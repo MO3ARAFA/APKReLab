@@ -1,0 +1,93 @@
+[
+ {
+  "id": "debuggable",
+  "vuln": "Debuggable build",
+  "rule": "manifest-debuggable",
+  "min_severity": "CRITICAL"
+ },
+ {
+  "id": "allow-backup",
+  "vuln": "allowBackup",
+  "rule": "manifest-allow-backup",
+  "min_severity": "MEDIUM"
+ },
+ {
+  "id": "exported-provider",
+  "vuln": "Exported TrackUserContentProvider",
+  "rule": "manifest-exported-components",
+  "title_any": [
+   "provider"
+  ],
+  "min_severity": "HIGH"
+ },
+ {
+  "id": "provider-sqli",
+  "vuln": "SQL injection in TrackUserContentProvider",
+  "rule": "taint-flow",
+  "class": "TrackUserContentProvider",
+  "min_severity": "HIGH",
+  "reach": true
+ },
+ {
+  "id": "exported-activities",
+  "vuln": "Exported activities (PostLogin, DoTransfer, ViewStatement, ChangePassword)",
+  "rule": "manifest-exported-components",
+  "title_any": [
+   "activity"
+  ],
+  "min_severity": "MEDIUM"
+ },
+ {
+  "id": "exported-receiver",
+  "vuln": "Exported MyBroadCastReceiver",
+  "rule": "manifest-exported-components",
+  "title_any": [
+   "receiver"
+  ],
+  "min_severity": "MEDIUM"
+ },
+ {
+  "id": "webview-statement",
+  "vuln": "Untrusted input loaded into a WebView (ViewStatement)",
+  "rule": "taint-flow",
+  "class": "ViewStatement",
+  "min_severity": "HIGH",
+  "reach": true
+ },
+ {
+  "id": "plain-prefs",
+  "vuln": "Plaintext credentials in SharedPreferences (DoLogin)",
+  "title_any": [
+   "SharedPreferences"
+  ],
+  "class": "DoLogin",
+  "min_severity": "MEDIUM"
+ },
+ {
+  "id": "external-storage",
+  "vuln": "Statements written to shared external storage",
+  "rule": "external-storage",
+  "min_severity": "LOW"
+ },
+ {
+  "id": "hardcoded-aes-key",
+  "vuln": "Hardcoded AES key in CryptoClass",
+  "rule": "crypto-hardcoded-key",
+  "class": "CryptoClass",
+  "min_severity": "MEDIUM",
+  "known_gap": true,
+  "hint": "key is a field initializer, not built in the same method as SecretKeySpec"
+ },
+ {
+  "id": "log-credentials",
+  "vuln": "Credentials written to the log (DoLogin)",
+  "rule": [
+   "log-credential-object",
+   "log-sensitive-strings"
+  ],
+  "class": "DoLogin",
+  "min_severity": "LOW",
+  "known_gap": true,
+  "hint": "string concatenation with username/password passed to Log.d"
+ }
+]

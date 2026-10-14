@@ -1,0 +1,33 @@
+{
+ "app": "InsecureBankv2",
+ "app_prefix": "Lcom/android/insecurebankv2/",
+ "note": "all entries from the public description of the app (insecure content provider, insecure WebView)",
+ "entries": [
+  {
+   "id": "provider-delete",
+   "class": "TrackUserContentProvider",
+   "method": "delete",
+   "title_any": [
+    "SQL"
+   ],
+   "status": "documented"
+  },
+  {
+   "id": "provider-update",
+   "class": "TrackUserContentProvider",
+   "method": "update",
+   "title_any": [
+    "SQL"
+   ],
+   "status": "documented"
+  },
+  {
+   "id": "viewstatement-webview",
+   "class": "ViewStatement",
+   "title_any": [
+    "WebView"
+   ],
+   "status": "documented"
+  }
+ ]
+}

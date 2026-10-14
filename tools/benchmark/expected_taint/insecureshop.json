@@ -1,0 +1,31 @@
+{
+ "app": "InsecureShop",
+ "app_prefix": "Lcom/insecureshop/",
+ "note": "WebView activities: documented insufficient URL validation. UploadService is third-party code (net.gotev), kept out of precision",
+ "entries": [
+  {
+   "id": "webview2-url",
+   "class": "WebView2Activity",
+   "title_any": [
+    "WebView"
+   ],
+   "status": "documented"
+  },
+  {
+   "id": "webview-url",
+   "class": "WebViewActivity",
+   "title_any": [
+    "WebView"
+   ],
+   "status": "documented"
+  },
+  {
+   "id": "uploadservice-forname",
+   "class": "net/gotev/uploadservice/UploadService",
+   "title_any": [
+    "class or method"
+   ],
+   "status": "library"
+  }
+ ]
+}

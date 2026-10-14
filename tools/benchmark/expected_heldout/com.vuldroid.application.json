@@ -1,0 +1,96 @@
+[
+ {
+  "id": "code-exec-app",
+  "vuln": "Code execution via malicious app",
+  "rule": [
+   "shell-exec",
+   "taint-flow"
+  ],
+  "min_severity": "INFO",
+  "independent": false,
+  "title_any": [
+   "shell"
+  ],
+  "amended": "0.73.0 after the first scan: my first mapping (package-context-code) was a wrong guess; the smali shows Runtime.exec(getIntent().getStringExtra(\"command\")) in RootDetection. Not counted as independent."
+ },
+ {
+  "id": "webview-xhr",
+  "vuln": "Steal files via WebView XHR",
+  "rule": [
+   "webview-file-access",
+   "webview-intent-url"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "fileprovider",
+  "vuln": "Steal files via FileProvider through Intents",
+  "rule": [
+   "manifest-exported-provider-grant-uri",
+   "provider-openfile-segment",
+   "uri-grant-via-result",
+   "pick-result-file"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "reset-token",
+  "vuln": "Steal password-reset tokens / magic login links (deep link)",
+  "rule": [
+   "manifest-deep-links",
+   "deeplink-host-validation"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "xss-exported",
+  "vuln": "WebView XSS via exported activity",
+  "rule": [
+   "webview-intent-url",
+   "taint-flow"
+  ],
+  "title_any": [
+   "webview"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "xss-deeplink",
+  "vuln": "WebView XSS via deep link",
+  "rule": [
+   "webview-intent-url",
+   "taint-flow",
+   "deeplink-host-validation"
+  ],
+  "title_any": [
+   "webview",
+   "deep"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "intent-sniff",
+  "vuln": "Intent sniffing between two apps",
+  "rule": [
+   "implicit-intent-sensitive",
+   "broadcast-unprotected-send"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "email-broadcast",
+  "vuln": "Reading user email via broadcasts",
+  "rule": [
+   "broadcast-unprotected-send",
+   "manifest-exported-components"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ }
+]

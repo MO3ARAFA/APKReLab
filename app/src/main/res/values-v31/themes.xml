@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 0.60.1: Android 12+ system splash: black background, icon on black (no white screen, no grey square). -->
+    <style name="ReLabLaunch" parent="ReLabBase">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorAccent">#4A3BC0</item>
+        <item name="android:alertDialogTheme">@style/ReLabDialogMidnight</item>
+        <item name="android:windowSplashScreenBackground">#000000</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#000000</item>
+    </style>
+</resources>

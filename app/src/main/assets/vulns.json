@@ -1,0 +1,475 @@
+{
+ "schema": 1,
+ "comment": "APK ReLab hand-checked vulnerable library versions. ranges are [from, to) pairs, empty string = unbounded. advisory=true means a general notice, not a CVE.",
+ "vulns": [
+  {
+   "group": "org.apache.logging.log4j",
+   "artifact": "log4j-core",
+   "ranges": [
+    [
+     "2.0",
+     "2.15.0"
+    ]
+   ],
+   "id": "CVE-2021-44228",
+   "severity": "CRITICAL",
+   "summary": "Log4Shell: remote code execution through JNDI lookups in logged messages",
+   "fixed": "2.17.1 or newer",
+   "note": "Rare on Android; it matters only if untrusted text is logged through Log4j."
+  },
+  {
+   "group": "org.apache.logging.log4j",
+   "artifact": "log4j-core",
+   "ranges": [
+    [
+     "2.15.0",
+     "2.17.0"
+    ]
+   ],
+   "id": "CVE-2021-45046 / CVE-2021-45105",
+   "severity": "HIGH",
+   "summary": "incomplete Log4Shell fix (lookup bypass) and denial of service through recursive lookups",
+   "fixed": "2.17.1 or newer"
+  },
+  {
+   "group": "org.apache.commons",
+   "artifact": "commons-text",
+   "ranges": [
+    [
+     "1.5",
+     "1.10.0"
+    ]
+   ],
+   "id": "CVE-2022-42889",
+   "severity": "HIGH",
+   "summary": "Text4Shell: StringSubstitutor interpolation can run script / DNS / URL lookups on untrusted input",
+   "fixed": "1.10.0 or newer",
+   "note": "Exploitable only if untrusted text goes through StringSubstitutor.createInterpolator()."
+  },
+  {
+   "group": "com.squareup.okhttp",
+   "artifact": "okhttp",
+   "ranges": [
+    [
+     "",
+     "2.7.5"
+    ]
+   ],
+   "id": "CVE-2016-2402",
+   "severity": "MEDIUM",
+   "summary": "certificate pinning can be bypassed by a man-in-the-middle",
+   "fixed": "2.7.5 or newer (preferably OkHttp 4)"
+  },
+  {
+   "group": "com.squareup.okhttp3",
+   "artifact": "okhttp",
+   "ranges": [
+    [
+     "3.0.0",
+     "3.2.0"
+    ]
+   ],
+   "id": "CVE-2016-2402",
+   "severity": "MEDIUM",
+   "summary": "certificate pinning can be bypassed by a man-in-the-middle",
+   "fixed": "3.2.0 or newer (preferably OkHttp 4)"
+  },
+  {
+   "group": "com.google.code.gson",
+   "artifact": "gson",
+   "ranges": [
+    [
+     "",
+     "2.8.9"
+    ]
+   ],
+   "id": "CVE-2022-25647",
+   "severity": "HIGH",
+   "summary": "denial of service while deserializing untrusted JSON (unbounded recursion)",
+   "fixed": "2.8.9 or newer"
+  },
+  {
+   "group": "com.fasterxml.jackson.core",
+   "artifact": "jackson-databind",
+   "ranges": [
+    [
+     "",
+     "2.9.10"
+    ]
+   ],
+   "id": "CVE-2017-7525 / CVE-2019-12384",
+   "severity": "CRITICAL",
+   "summary": "polymorphic deserialization gadget chains: a JSON payload from the network can run code when default typing (or an open @JsonTypeInfo) is enabled",
+   "fixed": "2.9.10.8 or newer (and never enable default typing for untrusted input)",
+   "note": "Exploitable only when default typing / polymorphic handling is turned on for attacker-controlled JSON."
+  },
+  {
+   "group": "com.fasterxml.jackson.core",
+   "artifact": "jackson-databind",
+   "ranges": [
+    [
+     "2.9.10",
+     "2.13.0"
+    ]
+   ],
+   "id": "advisory",
+   "severity": "LOW",
+   "summary": "this Jackson line is behind a long series of deserialization and denial-of-service fixes",
+   "fixed": "2.13.2.1 or newer (current 2.17.x line)",
+   "advisory": true
+  },
+  {
+   "group": "com.squareup.okhttp3",
+   "artifact": "okhttp",
+   "ranges": [
+    [
+     "",
+     "3.12.1"
+    ]
+   ],
+   "id": "advisory",
+   "severity": "LOW",
+   "summary": "this OkHttp 3.x release predates the modern TLS defaults and is no longer fixed",
+   "fixed": "OkHttp 4.x (4.12.0 or newer)",
+   "advisory": true
+  },
+  {
+   "group": "org.apache.commons",
+   "artifact": "commons-compress",
+   "ranges": [
+    [
+     "",
+     "1.21"
+    ]
+   ],
+   "id": "CVE-2021-35515 / CVE-2021-35516 / CVE-2021-35517 / CVE-2021-36090",
+   "severity": "HIGH",
+   "summary": "crafted archive (7z/TAR) exhausts CPU or memory while unpacking (denial of service); classic Zip Slip sink when entries are extracted without path checks",
+   "fixed": "1.21 or newer (current 1.26.x line)"
+  },
+  {
+   "group": "org.apache.commons",
+   "artifact": "commons-compress",
+   "ranges": [
+    [
+     "1.21",
+     "1.26.0"
+    ]
+   ],
+   "id": "CVE-2024-25710 / CVE-2024-26308",
+   "severity": "MEDIUM",
+   "summary": "infinite loop / out-of-memory while unpacking a crafted archive",
+   "fixed": "1.26.0 or newer"
+  },
+  {
+   "group": "org.zeroturnaround",
+   "artifact": "zt-zip",
+   "ranges": [
+    [
+     "",
+     "1.13"
+    ]
+   ],
+   "id": "CVE-2018-1002201",
+   "severity": "HIGH",
+   "summary": "ZipUtil.unpack writes entries outside the target directory when the archive contains ../ paths",
+   "fixed": "1.13 or newer"
+  },
+  {
+   "group": "net.lingala.zip4j",
+   "artifact": "zip4j",
+   "ranges": [
+    [
+     "",
+     "2.11.3"
+    ]
+   ],
+   "id": "CVE-2023-22899",
+   "severity": "MEDIUM",
+   "summary": "the MAC of an AES-encrypted zip entry is not always verified when decrypting, so a tampered archive can be accepted",
+   "fixed": "2.11.3 or newer"
+  },
+  {
+   "group": "com.google.guava",
+   "artifact": "guava",
+   "ranges": [
+    [
+     "",
+     "32.0.0"
+    ]
+   ],
+   "id": "CVE-2023-2976 / CVE-2020-8908",
+   "severity": "MEDIUM",
+   "summary": "Files.createTempDir gives world-readable temp folders (local information disclosure on shared devices)",
+   "fixed": "32.1.2-android or newer"
+  },
+  {
+   "group": "com.google.protobuf",
+   "artifact": "protobuf-java",
+   "ranges": [
+    [
+     "",
+     "3.19.2"
+    ]
+   ],
+   "id": "CVE-2021-22569 / CVE-2022-1941",
+   "severity": "HIGH",
+   "summary": "denial of service while parsing a crafted message",
+   "fixed": "3.19.2+ / 3.21.7+ (current 4.x line)"
+  },
+  {
+   "group": "com.google.protobuf",
+   "artifact": "protobuf-javalite",
+   "ranges": [
+    [
+     "",
+     "3.21.7"
+    ]
+   ],
+   "id": "CVE-2022-1941",
+   "severity": "HIGH",
+   "summary": "denial of service while parsing a crafted message",
+   "fixed": "3.21.7 or newer"
+  },
+  {
+   "group": "org.jsoup",
+   "artifact": "jsoup",
+   "ranges": [
+    [
+     "",
+     "1.14.2"
+    ]
+   ],
+   "id": "CVE-2021-37714",
+   "severity": "MEDIUM",
+   "summary": "cross-site scripting when cleaning crafted HTML",
+   "fixed": "1.14.2 or newer"
+  },
+  {
+   "group": "com.fasterxml.jackson.core",
+   "artifact": "jackson-databind",
+   "ranges": [
+    [
+     "2.13.0",
+     "2.13.2.1"
+    ]
+   ],
+   "id": "CVE-2020-36518",
+   "severity": "HIGH",
+   "summary": "denial of service through deeply nested JSON (stack overflow)",
+   "fixed": "2.12.6.1 / 2.13.2.1 or newer"
+  },
+  {
+   "group": "commons-collections",
+   "artifact": "commons-collections",
+   "ranges": [
+    [
+     "",
+     "3.2.2"
+    ]
+   ],
+   "id": "CVE-2015-6420",
+   "severity": "HIGH",
+   "summary": "unsafe deserialization gadget chain (InvokerTransformer)",
+   "fixed": "3.2.2 or newer",
+   "note": "Exploitable only if the app deserializes untrusted data with ObjectInputStream."
+  },
+  {
+   "group": "org.apache.commons",
+   "artifact": "commons-collections4",
+   "ranges": [
+    [
+     "4.0",
+     "4.1"
+    ]
+   ],
+   "id": "CVE-2015-6420",
+   "severity": "HIGH",
+   "summary": "unsafe deserialization gadget chain (InvokerTransformer)",
+   "fixed": "4.1 or newer",
+   "note": "Exploitable only if the app deserializes untrusted data with ObjectInputStream."
+  },
+  {
+   "group": "com.squareup.retrofit2",
+   "artifact": "retrofit",
+   "ranges": [
+    [
+     "2.0.0",
+     "2.5.0"
+    ]
+   ],
+   "id": "CVE-2018-1000850",
+   "severity": "HIGH",
+   "summary": "path traversal through a user-controlled @Path parameter (../ is not neutralised)",
+   "fixed": "2.5.0 or newer"
+  },
+  {
+   "group": "io.netty",
+   "artifact": "netty-codec-http",
+   "ranges": [
+    [
+     "",
+     "4.1.71"
+    ]
+   ],
+   "id": "CVE-2021-43797",
+   "severity": "MEDIUM",
+   "summary": "HTTP request smuggling through control characters in header names",
+   "fixed": "4.1.71.Final or newer"
+  },
+  {
+   "group": "com.google.android.play",
+   "artifact": "core",
+   "ranges": [
+    [
+     "",
+     "1.7.2"
+    ]
+   ],
+   "id": "CVE-2020-8913",
+   "severity": "HIGH",
+   "summary": "Play Core local code execution: another app can make this app load its code",
+   "fixed": "1.7.2 or newer (the library is also deprecated)"
+  },
+  {
+   "group": "org.bouncycastle",
+   "artifact": "bcprov-jdk15on",
+   "ranges": [
+    [
+     "",
+     "1.66"
+    ]
+   ],
+   "id": "CVE-2020-15522",
+   "severity": "MEDIUM",
+   "summary": "timing side channel in ECDSA signature verification",
+   "fixed": "1.66 or newer (bcprov-jdk18on)"
+  },
+  {
+   "group": "native",
+   "artifact": "openssl",
+   "ranges": [
+    [
+     "1.0.1",
+     "1.0.1g"
+    ]
+   ],
+   "id": "CVE-2014-0160",
+   "severity": "CRITICAL",
+   "summary": "Heartbleed: the server or client leaks process memory (keys, session data)",
+   "fixed": "1.0.1g or newer (use a supported branch)"
+  },
+  {
+   "group": "native",
+   "artifact": "openssl",
+   "ranges": [
+    [
+     "1.0.2",
+     "1.0.2zd"
+    ],
+    [
+     "1.1.1",
+     "1.1.1n"
+    ],
+    [
+     "3.0.0",
+     "3.0.2"
+    ]
+   ],
+   "id": "CVE-2022-0778",
+   "severity": "HIGH",
+   "summary": "infinite loop while parsing a crafted certificate (denial of service)",
+   "fixed": "1.0.2zd / 1.1.1n / 3.0.2 or newer"
+  },
+  {
+   "group": "native",
+   "artifact": "openssl",
+   "ranges": [
+    [
+     "",
+     "1.1.1"
+    ]
+   ],
+   "id": "EOL",
+   "severity": "MEDIUM",
+   "summary": "this OpenSSL branch (1.0.x / 1.1.0 or older) has not received security fixes for years",
+   "fixed": "a supported release (3.x)",
+   "note": "",
+   "cwe": "CWE-1104"
+  },
+  {
+   "group": "native",
+   "artifact": "openssl",
+   "ranges": [
+    [
+     "1.1.1",
+     "1.1.2"
+    ]
+   ],
+   "id": "EOL",
+   "severity": "LOW",
+   "summary": "OpenSSL 1.1.1 reached end of life in September 2023",
+   "fixed": "a supported release (3.x)",
+   "note": "",
+   "cwe": "CWE-1104"
+  },
+  {
+   "group": "native",
+   "artifact": "curl",
+   "ranges": [
+    [
+     "7.69.0",
+     "8.4.0"
+    ]
+   ],
+   "id": "CVE-2023-38545",
+   "severity": "HIGH",
+   "summary": "heap buffer overflow in the SOCKS5 proxy handshake (long host name)",
+   "fixed": "8.4.0 or newer",
+   "note": "Reachable only when the app uses curl through a SOCKS5 proxy."
+  },
+  {
+   "group": "native",
+   "artifact": "zlib",
+   "ranges": [
+    [
+     "",
+     "1.2.12"
+    ]
+   ],
+   "id": "CVE-2018-25032",
+   "severity": "HIGH",
+   "summary": "memory corruption while compressing input with many distant matches",
+   "fixed": "1.2.12 or newer"
+  },
+  {
+   "group": "native",
+   "artifact": "zlib",
+   "ranges": [
+    [
+     "",
+     "1.2.13"
+    ]
+   ],
+   "id": "CVE-2022-37434",
+   "severity": "HIGH",
+   "summary": "heap overflow in inflate() with a large gzip header extra field",
+   "fixed": "1.2.13 or newer",
+   "note": "Reachable only when the code calls inflateGetHeader()."
+  },
+  {
+   "group": "native",
+   "artifact": "libpng",
+   "ranges": [
+    [
+     "",
+     "1.6.37"
+    ]
+   ],
+   "id": "CVE-2019-7317",
+   "severity": "MEDIUM",
+   "summary": "use-after-free in png_image_free",
+   "fixed": "1.6.37 or newer"
+  }
+ ]
+}
