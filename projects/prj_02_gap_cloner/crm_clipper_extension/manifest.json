@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Offline CRM Clipper",
+  "version": "1.0.0",
+  "description": "Clip leads from any page into a local, offline-first CRM (IndexedDB) and sync them to your webhook when online.",
+  "minimum_chrome_version": "102",
+  "action": {
+    "default_title": "Clip to CRM",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage", "contextMenus", "alarms", "activeTab", "scripting"],
+  "optional_host_permissions": ["https://*/*"]
+}

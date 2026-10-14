@@ -1,0 +1,146 @@
+[
+ {
+  "id": 1,
+  "rating": 1,
+  "text": "Way too expensive for what it does. $89 per seat per month and they charge extra for the API. Cancelled after the renewal price jumped.",
+  "source": "sample"
+ },
+ {
+  "id": 2,
+  "rating": 1,
+  "text": "The app is painfully slow. Loading a contact list takes 20 seconds and it freezes constantly. I wish it had a faster search.",
+  "source": "sample"
+ },
+ {
+  "id": 3,
+  "rating": 2,
+  "text": "Pricing is confusing with hidden fees. We were billed for seats we never used. Support ignored my ticket for two weeks.",
+  "source": "sample"
+ },
+ {
+  "id": 4,
+  "rating": 1,
+  "text": "No way to export contacts to CSV. Lacks a mobile app too. Honestly useless for field sales.",
+  "source": "sample"
+ },
+ {
+  "id": 5,
+  "rating": 2,
+  "text": "It crashes whenever I import more than 500 rows. Very laggy dashboard. Need an offline mode, my connection is bad on site.",
+  "source": "sample"
+ },
+ {
+  "id": 6,
+  "rating": 1,
+  "text": "Customer service never replied. Data loss after sync error, lost a week of notes. Terrible.",
+  "source": "sample"
+ },
+ {
+  "id": 7,
+  "rating": 2,
+  "text": "Missing integration with Gmail and no webhook support. Doesn't support custom fields on the free plan.",
+  "source": "sample"
+ },
+ {
+  "id": 8,
+  "rating": 1,
+  "text": "Overpriced subscription, $120/month for a CRM with a clunky and confusing interface. The paywall for reports is ridiculous.",
+  "source": "sample"
+ },
+ {
+  "id": 9,
+  "rating": 2,
+  "text": "Too complicated to set up. Hard to find anything. I wish it had a simple lead clipper for the browser.",
+  "source": "sample"
+ },
+ {
+  "id": 10,
+  "rating": 1,
+  "text": "Slow, buggy and expensive. Pages time out and the sync keeps breaking.",
+  "source": "sample"
+ },
+ {
+  "id": 11,
+  "rating": 2,
+  "text": "Lacks a browser extension to save leads from LinkedIn. We had to copy and paste everything by hand.",
+  "source": "sample"
+ },
+ {
+  "id": 12,
+  "rating": 1,
+  "text": "Can't bulk edit contacts. No way to merge duplicates. Support told me to upgrade to the $200 plan.",
+  "source": "sample"
+ },
+ {
+  "id": 13,
+  "rating": 5,
+  "text": "Love the pipeline view! Great product.",
+  "source": "sample"
+ },
+ {
+  "id": 14,
+  "rating": 4,
+  "text": "Solid tool, the reports are helpful.",
+  "source": "sample"
+ },
+ {
+  "id": 15,
+  "rating": 3,
+  "text": "Okay overall, a bit slow at times but fine.",
+  "source": "sample"
+ },
+ {
+  "id": 16,
+  "rating": 2,
+  "text": "The mobile app is missing half the features and it is very slow on Android. Needs an offline mode.",
+  "source": "sample"
+ },
+ {
+  "id": 17,
+  "rating": 1,
+  "text": "Billing nightmare. Charged twice and refund took a month. Way too expensive anyway.",
+  "source": "sample"
+ },
+ {
+  "id": 18,
+  "rating": 1,
+  "text": "Doesn't support webhook sync and no API on the cheap plan. Cannot connect to Zapier.",
+  "source": "sample"
+ },
+ {
+  "id": 19,
+  "rating": 2,
+  "text": "Search is sluggish and the UI lags with a few thousand contacts. Wish it had keyboard shortcuts.",
+  "source": "sample"
+ },
+ {
+  "id": 20,
+  "rating": 1,
+  "text": "I hate the pricing. Per seat cost is insane for a small team of 3. Cheaper alternatives exist.",
+  "source": "sample"
+ },
+ {
+  "id": 21,
+  "rating": 2,
+  "text": "Buggy export, the CSV is broken and drops columns. Support was unhelpful.",
+  "source": "sample"
+ },
+ {
+  "id": 22,
+  "rating": 1,
+  "text": "Needs a lightweight option. It is bloated, slow to load, and costs $99 a month just to store contacts.",
+  "source": "sample"
+ },
+ {
+  "id": 23,
+  "rating": 2,
+  "text": "No offline access. When the wifi drops I lose what I typed. Missing autosave.",
+  "source": "sample"
+ },
+ {
+  "id": 24,
+  "rating": 1,
+  "text": "Terrible customer support, no response in 10 days. The app freezes when I attach files.",
+  "source": "sample"
+ }
+]

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>CRM Clipper</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: light dark; --bg:#fff; --fg:#1f2937; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#111827; --fg:#f3f4f6; --muted:#9ca3af; --line:#374151; --accent:#60a5fa; } }
+    body { width: 360px; margin: 0; padding: 12px; font: 13px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+    h1 { font-size: 15px; margin: 0 0 8px; }
+    label { display: block; margin: 6px 0 2px; color: var(--muted); font-size: 12px; }
+    input, textarea, select { width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+    textarea { resize: vertical; min-height: 48px; }
+    .row { display: flex; gap: 6px; } .row > * { flex: 1; }
+    button { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    #status { margin: 8px 0; color: var(--muted); min-height: 1.4em; }
+    ul { list-style: none; margin: 8px 0 0; padding: 0; max-height: 170px; overflow: auto; }
+    li { padding: 6px 0; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+    li small { color: var(--muted); display: block; }
+    details { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Clip to CRM</h1>
+  <form id="clip-form" autocomplete="off">
+    <div class="row">
+      <div><label for="name">Name</label><input id="name" maxlength="200"></div>
+      <div><label for="company">Company</label><input id="company" maxlength="200"></div>
+    </div>
+    <label for="email">Email</label><input id="email" type="email" maxlength="254">
+    <div class="row">
+      <div><label for="stage">Stage</label>
+        <select id="stage"><option value="lead">Lead</option><option value="contacted">Contacted</option>
+          <option value="qualified">Qualified</option><option value="won">Won</option><option value="lost">Lost</option></select></div>
+      <div><label for="tags">Tags (comma separated)</label><input id="tags"></div>
+    </div>
+    <label for="notes">Notes</label><textarea id="notes" maxlength="5000"></textarea>
+    <p><button class="primary" type="submit">Save clip</button></p>
+  </form>
+  <div id="status" role="status" aria-live="polite"></div>
+  <div class="row">
+    <button id="sync" type="button">Sync now</button>
+    <button id="export" type="button">Export CSV</button>
+  </div>
+  <input id="search" type="search" placeholder="Search clips" aria-label="Search clips" style="margin-top:8px">
+  <ul id="list"></ul>
+  <details>
+    <summary>Webhook settings</summary>
+    <label for="webhook">Webhook URL (https)</label><input id="webhook" type="url" placeholder="https://example.com/hook">
+    <label for="secret">Signing secret (optional, HMAC-SHA256)</label><input id="secret" type="password">
+    <p><button id="save-settings" type="button">Save settings</button></p>
+  </details>
+  <script src="db.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "process_orders": [
+    [[]],
+    [[{"status": "paid", "qty": 2, "price": 50, "country": "DE"}]],
+    [[{"status": "pending", "paid": true, "qty": 1, "price": 2000, "country": "US", "coupon": "SAVE10"},
+      {"status": "cancelled"},
+      {"status": "pending"},
+      {"status": "paid", "qty": 0, "price": 5},
+      {"status": "paid", "qty": 3, "price": 10, "express": true, "country": "UK", "coupon": "SAVE20"}]]
+  ],
+  "add_tag": [["a"], ["b"], ["c", ["x"]]],
+  "lookup": [[{"a": 1}, "a"], [{"a": 1}, "z"]]
+}
