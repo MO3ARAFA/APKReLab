@@ -27,7 +27,7 @@ python main.py --dashboard      # executive table from persisted state
 python main.py --project PRJ-01 # one project → output/PRJ-01/
 python main.py --log-revenue PRJ-01 --amount 250   # record real revenue (unlocks Group B reinvestment)
 python main.py --run-all --live # live-refreshing dashboard while the sprint runs
-python -m pytest                #  tests: framework, budget controls + every project
+python -m pytest                # 105 tests: framework, budget controls + every project
 ```
 
 Flags: `--sequential` (no parallelism), `--reset` (wipe persisted state). Exit code is non-zero if any requested
