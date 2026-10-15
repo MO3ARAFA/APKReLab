@@ -25,7 +25,7 @@ def test_state_persists_atomically(tmp_path):
     st = AgencyState(p, 100)
     st.set_project("PRJ-01", stage="x", progress=42)
     assert AgencyState(p, 100).project("PRJ-01")["progress"] == 42
-    assert json.loads(p.read_text())["version"] == 1
+    assert json.loads(p.read_text())["version"] == 2
     assert not list(tmp_path.glob(".state-*"))  # no leftover temp files
 
 
@@ -49,25 +49,28 @@ def test_state_is_thread_safe(tmp_path):
 def test_cross_subsidy_split(tmp_path):
     st = AgencyState(tmp_path / "s.json", 100)
     q = {pid: p["quota_usd"] for pid, p in st.snapshot()["projects"].items()}
-    assert sum(q[p] for p in ("PRJ-01", "PRJ-02", "PRJ-03")) == pytest.approx(85)
-    assert sum(q[p] for p in ("PRJ-04", "PRJ-05")) == pytest.approx(15)
+    assert sum(q[p] for p in ("PRJ-01", "PRJ-02", "PRJ-03")) == pytest.approx(80)  # 80% Group A
+    assert sum(q[p] for p in ("PRJ-04", "PRJ-05")) == pytest.approx(5)            # 5% Group B (+15% locked vault)
 
 
-def test_group_b_gated_until_revenue_then_reinvest_60pct(tmp_path):
+def test_group_b_gated_until_revenue_and_reinvest_respects_hard_cap(tmp_path):
     st = AgencyState(tmp_path / "s.json", 100)
     cfo = CFOAgent(st, 0.1)
     assert cfo.run_mode("PRJ-04") == "dry-run" and cfo.run_mode("PRJ-01") == "production"
     before = st.project("PRJ-04")["quota_usd"]
     cfo.log_revenue("PRJ-01", 1000)
     assert cfo.run_mode("PRJ-04") == "reinvested"
-    snap = st.snapshot()
-    assert snap["reinvested_usd"] == pytest.approx(600)  # 60% of (1000 - ~0 spend)
+    # default matrix commits the whole seed (vault is released into PRJ-01), so there is no headroom:
+    # revenue must NOT raise quotas or the cap
+    assert st.snapshot()["reinvested_usd"] == 0 and st.project("PRJ-04")["quota_usd"] == pytest.approx(before)
+    assert cfo.summary()["ceiling_usd"] == pytest.approx(100)
+    # deliberately re-seeding creates headroom; then 60% of Group A profit flows to Group B, idempotently
+    st.update(lambda d: d.__setitem__("seed_usd", 1000.0))
+    cfo.rebalance()
+    cfo.rebalance()
+    assert st.snapshot()["reinvested_usd"] == pytest.approx(600)  # 60% of $1000 profit, within headroom (1000 - 100)
     assert st.project("PRJ-04")["quota_usd"] == pytest.approx(before + 300)
-    cfo.rebalance()
-    cfo.rebalance()
-    assert st.snapshot()["reinvested_usd"] == pytest.approx(600)  # idempotent
-    cfo.log_revenue("PRJ-02", 500)
-    assert st.snapshot()["reinvested_usd"] == pytest.approx(900)  # only the delta is added
+    assert cfo.summary()["ceiling_usd"] == pytest.approx(1000)
 
 
 def test_revenue_validation(tmp_path):
@@ -202,19 +205,19 @@ def test_llm_offline_fallback_and_recording():
     assert r.text == "fallback text" and not r.live and r.cost_usd == 0 and len(seen) == 1
 
 
-def test_llm_provider_failure_falls_back(monkeypatch):
-    s = replace(Settings.load(), provider="openai", api_key="k", fallback_ollama=False)
+def test_llm_provider_failure_falls_back(monkeypatch, tmp_path):
+    s = replace(Settings.load(), provider="openai", api_key="k", fallback_ollama=False, cache_path=tmp_path / "c.json")
     llm = LLMClient(s)
     from llm import LLMError
     monkeypatch.setattr(llm, "_openai", lambda *a: (_ for _ in ()).throw(LLMError("down")))
     assert llm.complete("x", fallback="FB").text == "FB"
 
 
-def test_llm_cost_accounting(monkeypatch):
-    s = replace(Settings.load(), provider="anthropic", api_key="k", fallback_ollama=False)
+def test_llm_cost_accounting(monkeypatch, tmp_path):
+    s = replace(Settings.load(), provider="anthropic", api_key="k", fallback_ollama=False, cache_path=tmp_path / "c.json")
     llm = LLMClient(s)
-    monkeypatch.setattr(llm, "_anthropic", lambda *a: LLMResult("t", "anthropic", "m", 1_000_000, 1_000_000, live=True))
-    assert llm.complete("x").cost_usd == pytest.approx(18.0)
+    monkeypatch.setattr(llm, "_anthropic", lambda m, *a: LLMResult("t", "anthropic", m, 1_000_000, 1_000_000, live=True))
+    assert llm.complete("x").cost_usd == pytest.approx(0.60)  # claude-haiku-5-5: $0.10 in + $0.50 out per 1M
 
 
 def test_settings_without_key_go_offline(monkeypatch):

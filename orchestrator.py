@@ -8,7 +8,7 @@ from agents.ceo_agent import CEOAgent
 from agents.cfo_agent import CFOAgent
 from agents.pm_agents import build_pms
 from config import ROOT, Settings
-from llm import LLMClient
+from llm import LLMCache, LLMClient
 from state import PROJECT_META, AgencyState
 
 if str(ROOT) not in sys.path:
@@ -21,8 +21,10 @@ class Orchestrator:
         self.state = AgencyState(self.s.state_path, self.s.budget_usd)
         self.cfo = CFOAgent(self.state, self.s.compute_rate_per_hour)
         self.ceo = CEOAgent(self.state, self.s.qc_threshold)
+        self.cache = LLMCache(self.s.cache_path)  # shared by all PMs: identical prompts cost $0.00
         self.pms = build_pms(self.s.output_dir,
-                             lambda pid: LLMClient(self.s, lambda r, pid=pid: self.cfo.record_usage(pid, r)))
+                             lambda pid: LLMClient(self.s, lambda r, pid=pid: self.cfo.record_usage(pid, r),
+                                                   budget=self.cfo.gate(pid), cache=self.cache))
 
     # -- one project through the triple gate ----------------------------------------------
     def run_project(self, pid: str) -> dict:
@@ -34,7 +36,8 @@ class Orchestrator:
 
         pre = cfo.preflight(pid)
         if not pre.approved:
-            st.set_project(pid, stage="blocked", cfo_status=pre.status, ceo_status="REJECTED", blockers=pre.reasons)
+            st.set_project(pid, stage="blocked", cfo_status=pre.status, ceo_status="REJECTED", blockers=pre.reasons,
+                           units={})
             return st.project(pid)
 
         mode = cfo.run_mode(pid)
@@ -72,13 +75,14 @@ class Orchestrator:
             if final_report.approved:
                 st.set_project(pid, stage="delivered", progress=100, ceo_status="APPROVED",
                                ceo_score=final_report.score, blockers=[], feedback=final_report.feedback,
-                               artifacts=result.get("artifacts", {}), last_run=result.get("summary", ""))
+                               artifacts=result.get("artifacts", {}), last_run=result.get("summary", ""),
+                               units=result.get("units", {}))
                 return st.project(pid)
             feedback = final_report.feedback
             st.set_project(pid, stage="CEO rejected - revising", progress=60, ceo_status="REVISING",
                            ceo_score=final_report.score, feedback=feedback, blockers=feedback[:3])
 
-        st.set_project(pid, stage="rejected after max cycles", ceo_status="REJECTED",
+        st.set_project(pid, stage="rejected after max cycles", ceo_status="REJECTED", units={},
                        ceo_score=final_report.score if final_report else None,
                        blockers=feedback[:3] or ["max revision cycles reached"])
         return st.project(pid)

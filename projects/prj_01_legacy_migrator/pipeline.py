@@ -158,6 +158,7 @@ def run(out_dir: Path, llm, dry_run: bool = False, feedback: list[str] | None = 
     artifacts = {"audit_report": str(out_dir / "client_audit_report.md"), "findings": str(out_dir / "findings.json"),
                  "service": str(svc / "service.py"), "tests": str(svc / "tests")}
     return {"artifacts": artifacts, "checks": checks, "summary": f"Audit of {repo.name}: {base}",
+            "units": {"legacy_repos_audited": 1},
             "metrics": {"findings": len(findings), "risk_before": risk_before, "risk_after": risk_after,
                         "tests": f"{passed}/{total}", "endpoints": len(endpoints)}}
 

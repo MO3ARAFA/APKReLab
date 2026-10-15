@@ -367,6 +367,34 @@ def run_sniper(url: str, ceo: str = "there", company: str | None = None, llm=Non
     }
 
 
+def load_targets(path: str, limit: int = 500) -> list[dict]:
+    """CSV with columns url,ceo,company (company optional). Blank/invalid URLs are skipped."""
+    import csv
+    out = []
+    with open(path, newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            url = (row.get("url") or "").strip()
+            if url:
+                out.append({"url": url, "ceo": (row.get("ceo") or "there").strip(), "company": (row.get("company") or "").strip() or None})
+            if len(out) >= limit:
+                break
+    return out
+
+
+def run_batch(targets: list[dict], llm, sender: str = "Alex", allow_private: bool = False) -> list[dict]:
+    """Audit many prospects; one failure never aborts the batch. Local fetch/parse is free - only the draft uses the LLM
+    (identical drafts hit the cache), and the CFO breaker degrades to the deterministic template when budget runs out."""
+    results = []
+    for t in targets:
+        try:
+            r = run_sniper(t["url"], t["ceo"], t["company"], llm=llm, allow_private=allow_private, sender=sender)
+            r["ready"] = not validate_outreach(r["outreach"], r["ceo"], [Finding(**f) for f in r["findings"]])
+        except (UnsafeURL, urllib.error.URLError, OSError, ValueError) as exc:
+            r = {"url": t["url"], "ceo": t["ceo"], "error": str(exc), "ready": False}
+        results.append(r)
+    return results
+
+
 def main(argv=None) -> int:
     import argparse
     ap = argparse.ArgumentParser(description=__doc__)

@@ -6,6 +6,7 @@ TARGET_COMPANY to point the pipeline at a real prospect instead.
 """
 from __future__ import annotations
 
+import csv
 import gzip
 import json
 import os
@@ -75,6 +76,17 @@ def run(out_dir: Path, llm, dry_run: bool = False, feedback: list[str] | None = 
         if srv:
             srv.shutdown()
 
+    batch_ready = 0
+    targets_file = os.getenv("TARGETS_FILE")
+    if targets_file:  # real prospect list: url,ceo,company (max TARGETS_MAX, default 500)
+        batch = bs.run_batch(bs.load_targets(targets_file, int(os.getenv("TARGETS_MAX", "500"))), llm)
+        batch_ready = sum(1 for r in batch if r.get("ready"))
+        with (out_dir / "outreach_batch.csv").open("w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(["url", "ceo", "score", "words", "ready", "outreach", "error"])
+            for r in batch:
+                w.writerow([r["url"], r["ceo"], r.get("scores", {}).get("overall", ""), r.get("outreach_words", ""),
+                            r["ready"], r.get("outreach", ""), r.get("error", "")])
     (out_dir / "diagnostics.json").write_text(json.dumps(result, indent=2))
     (out_dir / "outreach.txt").write_text(result["outreach"] + "\n")
     f = result["findings"]
@@ -102,6 +114,7 @@ def run(out_dir: Path, llm, dry_run: bool = False, feedback: list[str] | None = 
     artifacts = {"diagnostics": str(out_dir / "diagnostics.json"), "outreach": str(out_dir / "outreach.txt"), "audit": str(out_dir / "audit.md")}
     return {"artifacts": artifacts, "checks": checks,
             "summary": f"Diagnosed {result['company']} (score {result['scores']['overall']}/100, {len(f)} issues); outreach {result['outreach_words']} words.",
+            "units": {"audits_ready": batch_ready or 1},
             "metrics": {"score": result["scores"]["overall"], "issues": len(f), "words": result["outreach_words"], "tests": f"{passed}/{total}"}}
 
 

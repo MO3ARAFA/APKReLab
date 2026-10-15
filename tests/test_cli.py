@@ -60,8 +60,8 @@ def test_run_all_then_revenue_unlocks_group_b(env):
         assert any((tmp / "out" / pid).iterdir())
     assert cli(e, "--log-revenue", "PRJ-01", "--amount", "200").returncode == 0
     s = json.loads((tmp / "state.json").read_text())
-    assert s["reinvested_usd"] == pytest.approx(0.6 * (200 - s["projects"]["PRJ-01"]["spent_usd"] - sum(
-        p["spent_usd"] for p in s["projects"].values() if p["group"] == "A" and p["id"] != "PRJ-01")), rel=1e-3)
+    assert s["reinvested_usd"] == 0 and s["vault"]["released_to"] == "PRJ-01"  # hard cap: revenue cannot raise quotas
+    assert s["projects"]["PRJ-01"]["quota_usd"] == pytest.approx(2.5 + 1.5)
     assert cli(e, "--run-all", "--sequential").returncode == 0
     s = json.loads((tmp / "state.json").read_text())
     assert s["projects"]["PRJ-04"]["mode"] == "reinvested"

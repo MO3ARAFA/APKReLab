@@ -90,7 +90,7 @@ def run(out_dir: Path, llm, dry_run: bool = False, feedback: list[str] | None = 
                              system="You are an application security engineer. Be precise.",
                              fallback=f"{len(findings)} issues found ({', '.join(f'{k}: {v}' for k, v in by_rule.items())}); "
                                       f"{len(res['applied'])} were patched automatically and verified; the rest need manual design changes.",
-                             max_tokens=200).text
+                             max_tokens=200, tier=2).text  # complex security reasoning -> flagship tier
         lines.insert(2, story + "\n")
     (out_dir / "security_report.md").write_text("\n".join(lines))
 
@@ -116,6 +116,7 @@ def run(out_dir: Path, llm, dry_run: bool = False, feedback: list[str] | None = 
                  "graph": str(out_dir / "dataflow_graph.json"), "findings": str(out_dir / "findings.json")}
     return {"artifacts": artifacts, "checks": checks,
             "summary": f"{len(findings)} findings, {len(res['applied'])} auto-patched and verified ({'dry-run' if dry_run else 'full'}).",
+            "units": {"patches_ready": len(res["applied"])},
             "metrics": {"findings": len(findings), "patched": len(res["applied"]), "manual": len(res["skipped"]), "tests": f"{passed}/{total}"}}
 
 

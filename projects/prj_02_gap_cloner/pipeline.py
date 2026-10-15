@@ -28,8 +28,12 @@ def run(out_dir: Path, llm, dry_run: bool = False, feedback: list[str] | None = 
     top = ", ".join(o["feature"] for o in report["missing_feature_opportunities"][:3])
     pitch_fallback = (f"Positioning: an offline-first, flat-price CRM clipper. Users' top pain is "
                       f"'{report['top_pain']}'; the most requested gaps are: {top}.")
+    # Hybrid pre-processing: mining/clustering happened locally; the LLM only sees a compact digest.
+    digest = "; ".join(f"{c}: {d['reviews_mentioning']} reviews, e.g. \"{(d['example_quotes'] or [''])[0][:90]}\""
+                       for c, d in list(report["categories"].items())[:4])
     pitch = llm.complete(
-        f"Write a 2-sentence micro-SaaS positioning statement addressing these competitor complaints: {json.dumps(report['categories'])[:1500]}",
+        f"Write marketing copy: a 2-sentence positioning statement for a $39 lifetime-deal offline CRM clipper "
+        f"addressing these competitor complaints. Top gaps: {top}. Pain digest: {digest}",
         system="You are a product strategist. Be specific and non-hyped.", fallback=pitch_fallback, max_tokens=200).text
     (out_dir / "gap_brief.md").write_text(rpe.brief_markdown(report, "Competitor CRM", pitch))
 
@@ -66,6 +70,7 @@ def run(out_dir: Path, llm, dry_run: bool = False, feedback: list[str] | None = 
     return {"artifacts": artifacts, "checks": checks,
             "summary": f"Analyzed {report['reviews_analyzed']} low-star reviews; top pain '{report['top_pain']}'; "
                        f"extension packaged ({len(names)} files, {passed}/{total} tests).",
+            "units": {"extensions_packaged": 1},
             "metrics": {"reviews_analyzed": report["reviews_analyzed"], "opportunities": len(report["missing_feature_opportunities"]),
                         "tests": f"{passed}/{total}"}}
 

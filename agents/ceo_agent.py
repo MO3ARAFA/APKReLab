@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
+from agents.cfo_agent import compute_summary
 from llm import LLMClient
 from state import AgencyState
 
@@ -81,9 +82,9 @@ class CEOAgent:
         approved = score >= self.threshold
         if approved:
             # Optional qualitative note; never alters the score.
-            note = llm.complete(
+            note = llm.complete(  # tier 2: the flagship model is reserved for this quality gate
                 f"In one sentence, comment on this deliverable summary for {pid}: {result.get('summary', '')}",
-                system="You are a CEO reviewing deliverables. Be brief.", fallback="", max_tokens=80).text
+                system="You are a CEO reviewing deliverables. Be brief.", fallback="", max_tokens=200, tier=2).text
             if note:
                 feedback.append(f"CEO note: {note.strip()}")
         elif not feedback:
@@ -92,14 +93,36 @@ class CEOAgent:
                         {"artifacts": a_ratio * 100, "verification": c_ratio * 100, "reporting": r_ratio * 100})
 
     # -- dashboard -------------------------------------------------------------------------
+    def build_summary(self) -> Table:
+        """CFO ROI telemetry banner."""
+        c = compute_summary(self.state.snapshot())
+        t = Table(title="CFO Summary - $%.2f seed capital" % c["seed_usd"], show_header=False, box=None, padding=(0, 2))
+        for _ in range(4):
+            t.add_column()
+        roi = f"{c['roi_multiple']:.0f}x burn" if c["roi_multiple"] else "n/a"
+        t.add_row("Remaining Seed Capital", Text(f"${c['remaining_seed_usd']:.4f}", style="bold green"),
+                  "Total Burn", f"${c['burn_usd']:.5f}")
+        t.add_row("Cache Savings", Text(f"${c['cache_savings_usd']:.5f} ({c['cache_hits']} hits)", style="cyan"),
+                  "Est. Revenue Pipeline*", f"${c['pipeline_usd']:,.2f} ({roi})")
+        t.add_row("Circuit Breaker", Text(c["breaker"], style="red bold" if c["breaker_tripped"] else "green"),
+                  "Reserve Vault", c["vault"])
+        t.add_row("Blocked Live Calls", str(c["blocked_calls"]), "Sellable units",
+                  ", ".join(f"{k}={v}" for u in c["units"].values() for k, v in u.items()) or "-")
+        return t
+
+    def build_renderable(self):
+        from rich.console import Group
+        return Group(self.build_summary(),
+                     Text("* assumption-based projection of sellable artifacts (config.roi_values) - NOT revenue",
+                          style="dim"), self.build_table())
+
     def build_table(self) -> Table:
         snap = self.state.snapshot()
-        t = Table(title=f"AI Agency - Executive Dashboard  (budget ${snap['budget_usd']:.2f}, "
-                        f"reinvested ${snap['reinvested_usd']:.4f})", show_lines=True)
+        t = Table(title=f"AI Agency - Executive Dashboard  (reinvested ${snap['reinvested_usd']:.4f})", show_lines=True)
         for col in ["Project", "PM Agent", "Progress %", "Burn Rate $", "CFO Health", "CEO QC", "Active Blockers"]:
             t.add_column(col, overflow="fold")
         colors = {"HEALTHY": "green", "WATCH": "yellow", "DRY-RUN": "cyan", "OVER BUDGET": "red",
-                  "PENDING": "dim", "APPROVED": "green", "REJECTED": "red", "REVISING": "yellow", "RUNNING": "blue"}
+                  "BREAKER": "magenta", "PENDING": "dim", "APPROVED": "green", "REJECTED": "red", "REVISING": "yellow", "RUNNING": "blue"}
         for pid, p in snap["projects"].items():
             filled = int(p["progress"] / 10)
             bar = "█" * filled + "░" * (10 - filled)
@@ -107,7 +130,7 @@ class CEOAgent:
             blockers = "; ".join(p["blockers"]) if p["blockers"] else "-"
             rate = p["spent_usd"] / (p["compute_s"] / 3600) if p["compute_s"] > 0 else 0.0
             t.add_row(f"{pid} [{p['group']}]\n{p['name']}", p["pm"], f"{bar} {p['progress']}%\n{p['stage']}",
-                      f"${p['spent_usd']:.5f} / ${p['quota_usd']:.4f}\n${rate:.3f}/hr | rev ${p['revenue_usd']:.2f}",
+                      f"${p['spent_usd']:.5f} / ${p['quota_usd']:.4f}\n${rate:.3f}/hr | rev ${p['revenue_usd']:.2f}\ncache ${p['cache_saved_usd']:.4f} | blocked {p['blocked_calls']}",
                       Text(p["cfo_status"], style=colors.get(p["cfo_status"], "white")),
                       Text(qc, style=colors.get(p["ceo_status"], "white")), blockers)
         return t
@@ -116,8 +139,8 @@ class CEOAgent:
         console = console or Console()
         if not console.is_terminal and console.width < 140:
             console = Console(width=140)  # piped output: avoid a collapsed table
-        console.print(self.build_table())
+        console.print(self.build_renderable())
 
     def live(self, console: Console | None = None):
         from rich.live import Live
-        return Live(self.build_table(), console=console, refresh_per_second=4, get_renderable=self.build_table)
+        return Live(self.build_renderable(), console=console, refresh_per_second=4, get_renderable=self.build_renderable)

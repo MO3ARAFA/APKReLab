@@ -77,6 +77,7 @@ def run(out_dir: Path, llm, dry_run: bool = False, feedback: list[str] | None = 
     return {"artifacts": artifacts, "checks": checks,
             "summary": f"Generated {n_rows} synthetic rows; validation score {report['validation_score']}/100; privacy gate "
                        f"{'passed' if report['privacy']['passed'] else 'FAILED'} ({'dry-run' if dry_run else 'full'}).",
+            "units": {"datasets_generated": 1},
             "metrics": {"validation_score": report["validation_score"], "rows": n_rows, "tests": f"{passed}/{total}"}}
 
 
