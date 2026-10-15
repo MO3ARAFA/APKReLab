@@ -295,6 +295,12 @@
     const p = $('#coo-pending'); p.textContent = '';
     if (!d.pending.length) p.append(el('p', {class: 'muted', text: 'Nothing is waiting for you.'}));
     d.pending.forEach(x => p.append(el('blockquote', {text: x.text + `  (answer in Telegram, ${Math.round(x.age_s / 60)} min ago)`})));
+    const lb = $('#coo-leads'); lb.textContent = '';
+    $('#coo-leads-meta').textContent = d.paypal ? '' : '(PAYPAL_ME is not set: reply drafts have no payment link)';
+    if (!d.leads.length) lb.append(el('tr', {}, el('td', {colspan: 5, class: 'muted', text: 'No leads yet: they appear after you release a batch in Telegram.'})));
+    d.leads.forEach(l => lb.append(el('tr', {}, el('td', {text: l.company}), el('td', {text: l.status + (l.won_usd ? ` ($${l.won_usd})` : '')}),
+      el('td', {class: 'num', text: l.score == null ? '–' : l.score}), el('td', {class: 'num', text: l.quote ? '$' + l.quote : '–'}),
+      el('td', {text: l.next_followup ? new Date(l.next_followup * 1000).toLocaleDateString() : '–'}))));
     $('#coo-brief').textContent = d.last_briefing ? d.last_briefing.text : 'No briefing yet. Start the daemon or run: python main.py --briefing';
   }
 

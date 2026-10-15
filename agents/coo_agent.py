@@ -55,6 +55,10 @@ class COOAgent:
         except Exception:  # pool file missing: the pool line is simply omitted
             pass
         revenue = round(sum(r.get("usd", 0.0) for r in snap.get("revenue", [])), 2)
+        leads = list(ops.get("leads", {}).values())
+        counts: dict[str, int] = {}
+        for l in leads:
+            counts[l["status"]] = counts.get(l["status"], 0) + 1
         sent, replies = int(fun.get("sent", 0)), int(fun.get("replies", 0))
         projects = [{"id": pid, "status": p["ceo_status"] if p["cfo_status"] not in {"BREAKER", "OVER BUDGET"} else p["cfo_status"],
                      "score": p["ceo_score"], "blockers": [clean(b, 90) for b in p["blockers"][:2]]}
@@ -74,6 +78,10 @@ class COOAgent:
                        "free_requests": c["free_requests"], "avoided": round(c["free_savings_usd"], 4)},
             "pipeline": {"audited_total": len(audited), "pool_left": pool},
             "funnel": {"sent": sent, "replies": replies, "reply_rate": round(100 * replies / sent, 1) if sent else None, "revenue": revenue},
+            "leads": {"counts": counts, "total": len(leads),
+                      "due_followups": sum(1 for l in leads if l["status"] == "sent" and l.get("next_followup") and l["next_followup"] <= now),
+                      "stale_quotes": sum(1 for l in leads if l["status"] == "quoted" and now - l.get("t_quoted", now) > 3 * 86400),
+                      "won_usd": round(sum(l.get("won_usd", 0.0) for l in leads), 2)},
             "projects": projects,
             "ops": {"paused": bool(ops.get("paused")), "failures": int(ops.get("failures", 0)), "pending": len(
                 [p for p in ops.get("proposals", {}).values() if p.get("status") == "pending"])},
@@ -105,6 +113,11 @@ class COOAgent:
         weak = [p["id"] for p in f["projects"] if p["status"] in {"REJECTED", "BREAKER", "OVER BUDGET"}]
         if weak:
             out.append("Not approved: " + ", ".join(weak) + ".")
+        ld = f["leads"]
+        if ld["stale_quotes"]:
+            out.append(f"{ld['stale_quotes']} quote(s) sent 3+ days ago with no answer: a short nudge may close them.")
+        if ld["due_followups"]:
+            out.append(f"{ld['due_followups']} follow-up(s) are due.")
         fun = f["funnel"]
         if fun["sent"] >= 20 and fun["replies"] == 0:
             out.append(f"{fun['sent']} messages sent with no replies: revisit the target list and wording before sending more.")
@@ -156,6 +169,10 @@ class COOAgent:
                    + (f" · {cyc['ready']} message(s) ready" if cyc else ""))
         rate = f" ({fun['reply_rate']}%)" if fun["reply_rate"] is not None else ""
         out.append(f"📬 Funnel: sent {fun['sent']} · replies {fun['replies']}{rate} · revenue ${fun['revenue']:.2f}")
+        ld = f["leads"]
+        if ld["total"]:
+            order = ("released", "sent", "replied", "quoted", "won", "lost", "optout")
+            out.append("👥 Leads: " + " · ".join(f"{k} {ld['counts'][k]}" for k in order if ld["counts"].get(k)) + (f" · won ${ld['won_usd']:g}" if ld["won_usd"] else ""))
         out.append("✅ Projects: " + " | ".join(f"{p['id']} {p['status']}" + (f" {p['score']:.0f}%" if p["score"] is not None else "") for p in f["projects"]))
         if f["risks"]:
             out.append("⚠️ Watch:")

@@ -38,6 +38,8 @@ Stop it with `pkill -f "main.py --daemon"` or ask from Telegram with `/pause`. A
 - `/sent N` and `/replies N` tell the COO how your outreach is going, so the briefing can show a real reply rate and warn when 20+ messages brought no replies
 - `/revenue PRJ-02 39 Gumroad sale` logs *verified* revenue after you confirm; the first Group A revenue unlocks the reserve vault
 
+The lead commands (`/leads`, `/sent`, `/replied`, `/quote`, `/won`, `/report`, `/lost`, `/optout`, `/addlead`) are described in [`SALES.md`](SALES.md).
+
 ## How the briefing is built (so you can trust it)
 
 The numbers (budget, spend today, pipeline, funnel, project status) are computed from the state file and printed as they are. A model never touches them. Below them, the **COO analysis** (assessment, main risk, recommendation) is written by a model when one is available within the caps, otherwise by plain rules; it is labelled, length-capped and stripped of links, and it cannot start anything: decisions come only from fixed rules in the daemon. Company names and findings come from scraped websites, so they are sanitised before they reach a prompt and are sent as plain text (never markup).

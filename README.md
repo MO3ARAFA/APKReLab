@@ -33,7 +33,7 @@ python tools/build_ready_to_sell.py   # assemble output/READY_TO_SELL_NOW.md fro
 python main.py --daemon         # AI COO: unattended cycles + Telegram briefings/approvals (docs/AUTOPILOT.md)
 python main.py --growth         # PM-06 cost report, runway and routing policy
 python main.py --free-tiers     # which free-tier providers are configured (--check to ping them)
-python -m pytest                # 243 tests: framework, budget, live-mode, web UI, auto-pilot, PM-06 + every project
+python -m pytest                # 273 tests: framework, budget, live-mode, web UI, auto-pilot, PM-06 + every project
 ```
 
 Flags: `--live` (**enables paid LLM calls**; without it every run is offline and free even if a key is in `.env`),
@@ -52,6 +52,16 @@ from state; the COO's analysis paragraph is model-written (or rule-based), label
 after repeated failures, only one daemon runs at a time, and web/CLI runs wait while a cycle writes the state file.
 One-time setup: `@BotFather` token in `.env`, then `python main.py --telegram-setup` (code pairing so only you can command it).
 Full guide, Termux commands, privacy notes and limits: [`docs/AUTOPILOT.md`](docs/AUTOPILOT.md).
+
+## Sales loop: from audit to payment (Phase 8)
+
+After you release a batch, every message arrives in Telegram with a public contact path found on the company's own site (role addresses
+only), a suggested subject, your legal footer, and, for non-English sites, an unverified AI translation. `/sent all` starts follow-up
+reminders (day 3 and day 7, never more than two). `/replied Acme` returns the **reply kit**: top findings, a price, and a ready draft with
+PayPal links. The COO prices each job from the audit (report-only fee, or report plus the estimated hours for the top 5 fixes; above a cap it
+is "custom"); `/quote Acme 120` overrides. `/won Acme 149` logs verified revenue after you confirm, `/report Acme` produces the written
+deliverable, `/optout` is permanent, `/addlead` queues your own prospects. The agency never sends anything and never touches your money.
+Set `PAYPAL_ME` and `SENDER_ADDRESS` in `.env`. Details, pricing rules, compliance notes and limits: [`docs/SALES.md`](docs/SALES.md).
 
 ## PM-06: AI Growth & Cost-Hacking Agent (free lane)
 
@@ -222,6 +232,7 @@ extension ($39 LTD x an assumed 10 early sales). PRJ-03 batch mode (`TARGETS_FIL
 | `FREE_LANE_ENABLED`, `FREE_LANE_THRESHOLD_USD`, `CONSERVE_BELOW_PCT`, `PAID_RETRY_HOURS` | PM-06 thresholds |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | AI COO Telegram bridge (chat id comes from `--telegram-setup`) |
 | `DAEMON_CYCLE_HOURS`, `DAEMON_QUIET_HOURS`, `DAEMON_DAILY_CAP_USD`, `DAEMON_LIVE_CAP_USD`, `DAEMON_MAX_FAILURES`, `DAEMON_PROPOSAL_TTL_HOURS`, `DAEMON_REJECT_COOLDOWN_HOURS` | daemon schedule and spending limits |
+| `PAYPAL_ME`, `SENDER_ADDRESS`, `PRICE_REPORT_USD`, `PRICE_HOURLY_USD`, `PRICE_CAP_USD`, `DELIVERY_DAYS`, `FOLLOWUP_FIRST_DAYS`, `FOLLOWUP_SECOND_DAYS` | sales loop: payment handle, legal footer, pricing, follow-up timing |
 | `QC_THRESHOLD`, `MAX_REVISION_CYCLES` | CEO gate |
 | `AGENCY_STATE_PATH`, `AGENCY_OUTPUT_DIR` | relocate state/output (used by the CLI tests) |
 
@@ -241,8 +252,8 @@ Chrome will prompt for that single host permission.
 ```
 main.py  orchestrator.py  config.py  llm.py  state.py  web_dashboard.py  web_markdown.py  web/ (index.html, static/)  tools/ (sell-sheet builder)
 agents/        ceo_agent.py  cfo_agent.py  growth_agent.py (PM-06)  coo_agent.py  policy.py  pm_agents.py
-ops/           daemon.py  telegram.py  lock.py
-docs/          FREE_TIERS.md  AUTOPILOT.md
+ops/           daemon.py  telegram.py  lock.py  sales.py
+docs/          FREE_TIERS.md  AUTOPILOT.md  SALES.md
 projects/      common.py  prj_01_legacy_migrator/  prj_02_gap_cloner/  prj_03_deal_closer/
                prj_04_zeroday_hunter/  prj_05_synthetic_foundry/   (each: pipeline.py, engine, sample data, tests/)
 tests/         framework + CLI end-to-end tests

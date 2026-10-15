@@ -102,6 +102,11 @@ class FakeOrch:
                 "llm": {"live_calls": 0, "cache_hits": 0, "blocked": 0, "errors": 0, "spent_usd": fab.spend}}
 
 
+def no_net(url, timeout=10.0, **kw):
+    """Public-page fetcher stand-in: no network, no contact details published."""
+    return SimpleNamespace(status=200, html="<html lang='en'><body>hello</body></html>")
+
+
 @pytest.fixture
 def clock():
     t = [time.time()]
@@ -114,7 +119,7 @@ def setup(tmp_path, clock, provider="offline", tg=True, **over):
                 fallback_ollama=False, **over)
     api = FakeAPI()
     fab = Fab(s)
-    d = Daemon(s, Telegram(TOKEN, OWNER, api) if tg else None, clock=lambda: clock[0], orch_factory=fab, log=lambda *_: None)
+    d = Daemon(s, Telegram(TOKEN, OWNER, api) if tg else None, clock=lambda: clock[0], orch_factory=fab, log=lambda *_: None, fetch=no_net)
     return d, api, fab
 
 
@@ -186,7 +191,7 @@ def test_each_update_is_processed_at_most_once(tmp_path, clock, monkeypatch):
 def test_offline_cycle_runs_unattended_briefs_and_proposes_release(tmp_path, clock, net):
     s = mk(tmp_path)
     api = FakeAPI()
-    d = Daemon(s, Telegram(TOKEN, OWNER, api), clock=lambda: clock[0], log=lambda *_: None)
+    d = Daemon(s, Telegram(TOKEN, OWNER, api), clock=lambda: clock[0], log=lambda *_: None, fetch=no_net)
     d.tick()
     o = ops(d)
     assert o["cycles"] == 1 and o["failures"] == 0 and o["last_cycle_t"] == clock[0]
@@ -382,7 +387,8 @@ def test_release_sends_each_message_to_the_owner_only_once(tmp_path, clock):
     d.tick()
     got = api.texts()[n:]
     assert sum(t.startswith("✉️ Message") for t in got) == 2 and any("Message 1/2 · Acme 0" in t and "message 0" in t for t in got)
-    assert any("not verified: check the name" in t for t in got) and any("CAN-SPAM" in t and "/sent N" in t for t in got)
+    assert any("not verified: check the name" in t for t in got) and any("CAN-SPAM" in t and "/sent all" in t for t in got)
+    assert any('reply "no thanks"' in t for t in got) and any("no public contact found" in t for t in got)
     assert all(m["chat_id"] == str(OWNER) for m in api.sent)            # nothing is ever sent anywhere else
     assert ops(d)["funnel"]["released"] == 2 and len(ops(d)["released"]) == 1
     clock[0] += 2 * 3600
@@ -401,11 +407,11 @@ def test_skipping_a_batch_releases_nothing(tmp_path, clock):
 # ------------------------------------------------------------------ commands
 def test_funnel_commands_and_reply_rate(tmp_path, clock):
     d, api, _ = setup(tmp_path, clock)
-    for cmd in ("/sent 20", "/replies 3", "/sent 0", "/sent abc", "/sent 501", "/replies"):
+    for cmd in ("/sent 20", "/replies 3", "/sent 0", "/sent 501", "/replies"):
         api.say(cmd)
     d.tick()
     fun = ops(d)["funnel"]
-    assert fun == {"sent": 20, "replies": 3} and sum("Usage: " in t for t in api.texts()) == 4
+    assert fun == {"sent": 20, "replies": 3} and sum("Usage: " in t for t in api.texts()) == 3
     api.say("/status")
     d.tick()
     assert "sent 20 · replies 3 (15.0%)" in api.texts()[-1]

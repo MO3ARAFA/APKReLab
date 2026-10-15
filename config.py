@@ -87,6 +87,14 @@ class Settings:
     daemon_max_failures: int = 3  # consecutive failed cycles before the daemon pauses itself
     daemon_proposal_ttl_hours: float = 24.0  # an unanswered decision expires (never executed late on stale facts)
     daemon_reject_cooldown_hours: float = 24.0  # after a "no", the same proposal is not repeated for this long
+    # Sales (Phase 8). PAYPAL_ME is a public payment handle, never a credential.
+    paypal_me: str = ""  # e.g. paypal.me/yourname
+    sender_address: str = ""  # postal address for the cold-email footer (required by CAN-SPAM and similar laws)
+    price_report: float = 49.0  # report-only price (USD)
+    price_hourly: float = 30.0  # rate used to estimate the "report + fixes" price (USD/hour)
+    price_cap: float = 600.0  # above this an engagement is "custom": discuss before sending a link
+    delivery_days: int = 3  # business days promised in the reply draft
+    followup_days: tuple = (3.0, 4.0)  # follow-up #1 after N days of silence, follow-up #2 N days after that (max two)
     compute_rate_per_hour: float = 0.0  # local compute is free; the seed budget is for API spend
     qc_threshold: float = 95.0
     max_cycles: int = 3
@@ -127,6 +135,13 @@ class Settings:
             daemon_max_failures=int(_f("DAEMON_MAX_FAILURES", 3)),
             daemon_proposal_ttl_hours=_f("DAEMON_PROPOSAL_TTL_HOURS", 24.0),
             daemon_reject_cooldown_hours=_f("DAEMON_REJECT_COOLDOWN_HOURS", 24.0),
+            paypal_me=os.getenv("PAYPAL_ME", "").strip(),
+            sender_address=re.sub(r"[\r\n]+", ", ", os.getenv("SENDER_ADDRESS", "")).strip()[:200],
+            price_report=_f("PRICE_REPORT_USD", 49.0),
+            price_hourly=_f("PRICE_HOURLY_USD", 30.0),
+            price_cap=_f("PRICE_CAP_USD", 600.0),
+            delivery_days=int(_f("DELIVERY_DAYS", 3)),
+            followup_days=(_f("FOLLOWUP_FIRST_DAYS", 3.0), _f("FOLLOWUP_SECOND_DAYS", 4.0)),
             ollama_host=os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/"),
             ollama_model=os.getenv("OLLAMA_MODEL", "llama3.1"),
             fallback_ollama=os.getenv("LLM_FALLBACK_OLLAMA", "true").lower() == "true",

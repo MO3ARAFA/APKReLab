@@ -472,7 +472,12 @@ class App:
         return self.ok({"alive": now - ops.get("heartbeat", 0) < 180, "paused": bool(ops.get("paused")),
                         "telegram": bool(ops.get("telegram")), "cycle_hours": ops.get("cycle_hours"),
                         "last_cycle_t": ops.get("last_cycle_t"), "cycles": ops.get("cycles", 0), "failures": ops.get("failures", 0),
-                        "funnel": ops.get("funnel", {}), "pending": pend, "last_briefing": ops.get("last_briefing"),
+                        "funnel": ops.get("funnel", {}), "pending": pend,
+                        "leads": [{"company": l.get("company") or l["url"], "status": l["status"], "score": l.get("score"),
+                                   "quote": (l.get("quote") or {}).get("fix"), "won_usd": l.get("won_usd"),
+                                   "next_followup": l.get("next_followup")}
+                                  for l in sorted(ops.get("leads", {}).values(), key=lambda x: -x["t"])[:60]],
+                        "paypal": bool(self.settings.paypal_me), "last_briefing": ops.get("last_briefing"),
                         "limits": {"daily_cap": self.settings.daemon_daily_cap_usd, "live_cap": self.settings.daemon_live_cap_usd}})
 
     def growth(self) -> GrowthAgent:
