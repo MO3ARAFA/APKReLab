@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Autonomous AI Agency CLI.
 
+  python main.py --web [--port 8080]         local web command center at http://127.0.0.1:8080 (localhost only)
   python main.py --dashboard                 render the executive table from persisted state
   python main.py --run-all [--live]          sprint across all 5 projects (PM -> CFO -> CEO)
                                              --live enables PAID LLM calls (key from .env); default is free/offline
@@ -39,6 +40,8 @@ def report_llm_usage(console: Console, entries: list[dict]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Autonomous AI Agency & Master Orchestrator")
+    ap.add_argument("--web", action="store_true", help="start the local web command center (127.0.0.1 only)")
+    ap.add_argument("--port", type=int, default=8080, help="port for --web (default 8080)")
     ap.add_argument("--dashboard", action="store_true", help="render the live Executive Dashboard")
     ap.add_argument("--run-all", action="store_true", help="run a sprint across all 5 projects")
     ap.add_argument("--project", metavar="PRJ-0X", help="run a single project")
@@ -52,6 +55,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--amount", type=float, help="revenue amount in USD (with --log-revenue)")
     ap.add_argument("--reset", action="store_true", help="reset persisted state before running")
     args = ap.parse_args(argv)
+
+    if args.web:
+        if not 1024 <= args.port <= 65535:
+            ap.error("--port must be between 1024 and 65535")
+        try:
+            from web_dashboard import serve
+        except ImportError as exc:
+            ap.error(f"--web needs FastAPI and uvicorn: pip install fastapi uvicorn ({exc})")
+        return serve(args.port)
 
     if not (args.dashboard or args.run_all or args.project or args.log_revenue):
         ap.print_help()

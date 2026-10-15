@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{CSRF_TOKEN}}">
+  <meta name="color-scheme" content="dark">
+  <title>Agency Command Center</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true">◆</span><div><h1>Agency Command Center</h1><p>Autonomous AI Agency · local only · 127.0.0.1</p></div></div>
+    <div class="pills"><span id="pill-mode" class="pill">…</span><span id="pill-sync" class="pill muted">syncing…</span></div>
+  </header>
+
+  <main>
+    <!-- A. CFO telemetry -->
+    <section class="cards" aria-label="CFO financial telemetry">
+      <article class="card"><h2>Remaining Seed Capital</h2><div class="big" id="c-remaining">–</div>
+        <div class="bar" role="progressbar" aria-label="Seed capital remaining"><span id="c-remaining-bar"></span></div><p class="sub" id="c-remaining-sub"></p></article>
+      <article class="card"><h2>Total API Burn</h2><div class="big" id="c-burn">–</div><p class="sub" id="c-burn-sub"></p></article>
+      <article class="card"><h2>Cache Savings</h2><div class="big good" id="c-cache">–</div><p class="sub" id="c-cache-sub"></p></article>
+      <article class="card"><h2>Emergency Reserve Vault</h2><div class="big" id="c-vault">–</div><p class="sub" id="c-vault-sub"></p>
+        <p class="sub"><b>Est. revenue pipeline</b> <span id="c-pipeline">–</span> <span class="muted">(assumption, not revenue)</span></p></article>
+      <article class="card"><h2>Circuit Breaker</h2><div><span class="badge" id="c-breaker">–</span></div><p class="sub" id="c-breaker-sub"></p></article>
+    </section>
+
+    <div id="banner" class="banner hidden" role="status" aria-live="polite"></div>
+
+    <!-- B. CEO project matrix -->
+    <section class="panel" aria-label="AI CEO projects">
+      <div class="panel-head">
+        <h2>AI CEO · Projects</h2>
+        <label class="cap">Live max-spend per click $<input id="cap-single" type="number" min="0.01" max="1" step="0.01" value="0.05"></label>
+      </div>
+      <div class="tablewrap"><table id="projects"><thead><tr>
+        <th>Project</th><th>Group</th><th>PM</th><th>Spent / Cap</th><th>CEO QC</th><th>Status</th><th>Sellable units</th><th>Actions</th>
+      </tr></thead><tbody id="projects-body"></tbody></table></div>
+    </section>
+
+    <!-- C. Global controls -->
+    <section class="panel toolbar" aria-label="Agency controls">
+      <button type="button" class="btn" id="btn-all-offline">Run All (Offline Sprint)</button>
+      <button type="button" class="btn warn" id="btn-all-live">Run All (Live Sprint - Capped at $0.10)</button>
+      <button type="button" class="btn" id="btn-rebuild">Rebuild Master Sell Sheet</button>
+      <button type="button" class="btn ghost" id="btn-revenue">Log Real Revenue…</button>
+    </section>
+
+    <!-- D. Commercial vault -->
+    <section class="panel" aria-label="Commercial vault">
+      <div class="tabs" role="tablist">
+        <button role="tab" class="tab active" data-tab="sheet" aria-selected="true">Master Sell Sheet</button>
+        <button role="tab" class="tab" data-tab="targets" aria-selected="false">PRJ-03 Target Manager</button>
+        <button role="tab" class="tab" data-tab="ext" aria-selected="false">PRJ-02 Extension Kit</button>
+        <button role="tab" class="tab" data-tab="audit" aria-selected="false">PRJ-01 Audit &amp; Spend Ledger</button>
+      </div>
+
+      <div id="tab-sheet" class="tabpane" role="tabpanel">
+        <div class="row"><button type="button" class="btn small" id="copy-sheet">Copy whole sheet</button><span class="muted" id="sheet-meta"></span></div>
+        <div class="md" id="sheet-body"></div>
+      </div>
+
+      <div id="tab-targets" class="tabpane hidden" role="tabpanel">
+        <p class="muted">Rows live in <code>targets.csv</code> (git-ignored). Messages cite only objective, re-checkable page findings. Verify the recipient's name before sending.</p>
+        <div class="tablewrap"><table><thead><tr><th>URL</th><th>CEO / greeting</th><th>Company</th><th></th></tr></thead><tbody id="targets-body"></tbody></table></div>
+        <div class="addrow">
+          <input id="t-url" type="text" placeholder="https://company.com" aria-label="Target URL" autocomplete="off">
+          <input id="t-ceo" type="text" placeholder="CEO first name (or leave: there)" aria-label="CEO" autocomplete="off">
+          <input id="t-company" type="text" placeholder="Company" aria-label="Company" autocomplete="off">
+          <button type="button" class="btn" id="t-add">Add target</button>
+        </div>
+        <div class="row"><label class="cap">Live max-spend $<input id="cap-targets" type="number" min="0.01" max="1" step="0.01" value="0.10"></label>
+          <button type="button" class="btn warn" id="t-audit">Audit Targets Live</button><span class="muted" id="t-msg"></span></div>
+      </div>
+
+      <div id="tab-ext" class="tabpane hidden" role="tabpanel">
+        <div class="row"><a class="btn good" id="dl-ext" href="/api/download/extension" download>⬇ Download crm_clipper_extension.zip</a><span class="muted" id="ext-meta"></span></div>
+        <div class="md" id="ext-body"></div>
+      </div>
+
+      <div id="tab-audit" class="tabpane hidden" role="tabpanel">
+        <h3>CFO spend ledger <span class="muted" id="ledger-meta"></span></h3>
+        <div class="tablewrap scroll"><table><thead><tr><th>Time</th><th>Project</th><th>Event</th><th>Model / tier</th><th class="num">Tokens in/out</th><th class="num">Cost (USD)</th><th>Note</th></tr></thead><tbody id="ledger-body"></tbody></table></div>
+        <h3>Latest client modernization report (sample)</h3>
+        <div class="md" id="audit-body"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="revenue-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rev-title">
+    <div class="modal-card">
+      <h2 id="rev-title">Log verified revenue</h2>
+      <p class="muted">Only log money that has actually arrived. The first Group A revenue unlocks the $1.50 reserve vault for that project. Revenue never raises the $10 hard cap.</p>
+      <label>Project <select id="rev-project"></select></label>
+      <label>Amount (USD) <input id="rev-amount" type="number" min="0.01" step="0.01" placeholder="39.00"></label>
+      <label>Note <input id="rev-note" type="text" maxlength="200" placeholder="e.g. Gumroad sale"></label>
+      <label class="check"><input id="rev-confirm" type="checkbox"> I confirm this revenue is real and verified</label>
+      <div class="row end"><button type="button" class="btn ghost" id="rev-cancel">Cancel</button><button type="button" class="btn" id="rev-save">Log revenue</button></div>
+    </div>
+  </div>
+  <div id="toasts" aria-live="polite"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

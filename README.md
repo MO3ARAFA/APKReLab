@@ -23,13 +23,14 @@ main.py ──► Orchestrator ──► per project (5 in parallel threads)
 pip install -r requirements.txt
 cp .env.example .env            # optional: add API_KEY + LLM_PROVIDER for LLM enrichment
 python main.py --run-all        # sprint across all 5 projects (~3 s offline, $0.00)
+python main.py --web            # local web command center at http://127.0.0.1:8080
 python main.py --dashboard      # executive table from persisted state
 python main.py --project PRJ-01 # one project → output/PRJ-01/
 python main.py --log-revenue PRJ-01 --amount 250   # record real revenue (unlocks Group B reinvestment)
 python main.py --run-all --watch # live-refreshing dashboard while the sprint runs
 python main.py --project PRJ-03 --live --max-spend 0.05   # PAID LLM calls (key from .env), capped for this run
 python tools/build_ready_to_sell.py   # assemble output/READY_TO_SELL_NOW.md from real artifacts + CFO state
-python -m pytest                # 126 tests: framework, budget, live-mode safety + every project
+python -m pytest                # 152 tests: framework, budget, live-mode, web UI + every project
 ```
 
 Flags: `--live` (**enables paid LLM calls**; without it every run is offline and free even if a key is in `.env`),
@@ -37,6 +38,38 @@ Flags: `--live` (**enables paid LLM calls**; without it every run is offline and
 `--sequential` (no parallelism), `--reset` (wipe persisted state). After a `--live` run the CLI prints how many calls were
 live / cached / blocked / failed, so a silent fallback to offline output can't be mistaken for a live run. Exit code is non-zero if any requested
 project is not CEO-approved.
+
+## Local web command center
+
+```bash
+python main.py --web            # http://127.0.0.1:8080   (add --port 9090 to change)
+```
+
+A dark, single-page executive UI (no Node build, no CDN - its own CSS/JS) over the same state files the CLI uses:
+
+* **CFO telemetry bar** - remaining seed capital with progress bar, total burn (live vs cached calls), cache savings, reserve vault
+  (locked/unlocked) with the assumption-based revenue pipeline, and a green ACTIVE / red TRIPPED circuit-breaker badge. Refreshes every 3 s.
+* **AI CEO project matrix** - group, PM, spent/cap, CEO QC %, status (`APPROVED` / `DRY-RUN` / `BREAKER`), sellable units, and per-row
+  **Run Offline (Free)** / **Run Live (Paid)** buttons (live asks for confirmation and uses the per-click max-spend box, default $0.05).
+* **Agency controls** - Run All offline, Run All live (capped at $0.10), Rebuild Master Sell Sheet, and a Log Real Revenue dialog.
+* **Commercial vault tabs** - the rendered Master Sell Sheet with a *Copy message* button on every outreach email/pitch and *Copy section*
+  on every heading; the `targets.csv` manager (add/remove, then *Audit Targets Live*, which rebuilds the sheet); the PRJ-02 launch copy with a
+  zip download; and the PRJ-01 audit report beside the CFO's exact per-call spend ledger.
+
+Safety design (the server can spend money, so it is locked down even though it is local):
+
+* binds to `127.0.0.1` only - `serve()` has no host parameter;
+* `Host` must be `127.0.0.1`/`localhost:<port>` (anti DNS-rebinding), any `Origin` must match, and every state-changing request needs a per-process
+  CSRF token that only the served page can read; no CORS is enabled;
+* live runs are enforced **server-side**: key configured, `confirm: true`, and `0 < max_spend <= $1.00` per click, on top of the CFO sub-budgets and
+  the $10 cap. Offline is the default everywhere. One mutating operation runs at a time;
+* **no secrets in responses**: `.env` is never read by any endpoint, keys and key-shaped strings are scrubbed from every payload, artifacts are served
+  from a fixed allowlist (no user-supplied paths), and the page runs under a strict CSP with no inline scripts;
+* markdown from scraped sites / LLM output is rendered by an escape-first renderer, so it cannot inject HTML or `javascript:` links.
+
+JSON API (for scripting): `GET /api/state`, `/api/ledger`, `/api/sell-sheet`, `/api/launch-copy`, `/api/audit-report`, `/api/targets`,
+`/api/download/extension`, `/api/jobs/{id}`; `POST /api/run/{PRJ-0X}`, `/api/run-all`, `/api/revenue`, `/api/rebuild-sell-sheet`,
+`/api/targets`, `/api/targets/audit` (all POSTs need the `X-CSRF-Token` header from the page's `<meta name="csrf-token">`).
 
 ## The Triple-Gate loop
 
@@ -133,7 +166,7 @@ Chrome will prompt for that single host permission.
 ## Layout
 
 ```
-main.py  orchestrator.py  config.py  llm.py  state.py
+main.py  orchestrator.py  config.py  llm.py  state.py  web_dashboard.py  web_markdown.py  web/ (index.html, static/)
 agents/        ceo_agent.py  cfo_agent.py  pm_agents.py
 projects/      common.py  prj_01_legacy_migrator/  prj_02_gap_cloner/  prj_03_deal_closer/
                prj_04_zeroday_hunter/  prj_05_synthetic_foundry/   (each: pipeline.py, engine, sample data, tests/)

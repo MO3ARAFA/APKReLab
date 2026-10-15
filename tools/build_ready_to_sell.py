@@ -8,8 +8,8 @@ Also mirrors the deliverables to output/prj_01 and output/prj_02 (the paths used
 from __future__ import annotations
 
 import argparse
-import csv
 import datetime as dt
+import io
 import json
 import shutil
 import sys
@@ -27,11 +27,37 @@ from projects.prj_02_gap_cloner import launch_copy as lc  # noqa: E402
 from state import AgencyState  # noqa: E402
 
 
+class MissingArtifacts(RuntimeError):
+    """Raised when the pipelines the sell sheet depends on have not produced their outputs yet."""
+
+
+REQUIRED = {
+    "PRJ-01": ["client_audit_report.md", "findings.json", "migrated_service"],
+    "PRJ-02": ["LAUNCH_COPY.md", "crm_clipper_extension.zip", "gap_brief.md"],
+    "PRJ-03": ["outreach_batch.json"],
+}
+HINTS = {"outreach_batch.json": "run PRJ-03 with a targets list (Target Manager -> Audit Targets Live)"}
+
+
+def check_artifacts(out: Path) -> None:
+    missing = [f"{pid}/{name}" + (f" ({HINTS[name]})" if name in HINTS else "")
+               for pid, names in REQUIRED.items() for name in names if not (out / pid / name).exists()]
+    if missing:
+        raise MissingArtifacts("missing: " + "; ".join(missing))
+
+
 def dashboard_text(state: AgencyState, threshold: float) -> str:
-    c = Console(width=150, record=True, file=open("/dev/null", "w"))
+    c = Console(width=150, record=True, file=io.StringIO())
     ceo = CEOAgent(state, threshold)
     c.print(ceo.build_renderable())
     return c.export_text()
+
+
+def _rel(p: Path) -> str:
+    try:
+        return str(p.relative_to(ROOT))
+    except ValueError:
+        return str(p)
 
 
 def section_outreach(out: Path, sender: str | None) -> tuple[list[str], int]:
@@ -69,7 +95,7 @@ def section_extension(out: Path) -> list[str]:
     desc = copy.split("## Description", 1)[1].split("\n", 2)[2].split("### What you get", 1)[0].strip()
     feats = [f for f, _ in lc.FEATURES]
     return ["## 2. PRJ-02 - Chrome extension launch kit ($39 Lifetime Deal)", "",
-            f"Deliverable: `{zip_path.relative_to(ROOT)}` ({zip_path.stat().st_size // 1024} KB, manifest at zip root) | "
+            f"Deliverable: `{_rel(zip_path)}` ({zip_path.stat().st_size // 1024} KB, manifest at zip root) | "
             f"full copy: `output/PRJ-02/LAUNCH_COPY.md` (mirrored at `output/prj_02/LAUNCH_COPY.md`)", "",
             "### Gumroad / LemonSqueezy product", "",
             f"**Title:** {lc.TITLE}", "", f"**Tagline:** {lc.TAGLINE}", "", "**Description:**", "", desc, "",
@@ -117,12 +143,11 @@ def section_audit(out: Path) -> list[str]:
             "and query rewrites remain human work. Run it on the client's actual code before promising scope or a fixed price.", ""]
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--sender", help="replaces the placeholder sign-off 'Alex' in the outreach messages")
-    a = ap.parse_args()
-    s = Settings.load()
+def build(s: Settings | None = None, sender: str | None = None) -> dict:
+    """Write <output>/READY_TO_SELL_NOW.md (+ mirrors) from real artifacts and CFO state. Raises MissingArtifacts."""
+    s = s or Settings.load()
     out = s.output_dir
+    check_artifacts(out)
     state = AgencyState(s.state_path, s.budget_usd)
     snap = state.snapshot()
     summ = compute_summary(snap)
@@ -133,13 +158,13 @@ def main() -> int:
     for name in ("LAUNCH_COPY.md", "crm_clipper_extension.zip", "gap_brief.md"):
         shutil.copy2(out / "PRJ-02" / name, out / "prj_02" / name)
 
-    outreach, n_ready = section_outreach(out, a.sender)
+    outreach, n_ready = section_outreach(out, sender)
     live = [e for e in snap["ledger"] if e["kind"] == "api" and e.get("provider") != "offline"]
     by_model: dict[str, list] = {}
     for e in live:
         by_model.setdefault(f"{e['model']} (tier {e['tier']})", []).append(e["usd"])
-    md = ["# READY TO SELL NOW", "", f"_Generated {dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC} by `tools/build_ready_to_sell.py` "
-          "from real artifacts and persisted CFO state._", "",
+    md = ["# READY TO SELL NOW", "", f"Generated {dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC} by `tools/build_ready_to_sell.py` "
+          "from real artifacts and persisted CFO state.", "",
           f"**Sprint cost: ${summ['burn_usd']:.4f} of the ${summ['seed_usd']:.2f} seed budget "
           f"(${summ['remaining_seed_usd']:.4f} remaining).** The hard cap was never approached.", ""]
     md += outreach + section_extension(out) + section_audit(out)
@@ -150,12 +175,24 @@ def main() -> int:
            f"Est. revenue pipeline (${summ['pipeline_usd']:,.2f}) is an **assumption-based projection** (units x per-unit values in `config.py`), "
            "**not revenue** - nothing has been sold yet.", "",
            "## 5. Housekeeping", "",
-           "- **Rotate the API key** you pasted into the chat (console.anthropic.com -> API keys): it now exists in a conversation transcript. "
-           "Put the new one in `.env` only.",
+           "- **Rotate the API key** if you ever pasted it into a chat or terminal log (console.anthropic.com -> API keys). "
+           "Keep it in `.env` only.",
            "- `.env`, `state/` and `output/` are git-ignored; `targets.csv` names real companies, so it is your call whether to commit it.", ""]
     path = out / "READY_TO_SELL_NOW.md"
     path.write_text("\n".join(md))
-    print(f"wrote {path} ({n_ready} outreach messages, burn ${summ['burn_usd']:.4f})")
+    return {"path": str(path), "outreach_ready": n_ready, "burn_usd": summ["burn_usd"]}
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--sender", help="replaces the placeholder sign-off 'Alex' in the outreach messages")
+    a = ap.parse_args()
+    try:
+        r = build(Settings.load(), a.sender)
+    except MissingArtifacts as exc:
+        print(f"cannot build: {exc}")
+        return 1
+    print(f"wrote {r['path']} ({r['outreach_ready']} outreach messages, burn ${r['burn_usd']:.4f})")
     return 0
 
 
