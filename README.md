@@ -30,7 +30,7 @@ python main.py --log-revenue PRJ-01 --amount 250   # record real revenue (unlock
 python main.py --run-all --watch # live-refreshing dashboard while the sprint runs
 python main.py --project PRJ-03 --live --max-spend 0.05   # PAID LLM calls (key from .env), capped for this run
 python tools/build_ready_to_sell.py   # assemble output/READY_TO_SELL_NOW.md from real artifacts + CFO state
-python -m pytest                # 155 tests: framework, budget, live-mode, web UI + every project
+python -m pytest                # 158 tests: framework, budget, live-mode, web UI + every project
 ```
 
 Flags: `--live` (**enables paid LLM calls**; without it every run is offline and free even if a key is in `.env`),
@@ -48,7 +48,7 @@ python main.py --web            # http://127.0.0.1:8080   (add --port 9090 to ch
 Standard library only (no FastAPI, pydantic or Rust build), so it installs on a phone (Termux), a Raspberry Pi or a locked-down laptop:
 
 ```bash
-pip install rich python-dotenv     # both pure Python
+pip install rich python-dotenv pytest   # all pure Python (pytest is needed: projects self-verify with it)
 python main.py --web               # then open http://127.0.0.1:8080 in a browser on the same device
 ```
 

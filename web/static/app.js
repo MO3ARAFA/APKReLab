@@ -114,7 +114,14 @@
     if (!sel.options.length) state.projects.forEach(p => sel.append(el('option', {value: p.id, text: `${p.id} · ${p.name}`})));
   }
 
+  function renderWarnings(list) {
+    const w = $('#warnings'); w.textContent = '';
+    w.classList.toggle('hidden', !list.length);
+    list.forEach(t => w.append(el('div', {text: '⚠ ' + t})));
+  }
+
   function renderTop(state) {
+    renderWarnings(state.warnings || []);
     const pm = $('#pill-mode');
     pm.textContent = state.live_available ? 'Live API available (paid, capped)' : 'Offline only (no API key)';
     pm.className = 'pill ' + (state.live_available ? 'live' : 'off');

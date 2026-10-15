@@ -535,3 +535,27 @@ def test_markdown_structures_and_copy_buttons():
     assert 'data-copy="code">Copy message</button>' in html and 'data-copy="code">Copy</button>' in html
     assert "Hello &lt;b&gt;\nworld" in html
     assert render_markdown("```text\nunclosed").count("<pre>") == 1  # an unclosed fence cannot break the page
+
+
+# ------------------------------------------------------------------ environment problems are explained, not mysterious
+def test_missing_pytest_is_reported_clearly(tmp_path, monkeypatch):
+    import importlib.util
+    real = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name, *a, **k: None if name == "pytest" else real(name, *a, **k))
+    w = Web(mk_settings(tmp_path))
+    warns = w.get("/api/state").json()["warnings"]
+    assert warns and "pip install pytest" in warns[0]
+
+
+def test_no_warnings_when_environment_is_healthy(web):
+    assert web.get("/api/state").json()["warnings"] == []
+
+
+def test_run_pytest_names_the_missing_module(tmp_path, monkeypatch):
+    from projects.common import run_pytest
+    fake = tmp_path / "fakepath"
+    fake.mkdir()
+    (fake / "pytest.py").write_text("raise ModuleNotFoundError(\"No module named 'pytest'\")\n")
+    monkeypatch.setenv("PYTHONPATH", str(fake))
+    passed, total, detail = run_pytest(tmp_path, cwd=tmp_path)
+    assert (passed, total) == (0, 0) and "pip install pytest" in detail

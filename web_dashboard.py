@@ -16,6 +16,7 @@ Security model (this server can spend real money, so it is locked down even thou
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
 import os
 import re
@@ -366,12 +367,21 @@ class App:
                         "vault_released_to": v.get("released_to"), "cache_entries": self.cache_entries(),
                         "llm_errors": snap.get("llm_errors", 0), "live_calls": ls["live_calls"],
                         "cached_calls": summ["cache_hits"]},
-            "projects": projects, "live_available": self.live_available,
+            "projects": projects, "live_available": self.live_available, "warnings": self.warnings(),
             "limits": {"single_default": SINGLE_DEFAULT, "all_default": ALL_DEFAULT, "click_ceiling": CLICK_CEILING},
             "job": job.to_dict() if job else None, "busy": self.jobs.running() is not None,
             "artifacts": {"sell_sheet": self.out_file("READY_TO_SELL_NOW.md") is not None,
                           "extension_zip": self.out_file("prj_02/crm_clipper_extension.zip", "PRJ-02/crm_clipper_extension.zip") is not None},
         }
+
+    @staticmethod
+    def warnings() -> list[str]:
+        """Environment problems that would make every run fail - shown as a banner instead of a mystery REJECTED."""
+        out = []
+        if importlib.util.find_spec("pytest") is None:
+            out.append("pytest is not installed, so every project will be REJECTED (they verify their own output with it). "
+                       "Fix: run  pip install pytest  in the terminal, then reload.")
+        return out
 
     # -- execution -------------------------------------------------------------------------
     def default_executor(self, pids: list[str], live: bool, max_spend: float | None, env: dict | None = None) -> dict:

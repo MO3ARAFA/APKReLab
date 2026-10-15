@@ -1,6 +1,7 @@
 """Helpers shared by project pipelines."""
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tempfile
@@ -24,10 +25,13 @@ def run_pytest(test_path: Path, cwd: Path, timeout: int = 180) -> tuple[int, int
             [sys.executable, "-m", "pytest", str(test_path), "-p", "no:cacheprovider", "-o", "addopts=",
              f"--junitxml={xml_path}"],
             cwd=cwd, capture_output=True, text=True, timeout=timeout)
-        tail = "\n".join((proc.stdout + proc.stderr).strip().splitlines()[-8:])
+        out = proc.stdout + proc.stderr
+        tail = "\n".join(out.strip().splitlines()[-8:])
         try:
             root = ET.parse(xml_path).getroot()
         except (ET.ParseError, FileNotFoundError):
+            if re.search(r"No module named ['\"]?pytest", out):
+                return 0, 0, "pytest is not installed - run: pip install pytest"
             return 0, 0, tail
         suite = root if root.tag == "testsuite" else root.find("testsuite")
         tests, fails = int(suite.get("tests", 0)), int(suite.get("failures", 0)) + int(suite.get("errors", 0))

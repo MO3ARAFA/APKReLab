@@ -1,6 +1,6 @@
 python-dotenv>=1.0   # pure Python
 rich>=13.7           # pure Python
-pytest>=8.0          # tests only
+pytest>=8.0          # REQUIRED: every project verifies its own output with it (without it all runs are rejected)
 # The web dashboard (python main.py --web) uses only the standard library: no FastAPI / pydantic / Rust build needed,
 # so it installs on Termux/Android and Raspberry Pi. FastAPI + httpx are optional and only exercise the generated
 # PRJ-01 microservice tests (they are skipped when absent).
