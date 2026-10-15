@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,6 +42,12 @@ _DEFAULT_ROI = {"audits_ready": 3.0, "legacy_repos_audited": 100.0, "extensions_
                 "patches_ready": 0.0, "datasets_generated": 0.0}
 
 
+def sender_name() -> str:
+    """Sign-off for outreach messages (SENDER_NAME in .env). Stripped of characters that would look like placeholders."""
+    name = re.sub(r"[\[\]{}<>\r\n]", "", os.getenv("SENDER_NAME", "")).strip()[:60]
+    return name or "Mohamed"
+
+
 def roi_values() -> dict:
     import json
     vals = dict(_DEFAULT_ROI)
@@ -63,6 +70,7 @@ class Settings:
     model_t1: str = ""  # tier-1 workhorse override (default per provider in llm.py)
     model_t2: str = ""  # tier-2 gatekeeper override
     cache_path: Path = ROOT / "state" / "llm_cache.json"
+    targets_path: Path = ROOT / "targets.csv"
     compute_rate_per_hour: float = 0.0  # local compute is free; the seed budget is for API spend
     qc_threshold: float = 95.0
     max_cycles: int = 3
@@ -87,6 +95,7 @@ class Settings:
             model_t1=(os.getenv("LLM_MODEL_T1") or os.getenv("LLM_MODEL") or "").strip(),
             model_t2=os.getenv("LLM_MODEL_T2", "").strip(),
             cache_path=Path(os.getenv("AGENCY_CACHE_PATH", ROOT / "state" / "llm_cache.json")),
+            targets_path=Path(os.getenv("AGENCY_TARGETS_PATH", ROOT / "targets.csv")),
             ollama_host=os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/"),
             ollama_model=os.getenv("OLLAMA_MODEL", "llama3.1"),
             fallback_ollama=os.getenv("LLM_FALLBACK_OLLAMA", "true").lower() == "true",

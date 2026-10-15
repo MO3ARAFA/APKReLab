@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import inspect
 import json
 import os
 import re
@@ -37,6 +38,7 @@ from typing import Any, Callable
 from agents.cfo_agent import compute_summary
 from config import KEY_VARS, ROOT, Settings
 from orchestrator import Orchestrator
+from projects.prj_03_deal_closer import prospects
 from state import PROJECT_META, AgencyState
 from web_markdown import render_markdown
 
@@ -46,7 +48,6 @@ SINGLE_DEFAULT = 0.05   # default per-click cap for one project (USD)
 ALL_DEFAULT = 0.10      # default cap for a live sprint / target audit (USD)
 CLICK_CEILING = 1.00    # no single click may authorise more than this, whatever the client sends
 WEB_DIR = ROOT / "web"
-MAX_TARGETS = 200
 MAX_BODY = 64 * 1024
 CONTENT_TYPES = {".js": "application/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
 
@@ -97,11 +98,13 @@ class Job:
     finished: float | None = None
     result: dict | None = None
     error: str = ""
+    progress: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {"id": self.id, "kind": self.kind, "label": self.label, "mode": self.mode, "max_spend": self.max_spend,
                 "status": self.status, "started": self.started, "finished": self.finished,
-                "elapsed": round((self.finished or time.time()) - self.started, 2), "result": self.result, "error": self.error}
+                "elapsed": round((self.finished or time.time()) - self.started, 2), "result": self.result, "error": self.error,
+                "progress": self.progress}
 
 
 class JobManager:
@@ -123,7 +126,7 @@ class JobManager:
         finally:
             self._op.release()
 
-    def submit(self, kind: str, label: str, mode: str, max_spend: float | None, fn: Callable[[], dict]) -> Job:
+    def submit(self, kind: str, label: str, mode: str, max_spend: float | None, fn: Callable[..., dict]) -> Job:
         if not self._op.acquire(blocking=False):
             raise Busy("another run is in progress")
         job = Job(uuid.uuid4().hex[:12], kind, label, mode, max_spend)
@@ -135,7 +138,7 @@ class JobManager:
 
         def work() -> None:
             try:
-                job.result = fn()
+                job.result = fn(job) if len(inspect.signature(fn).parameters) else fn()
                 job.status = "done"
             except Exception as exc:  # surfaced to the UI; never crashes the server
                 job.status, job.error = "failed", f"{type(exc).__name__}: {exc}"
@@ -174,51 +177,16 @@ class TargetBody:
     company: str = ""
 
 
-# ----------------------------------------------------------------------------------- targets.csv
-_FORMULA = re.compile(r"^[=+\-@\t\r]")
+# ----------------------------------------------------------------------------------- targets.csv (shared with the AI CEO)
+MAX_TARGETS = prospects.MAX_TARGETS
+norm_url, read_targets, write_targets = prospects.norm_url, prospects.read_targets, prospects.write_targets
 
 
-def clean_target(t: TargetBody) -> dict:
-    url = t.url.strip()
-    if url and "://" not in url:
-        url = "https://" + url
-    p = urllib.parse.urlparse(url)
-    if p.scheme not in {"http", "https"} or not p.hostname or "." not in p.hostname:
-        raise HttpError(422, "url must be a public http(s) address, e.g. https://example.com")
-    if p.username or p.password:
-        raise HttpError(422, "credentials in URLs are not allowed")
-    if len(url) > 300:
-        raise HttpError(422, "url too long")
-    ceo = " ".join(t.ceo.split()) or "there"
-    company = " ".join(t.company.split())
-    for name, v, limit in (("ceo", ceo, 60), ("company", company, 80)):
-        if len(v) > limit:
-            raise HttpError(422, f"{name} too long (max {limit})")
-        if _FORMULA.match(v):
-            raise HttpError(422, f"{name} must not start with = + - @ (spreadsheet formula injection)")
-    return {"url": url, "ceo": ceo, "company": company}
-
-
-def norm_url(u: str) -> str:
-    return u.strip().lower().rstrip("/")
-
-
-def read_targets(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    with path.open(newline="", encoding="utf-8") as fh:
-        return [{"url": (r.get("url") or "").strip(), "ceo": (r.get("ceo") or "there").strip(),
-                 "company": (r.get("company") or "").strip()} for r in csv.DictReader(fh) if (r.get("url") or "").strip()]
-
-
-def write_targets(path: Path, rows: list[dict]) -> None:
-    tmp = path.with_suffix(".tmp")
-    with tmp.open("w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh)
-        w.writerow(["url", "ceo", "company"])
-        for r in rows:
-            w.writerow([r["url"], r["ceo"], r["company"]])
-    os.replace(tmp, path)
+def clean_target(t: "TargetBody") -> dict:
+    try:
+        return prospects.clean_row(t.url, t.ceo, t.company)
+    except ValueError as exc:
+        raise HttpError(422, str(exc))
 
 
 def summarize_ledger(entries: list[dict]) -> dict:
@@ -248,7 +216,8 @@ class Req:
 class App:
     """Transport-independent application: `handle()` maps (method, path, headers, body) -> (status, headers, bytes)."""
 
-    def __init__(self, settings: Settings, port: int, targets_path: Path, executor: Callable[..., dict] | None):
+    def __init__(self, settings: Settings, port: int, targets_path: Path, executor: Callable[..., dict] | None,
+                 autopilot: Callable[..., dict] | None = None):
         self.settings = settings
         self.targets_path = Path(targets_path)
         self.scrub = make_scrubber(settings)
@@ -259,6 +228,7 @@ class App:
         self.live_available = settings.provider != "offline"
         self.targets_lock = threading.Lock()
         self.run = executor or self.default_executor
+        self.autopilot = autopilot or self.default_autopilot
         self.routes = [
             ("GET", r"^/$", self.index), ("GET", r"^/static/([A-Za-z0-9._-]+)$", self.static),
             ("GET", r"^/api/state$", self.api_state), ("GET", r"^/api/ledger$", self.api_ledger),
@@ -268,7 +238,8 @@ class App:
             ("GET", r"^/api/sell-sheet$", self.api_sell_sheet), ("GET", r"^/api/launch-copy$", self.api_launch_copy),
             ("GET", r"^/api/audit-report$", self.api_audit_report), ("GET", r"^/api/download/extension$", self.api_download),
             ("GET", r"^/api/targets$", self.api_targets), ("POST", r"^/api/targets$", self.api_add_target),
-            ("DELETE", r"^/api/targets$", self.api_delete_target), ("POST", r"^/api/targets/audit$", self.api_audit_targets)]
+            ("DELETE", r"^/api/targets$", self.api_delete_target), ("POST", r"^/api/targets/audit$", self.api_audit_targets),
+            ("POST", r"^/api/targets/rotate$", self.api_rotate_targets), ("POST", r"^/api/autopilot$", self.api_autopilot)]
 
     # -- http plumbing ---------------------------------------------------------------------
     def handle(self, method: str, raw_path: str, headers: dict[str, str], body: bytes = b"") -> tuple[int, dict, bytes]:
@@ -406,6 +377,13 @@ class App:
                              for pid in pids},
                 "llm": summarize_ledger(snap["ledger"][start:])}
 
+    def default_autopilot(self, live: bool, max_spend: float | None, discover: bool, rotate: bool, on_step=None) -> dict:
+        s = self.settings if live else replace(self.settings, provider="offline")
+        orch = Orchestrator(s)
+        if live and max_spend is not None:
+            orch.cfo.set_run_cap(max_spend)
+        return orch.run_autopilot(self.targets_path, live=live, discover=discover, rotate=rotate, on_step=on_step)
+
     @staticmethod
     def project_or_404(pid: str) -> str:
         pid = pid.upper()
@@ -539,9 +517,47 @@ class App:
             raise HttpError(404, "extension zip not built yet - run PRJ-02")
         return 200, "application/zip", z.read_bytes(), {"Content-Disposition": 'attachment; filename="crm_clipper_extension.zip"'}
 
+    def pool_info(self) -> dict:
+        audited = set(self.snapshot().get("prospects", {}).get("audited", {}))
+        return prospects.pool_status(prospects.load_pool(), audited)
+
     def api_targets(self, req: Req):
         with self.targets_lock:
-            return self.ok({"targets": read_targets(self.targets_path), "max": MAX_TARGETS})
+            return self.ok({"targets": read_targets(self.targets_path), "max": MAX_TARGETS, "pool": self.pool_info()})
+
+    def api_autopilot(self, req: Req):
+        d = req.json()
+        mode, max_spend, confirm = self.run_body(d)
+        discover, rotate = _field(d, "discover", "bool", False), _field(d, "rotate", "bool", False)
+        if discover and mode != "live":
+            raise HttpError(422, "discovery asks the AI for new prospects, so it needs live mode")
+        cap = self.live_guard(mode, confirm, max_spend, ALL_DEFAULT)
+        live = mode == "live"
+
+        def work(job: Job) -> dict:
+            return self.autopilot(live, cap, discover, rotate, lambda steps: setattr(job, "progress", [dict(x) for x in steps]))
+        return self.submit("autopilot", f"AI CEO auto-pilot ({mode})", mode, cap, work)
+
+    def api_rotate_targets(self, req: Req):
+        d = req.json()
+        count = _field(d, "count", "num", 5)
+        discover = _field(d, "discover", "bool", False)
+        if not (1 <= count <= 10 and float(count).is_integer()):
+            raise HttpError(422, "count must be a whole number from 1 to 10")
+        cap = self.live_guard("live", _field(d, "confirm", "bool", False), _field(d, "max_spend", "num"), 0.02) if discover else None
+        try:
+            with self.jobs.exclusive(), self.targets_lock:
+                orch = Orchestrator(self.settings if discover else replace(self.settings, provider="offline"))
+                if cap is not None:
+                    orch.cfo.set_run_cap(cap)
+                res = orch.ceo.dispatch_targets(self.targets_path, n=int(count), rotate=True, discover=discover,
+                                                llm=orch.pms["PRJ-03"].llm if discover else None)
+        except Busy:
+            raise HttpError(409, "A run is in progress - wait for it to finish")
+        except RuntimeError as exc:
+            raise HttpError(409, str(exc))
+        return self.ok({"targets": res["targets"], "note": res["note"], "source": res["source"],
+                        "pool": {k: res[k] for k in ("pool", "audited_in_pool", "remaining")}})
 
     def api_add_target(self, req: Req):
         d = req.json()
@@ -590,8 +606,9 @@ class App:
 
 
 def create_app(settings: Settings | None = None, port: int = DEFAULT_PORT, targets_path: Path | None = None,
-               executor: Callable[..., dict] | None = None) -> App:
-    return App(settings or Settings.load(), port, Path(targets_path or ROOT / "targets.csv"), executor)
+               executor: Callable[..., dict] | None = None, autopilot: Callable[..., dict] | None = None) -> App:
+    settings = settings or Settings.load()
+    return App(settings, port, Path(targets_path or settings.targets_path), executor, autopilot)
 
 
 # ----------------------------------------------------------------------------------- http server

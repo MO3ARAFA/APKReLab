@@ -127,6 +127,8 @@
     pm.className = 'pill ' + (state.live_available ? 'live' : 'off');
     $('#pill-sync').textContent = 'updated ' + new Date(state.generated_at * 1000).toLocaleTimeString();
     $('#btn-all-live').disabled = !state.live_available || state.busy;
+    $('#btn-auto-live').disabled = !state.live_available || state.busy; $('#btn-auto-off').disabled = state.busy; $('#t-rotate').disabled = state.busy;
+    $('#btn-auto-live').textContent = `🤖 AI CEO: Run Full Auto-Pilot (Live - Capped at ${usd(state.limits.all_default, 2)})`;
     $('#btn-all-offline').disabled = state.busy; $('#btn-rebuild').disabled = state.busy; $('#t-audit').disabled = !state.live_available || state.busy;
     $('#btn-all-live').textContent = `Run All (Live Sprint - Capped at ${usd(state.limits.all_default, 2)})`;
     renderBanner(state.job);
@@ -137,14 +139,26 @@
     if (!job) { b.classList.add('hidden'); return; }
     b.classList.remove('hidden', 'run', 'done', 'fail');
     b.textContent = '';
+    const stepList = () => el('ul', {class: 'steps'}, (job.progress || []).map(s => el('li', {},
+      el('span', {class: s.status === 'done' ? 'ok' : s.status === 'failed' ? 'bad' : 'run', text: s.status === 'done' ? '✓' : s.status === 'failed' ? '✗' : '…'}),
+      el('span', {}, el('b', {text: s.label + ' '}), el('small', {text: s.detail})))));
     if (job.status === 'running') {
       b.classList.add('run');
       b.append(el('span', {class: 'spin'}), el('b', {text: 'Running '}), document.createTextNode(`${job.label} · ${job.elapsed.toFixed(0)}s` + (job.max_spend ? ` · cap ${usd(job.max_spend, 2)}` : '')));
+      if (job.progress && job.progress.length) b.append(stepList());
     } else if (job.status === 'failed') {
       b.classList.add('fail'); b.append(el('b', {text: 'Failed '}), document.createTextNode(`${job.label}: ${job.error}`));
+      if (job.progress && job.progress.length) b.append(stepList());
     } else {
       b.classList.add('done');
       const r = job.result || {}, l = r.llm || {};
+      if (job.kind === 'autopilot') {
+        const failed = (r.failed_steps || []).length;
+        b.classList.toggle('fail', failed > 0);
+        b.append(el('b', {text: failed ? 'Auto-pilot finished with issues ' : 'Auto-pilot complete '}),
+          document.createTextNode(`in ${job.elapsed.toFixed(1)}s. LLM: ${l.live_calls || 0} live (${usd(l.spent_usd || 0)}), ${l.cache_hits || 0} cached, ${l.blocked || 0} blocked, ${l.errors || 0} errors.`), stepList());
+        return;
+      }
       const ps = Object.entries(r.projects || {}).map(([id, v]) => `${id} ${v.ceo_status}${v.ceo_score != null ? ' ' + v.ceo_score.toFixed(0) + '%' : ''}`).join(' · ');
       b.append(el('b', {text: 'Done '}), document.createTextNode(`${job.label} in ${job.elapsed.toFixed(1)}s - ${ps}. LLM: ${l.live_calls || 0} live (${usd(l.spent_usd || 0)}), ${l.cache_hits || 0} cached, ${l.blocked || 0} blocked, ${l.errors || 0} errors.` + (r.sell_sheet ? ` Sell sheet ${r.sell_sheet}.` : '')));
     }
@@ -175,13 +189,20 @@
         const {job} = await api('/api/jobs/' + id);
         renderBanner(job);
         if (job.status !== 'running') {
-          clearInterval(pollJob); pollJob = null; await refresh(); Object.keys(loaded).forEach(k => delete loaded[k]); loadTab(activeTab, true);
+          clearInterval(pollJob); pollJob = null; await refresh(); Object.keys(loaded).forEach(k => delete loaded[k]);
+          if (job.kind === 'autopilot' && job.status === 'done') { history.replaceState(null, '', '#sheet'); activate('sheet'); } else { loadTab(activeTab, true); }
           toast(job.status === 'done' ? 'Run finished' : 'Run failed', job.status === 'done' ? 'ok' : 'err');
         }
       } catch (e) { clearInterval(pollJob); pollJob = null; toast(e.message, 'err'); }
     }, 1000);
   }
 
+  $('#btn-auto-off').addEventListener('click', () => start('/api/autopilot', {mode: 'offline'}));
+  $('#btn-auto-live').addEventListener('click', () => {
+    const cap = S.limits.all_default;
+    if (!confirm(`Run the full AI CEO AUTO-PILOT LIVE?\n\nIt will fetch real websites, make paid API calls (hard-capped at ${usd(cap, 2)} for the whole chain) and rebuild the sell sheet. Continue?`)) return;
+    start('/api/autopilot', {mode: 'live', max_spend: cap, confirm: true});
+  });
   $('#btn-all-offline').addEventListener('click', () => start('/api/run-all', {mode: 'offline'}));
   $('#btn-all-live').addEventListener('click', () => {
     const cap = S.limits.all_default;
@@ -256,6 +277,7 @@
   /* ---------- targets ---------- */
   async function loadTargets() {
     const d = await api('/api/targets'); const body = $('#targets-body'); body.textContent = '';
+    $('#t-pool').textContent = `Prospect pool: ${d.pool.remaining} of ${d.pool.pool} not yet audited`;
     if (!d.targets.length) body.append(el('tr', {}, el('td', {colspan: 4, class: 'muted', text: 'No targets yet - add one below.'})));
     d.targets.forEach(t => {
       const rm = el('button', {type: 'button', class: 'btn small ghost', text: 'Remove', 'aria-label': 'Remove ' + t.url});
@@ -267,6 +289,15 @@
     try {
       await api('/api/targets', {method: 'POST', json: {url: $('#t-url').value, ceo: $('#t-ceo').value, company: $('#t-company').value}});
       ['#t-url', '#t-ceo', '#t-company'].forEach(i => $(i).value = ''); loadTargets();
+    } catch (e) { toast(e.message, 'err'); }
+  });
+  $('#t-rotate').addEventListener('click', async () => {
+    const discover = $('#t-discover').checked;
+    if (discover && !confirm('Ask the AI CEO to suggest new prospects?\n\nThis makes one small paid call (capped at $0.02). Suggestions are unverified leads and greet with "there". Continue?')) return;
+    try {
+      const body = discover ? {count: 5, discover: true, confirm: true, max_spend: 0.02} : {count: 5};
+      const r = await api('/api/targets/rotate', {method: 'POST', json: body});
+      toast(r.note, 'ok'); loadTargets();
     } catch (e) { toast(e.message, 'err'); }
   });
   $('#t-audit').addEventListener('click', () => {

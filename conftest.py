@@ -13,3 +13,5 @@ _tmp = tempfile.mkdtemp(prefix="agency-tests-")
 os.environ.setdefault("AGENCY_STATE_PATH", os.path.join(_tmp, "agency_state.json"))
 os.environ.setdefault("AGENCY_CACHE_PATH", os.path.join(_tmp, "llm_cache.json"))
 os.environ.setdefault("AGENCY_OUTPUT_DIR", os.path.join(_tmp, "output"))
+os.environ.setdefault("AGENCY_TARGETS_PATH", os.path.join(_tmp, "targets.csv"))
+os.environ.pop("SENDER_NAME", None)  # tests assert the default sign-off

@@ -347,7 +347,13 @@ def validate_outreach(text: str, ceo: str, findings: list[Finding]) -> list[str]
     return errs
 
 
-def generate_outreach(llm, url: str, ceo: str, company: str, findings: list[Finding], sender: str = "Alex") -> tuple[str, dict]:
+def _sender(sender: str | None) -> str:
+    from config import sender_name
+    return sender or sender_name()
+
+
+def generate_outreach(llm, url: str, ceo: str, company: str, findings: list[Finding], sender: str | None = None) -> tuple[str, dict]:
+    sender = _sender(sender)
     fallback = template_outreach(ceo, company, findings, sender)
     facts = "\n".join(f"- {f.detail}" for f in findings[:5]) or "- no major issues"
     prompt = (f"Write a cold outreach message to {ceo}, CEO of {company} ({_domain(url)}).\n"
@@ -374,7 +380,7 @@ TIMING_KEYWORDS = {"server", "load"}
 
 
 def run_sniper(url: str, ceo: str = "there", company: str | None = None, llm=None, allow_private: bool = False,
-               html_file: str | None = None, sender: str = "Alex", with_outreach: bool = True) -> dict:
+               html_file: str | None = None, sender: str | None = None, with_outreach: bool = True) -> dict:
     if html_file:
         html = open(html_file, encoding="utf-8", errors="replace").read()
         fr = FetchResult(url, 200, 0.0, 0.0, len(html.encode()), len(html.encode()), True, url.startswith("https"), {}, html)
@@ -424,7 +430,7 @@ def load_targets(path: str, limit: int = 500) -> list[dict]:
     return out
 
 
-def run_batch(targets: list[dict], llm, sender: str = "Alex", allow_private: bool = False) -> list[dict]:
+def run_batch(targets: list[dict], llm, sender: str | None = None, allow_private: bool = False) -> list[dict]:
     """Audit many prospects; one failure never aborts the batch. Local fetch/parse is free - only the draft uses the LLM
     (identical drafts hit the cache), and the CFO breaker degrades to the deterministic template when budget runs out."""
     results = []
@@ -444,7 +450,7 @@ def main(argv=None) -> int:
     ap.add_argument("url")
     ap.add_argument("--ceo", default="there")
     ap.add_argument("--company")
-    ap.add_argument("--sender", default="Alex")
+    ap.add_argument("--sender", default=None, help="sign-off (default: SENDER_NAME from .env, else Mohamed)")
     ap.add_argument("--html-file", help="analyze a saved HTML file instead of fetching")
     ap.add_argument("--allow-private", action="store_true", help="allow private/loopback targets (disables SSRF guard)")
     a = ap.parse_args(argv)

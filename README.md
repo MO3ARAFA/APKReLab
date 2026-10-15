@@ -30,7 +30,7 @@ python main.py --log-revenue PRJ-01 --amount 250   # record real revenue (unlock
 python main.py --run-all --watch # live-refreshing dashboard while the sprint runs
 python main.py --project PRJ-03 --live --max-spend 0.05   # PAID LLM calls (key from .env), capped for this run
 python tools/build_ready_to_sell.py   # assemble output/READY_TO_SELL_NOW.md from real artifacts + CFO state
-python -m pytest                # 158 tests: framework, budget, live-mode, web UI + every project
+python -m pytest                # 181 tests: framework, budget, live-mode, web UI, auto-pilot + every project
 ```
 
 Flags: `--live` (**enables paid LLM calls**; without it every run is offline and free even if a key is in `.env`),
@@ -38,6 +38,32 @@ Flags: `--live` (**enables paid LLM calls**; without it every run is offline and
 `--sequential` (no parallelism), `--reset` (wipe persisted state). After a `--live` run the CLI prints how many calls were
 live / cached / blocked / failed, so a silent fallback to offline output can't be mistaken for a live run. Exit code is non-zero if any requested
 project is not CEO-approved.
+
+## AI CEO auto-pilot (zero manual entry)
+
+```bash
+python main.py --ceo-autopilot                 # free: real site audits + template drafts, no API spend
+python main.py --ceo-autopilot --live          # paid drafts, capped at $0.10 for the whole chain unless --max-spend says otherwise
+python main.py --ceo-autopilot --live --discover-targets   # also let the tier-1 model suggest extra prospects
+```
+
+Or tap **AI CEO: Run Full Auto-Pilot** in the web dashboard (live, capped at $0.10) / **AI CEO: Auto-Pilot (Offline)**. One sequence:
+
+1. **CEO target dispatch** - if `targets.csv` is missing, empty, or fully audited, the CEO loads the next un-audited prospects (5 by default) from the
+   curated pool `projects/prj_03_deal_closer/prospect_pool.json` and assigns them to PM-03. Rows you added yourself are respected.
+2. **PM-03 batch audit** - real HTTP diagnostics of each site and one outreach message per site (live LLM, or deterministic templates offline), signed
+   with `SENDER_NAME` (default `Mohamed`). Every prospect is then marked audited so the next run moves on.
+3. **PM-01 / PM-02** - legacy audit package and extension kit with launch copy, through the CFO and CEO gates.
+4. **Sell sheet** - `output/READY_TO_SELL_NOW.md` is rebuilt (the Master Sell Sheet tab refreshes itself).
+
+A failed step is recorded and the later steps still run; the whole chain shares one CFO run cap. The **Rotate / Load Next 5 Prospects** button in the
+Target Manager tab loads a fresh batch with one tap.
+
+**The prospect pool is a vetted starting list, not a guarantee.** 18 real SaaS companies and agencies whose sites were reachable and auditable on
+2026-10-15. A leader's name is used as the greeting only where a source is recorded (7 of 18); everything else greets with "there". The pool loader
+refuses an unsourced name. Findings are re-measured on every run, and you should still read each message and confirm the recipient before sending.
+Prospects suggested by the LLM (`--discover-targets`, or the checkbox in the UI) are **unverified leads**: validated (https, public hosts only, no
+duplicates), fetched before use, and always greeted with "there".
 
 ## Local web command center
 
@@ -175,7 +201,7 @@ Chrome will prompt for that single host permission.
 ## Layout
 
 ```
-main.py  orchestrator.py  config.py  llm.py  state.py  web_dashboard.py  web_markdown.py  web/ (index.html, static/)
+main.py  orchestrator.py  config.py  llm.py  state.py  web_dashboard.py  web_markdown.py  web/ (index.html, static/)  tools/ (sell-sheet builder)
 agents/        ceo_agent.py  cfo_agent.py  pm_agents.py
 projects/      common.py  prj_01_legacy_migrator/  prj_02_gap_cloner/  prj_03_deal_closer/
                prj_04_zeroday_hunter/  prj_05_synthetic_foundry/   (each: pipeline.py, engine, sample data, tests/)

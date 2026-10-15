@@ -1,0 +1,182 @@
+[
+ {
+  "company": "Directive Consulting",
+  "url": "https://www.directiveconsulting.com/",
+  "segment": "agency",
+  "greeting": "Garrett",
+  "greeting_verified": true,
+  "greeting_source": "https://resource.digitalsummit.com/speaker/garrett-mehrguth",
+  "vetted": "2026-10-15",
+  "notes": "founder and CEO per speaker bio and company pages"
+ },
+ {
+  "company": "Single Grain",
+  "url": "https://www.singlegrain.com/",
+  "segment": "agency",
+  "greeting": "there",
+  "greeting_verified": false,
+  "greeting_source": null,
+  "vetted": "2026-10-15",
+  "notes": "CEO change reported (Alex Flores) but undated; greeting left neutral"
+ },
+ {
+  "company": "Mailshake",
+  "url": "https://mailshake.com/",
+  "segment": "saas",
+  "greeting": "there",
+  "greeting_verified": false,
+  "greeting_source": null,
+  "vetted": "2026-10-15",
+  "notes": "founder Sujan Patel; current CEO title not confirmed"
+ },
+ {
+  "company": "Ladder",
+  "url": "https://ladder.io/",
+  "segment": "agency",
+  "greeting": "Jon",
+  "greeting_verified": true,
+  "greeting_source": "https://ladder.io/blog/growth-marketing-playbook",
+  "vetted": "2026-10-15",
+  "notes": "CEO and co-founder per Ladder's own blog"
+ },
+ {
+  "company": "Hotjar",
+  "url": "https://www.hotjar.com/",
+  "segment": "saas",
+  "greeting": "there",
+  "greeting_verified": false,
+  "greeting_source": null,
+  "vetted": "2026-10-15",
+  "notes": "part of Contentsquare; current CEO not confirmed"
+ },
+ {
+  "company": "Grow and Convert",
+  "url": "https://www.growandconvert.com/",
+  "segment": "agency",
+  "greeting": "there",
+  "greeting_verified": false,
+  "greeting_source": null,
+  "vetted": "2026-10-15",
+  "notes": "co-founders Devesh Khanal and Benji Hyam; no CEO title confirmed"
+ },
+ {
+  "company": "Omniscient Digital",
+  "url": "https://omniscientdigital.com/",
+  "segment": "agency",
+  "greeting": "David",
+  "greeting_verified": true,
+  "greeting_source": "https://beomniscient.com/about",
+  "vetted": "2026-10-15",
+  "notes": "David Ly Khim, co-founder and CEO per team page"
+ },
+ {
+  "company": "Wpromote",
+  "url": "https://www.wpromote.com/",
+  "segment": "agency",
+  "greeting": "Andrea",
+  "greeting_verified": true,
+  "greeting_source": "https://www.mediapost.com/publications/article/401250/wpromote-appoints-bendzick-ceo.html",
+  "vetted": "2026-10-15",
+  "notes": "Andrea Bendzick appointed CEO (MediaPost); appointment date not confirmed"
+ },
+ {
+  "company": "Blue Corona",
+  "url": "https://www.bluecorona.com/",
+  "segment": "agency",
+  "greeting": "there",
+  "greeting_verified": false,
+  "greeting_source": null,
+  "vetted": "2026-10-15",
+  "notes": "leadership sources conflict; neutral greeting"
+ },
+ {
+  "company": "Sendspark",
+  "url": "https://www.sendspark.com/",
+  "segment": "saas",
+  "greeting": "there",
+  "greeting_verified": false,
+  "greeting_source": null,
+  "vetted": "2026-10-15",
+  "notes": "CEO listing inconsistent across sources"
+ },
+ {
+  "company": "Convert.com",
+  "url": "https://www.convert.com/",
+  "segment": "saas",
+  "greeting": "Dennis",
+  "greeting_verified": true,
+  "greeting_source": "https://www.convert.com/author/dennis-van-der-heijden/page/6",
+  "vetted": "2026-10-15",
+  "notes": "Dennis van der Heijden, co-founder and CEO per Convert's blog"
+ },
+ {
+  "company": "Insightly",
+  "url": "https://www.insightly.com/",
+  "segment": "saas",
+  "greeting": "there",
+  "greeting_verified": false,
+  "greeting_source": null,
+  "vetted": "2026-10-15",
+  "notes": "former CEO stepped down mid-2024; successor not confirmed"
+ },
+ {
+  "company": "ProofHub",
+  "url": "https://www.proofhub.com/",
+  "segment": "saas",
+  "greeting": "there",
+  "greeting_verified": false,
+  "greeting_source": null,
+  "vetted": "2026-10-15",
+  "notes": "leadership not verified"
+ },
+ {
+  "company": "LYFE Marketing",
+  "url": "https://www.lyfemarketing.com/",
+  "segment": "agency",
+  "greeting": "there",
+  "greeting_verified": false,
+  "greeting_source": null,
+  "vetted": "2026-10-15",
+  "notes": "Sean Standberry listed as CEO by third parties, co-founder on company bio; neutral greeting"
+ },
+ {
+  "company": "Disruptive Advertising",
+  "url": "https://www.disruptiveadvertising.com/",
+  "segment": "agency",
+  "greeting": "Jacob",
+  "greeting_verified": true,
+  "greeting_source": "https://disruptiveadvertising.com/bio/jacob-baadsgaard/",
+  "vetted": "2026-10-15",
+  "notes": "Jacob Baadsgaard, founder and CEO per company bio (often called Jake)"
+ },
+ {
+  "company": "WebFX",
+  "url": "https://www.webfx.com/",
+  "segment": "agency",
+  "greeting": "William",
+  "greeting_verified": true,
+  "greeting_source": "https://www.webfx.com/about/leadership/",
+  "vetted": "2026-10-15",
+  "notes": "William Craig, founder/CEO per leadership page (may go by Bill - check before sending)"
+ },
+ {
+  "company": "Reply.io",
+  "url": "https://reply.io/",
+  "segment": "saas",
+  "greeting": "there",
+  "greeting_verified": false,
+  "greeting_source": null,
+  "vetted": "2026-10-15",
+  "notes": "founder name appears as Oleg Campbell/Oleg Bilozor; neutral greeting"
+ },
+ {
+  "company": "Smartlook",
+  "url": "https://www.smartlook.com/",
+  "segment": "saas",
+  "greeting": "there",
+  "greeting_verified": false,
+  "greeting_source": null,
+  "vetted": "2026-10-15",
+  "notes": "Cisco-owned product; leadership not verified"
+ }
+]

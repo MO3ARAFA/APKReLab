@@ -12,7 +12,8 @@ from rich.text import Text
 
 from agents.cfo_agent import compute_summary
 from llm import LLMClient
-from state import AgencyState
+from projects.prj_03_deal_closer import prospects
+from state import AgencyState, now
 
 
 @dataclass
@@ -34,6 +35,88 @@ class CEOAgent:
     def dispatch_plan(self) -> list[str]:
         """Group A first (cash), Group B limited by the CFO."""
         return ["PRJ-01", "PRJ-02", "PRJ-03", "PRJ-04", "PRJ-05"]
+
+    # -- campaign management: lead dispatch to PM-03 -----------------------------------------
+    def audited_urls(self) -> set[str]:
+        return set(self.state.snapshot().get("prospects", {}).get("audited", {}))
+
+    def pool_status(self) -> dict:
+        return prospects.pool_status(prospects.load_pool(), self.audited_urls())
+
+    def mark_audited(self, results: list[dict]) -> int:
+        """Record which prospects have been through PM-03's batch audit (success or not) so the next batch moves on."""
+        def f(d):
+            book = d.setdefault("prospects", {}).setdefault("audited", {})
+            for r in results:
+                if r.get("url"):
+                    book[prospects.norm_url(r["url"])] = {"t": now(), "ready": bool(r.get("ready")), "error": str(r.get("error", ""))[:120]}
+        self.state.update(f)
+        return len(results)
+
+    def discover_prospects(self, llm: LLMClient, n: int, exclude: set[str]) -> list[dict]:
+        """Ask the tier-1 model for fresh leads. Suggestions are unverified: validated, fetched, and greeted with 'there'."""
+        known = ", ".join(sorted(u.split("//")[-1] for u in exclude))[:600] or "none"
+        res = llm.complete(
+            f"Suggest {n + 3} real, currently operating B2B SaaS companies or digital marketing agencies with a public marketing "
+            f"website, small to mid-size, not in this list: {known}. Reply with ONLY a JSON array like "
+            f'[{{"company": "Name", "url": "https://example.com"}}]. Use only companies you are confident exist.',
+            system="You are a careful B2B market researcher. Never invent companies or URLs; if unsure, return fewer.",
+            fallback="[]", max_tokens=600)
+        out = []
+        for row in prospects.parse_discovered(res.text, exclude, n + 3):
+            if self.verify_reachable(row["url"]):
+                out.append(row)
+            if len(out) >= n:
+                break
+        return out
+
+    @staticmethod
+    def verify_reachable(url: str) -> bool:
+        from projects.prj_03_deal_closer import b2b_sniper as bs
+        try:
+            bs.assert_auditable(bs.fetch(url, timeout=10))
+            return True
+        except Exception:
+            return False
+
+    def dispatch_targets(self, targets_path, n: int = 5, rotate: bool = False, discover: bool = False,
+                         llm: LLMClient | None = None) -> dict:
+        """Make sure PM-03 has a fresh, un-audited batch in targets.csv without any human data entry.
+
+        * existing rows with at least one un-audited target are kept (the human's choice wins);
+        * empty/missing file, an all-audited file, or rotate=True loads the next `n` from the curated pool;
+        * discover=True lets the tier-1 model suggest additional (unverified, reachability-checked) prospects.
+        """
+        n = max(1, min(int(n), 10))
+        path = Path(targets_path)
+        rows = prospects.read_targets(path)
+        audited = self.audited_urls()
+        pending = [r for r in rows if prospects.norm_url(r["url"]) not in audited]
+        pool = prospects.load_pool()
+        if rows and pending and not rotate:
+            result = {"targets": rows, "seeded": False, "source": "existing",
+                      "note": f"kept {len(rows)} existing targets ({len(pending)} not yet audited)"}
+        else:
+            picks = [prospects.row_from_pool(p) for p in prospects.select_next(pool, audited, n)]
+            source = "pool"
+            if discover and llm is not None:
+                want = max(n - len(picks), min(2, n))
+                extra = self.discover_prospects(llm, want, audited | {prospects.norm_url(r["url"]) for r in picks})
+                if extra:
+                    picks = picks[: n - len(extra)] + extra
+                    source = "pool+llm" if picks[: n - len(extra)] else "llm"
+            if not picks:
+                if rows:
+                    result = {"targets": rows, "seeded": False, "source": "existing",
+                              "note": "prospect pool exhausted - kept the current targets (enable discovery to find new ones)"}
+                    self.state.set_project("PRJ-03", targets_assigned=len(rows))
+                    return {**result, **self.pool_status()}
+                raise RuntimeError("no targets available: the prospect pool is exhausted and discovery found nothing")
+            prospects.write_targets(path, picks)
+            result = {"targets": picks, "seeded": True, "source": source,
+                      "note": f"CEO loaded {len(picks)} new prospects ({source})"}
+        self.state.set_project("PRJ-03", targets_assigned=len(result["targets"]))  # assigned to PM-03
+        return {**result, **self.pool_status()}
 
     # -- QC gate ---------------------------------------------------------------------------
     def _artifact_ok(self, path: Path) -> str | None:

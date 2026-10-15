@@ -41,6 +41,14 @@
     </section>
 
     <!-- C. Global controls -->
+    <section class="panel autopilot" aria-label="AI CEO auto-pilot">
+      <div><h2>AI CEO · Auto-Pilot</h2><p class="muted">One tap: the CEO seeds fresh prospects, PM-03 audits them and drafts the outreach, PM-01/PM-02 build the audit package and extension kit, then the sell sheet is assembled. No data entry.</p></div>
+      <div class="row">
+        <button type="button" class="btn primary" id="btn-auto-live">🤖 AI CEO: Run Full Auto-Pilot (Live - Capped at $0.10)</button>
+        <button type="button" class="btn" id="btn-auto-off">🤖 AI CEO: Auto-Pilot (Offline)</button>
+      </div>
+    </section>
+
     <section class="panel toolbar" aria-label="Agency controls">
       <button type="button" class="btn" id="btn-all-offline">Run All (Offline Sprint)</button>
       <button type="button" class="btn warn" id="btn-all-live">Run All (Live Sprint - Capped at $0.10)</button>
@@ -63,6 +71,9 @@
       </div>
 
       <div id="tab-targets" class="tabpane hidden" role="tabpanel">
+        <div class="row"><button type="button" class="btn good" id="t-rotate">⟳ Rotate / Load Next 5 Prospects</button>
+          <label class="check"><input id="t-discover" type="checkbox"> also let the AI CEO suggest new prospects <span class="muted">(paid, tier-1, ≤ $0.02)</span></label>
+          <span class="muted" id="t-pool"></span></div>
         <p class="muted">Rows live in <code>targets.csv</code> (git-ignored). Messages cite only objective, re-checkable page findings. Verify the recipient's name before sending.</p>
         <div class="tablewrap"><table><thead><tr><th>URL</th><th>CEO / greeting</th><th>Company</th><th></th></tr></thead><tbody id="targets-body"></tbody></table></div>
         <div class="addrow">

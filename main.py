@@ -2,6 +2,7 @@
 """Autonomous AI Agency CLI.
 
   python main.py --web [--port 8080]         local web command center at http://127.0.0.1:8080 (localhost only)
+  python main.py --ceo-autopilot [--live]    AI CEO runs the whole campaign: seed targets -> audit -> sprint -> sell sheet
   python main.py --dashboard                 render the executive table from persisted state
   python main.py --run-all [--live]          sprint across all 5 projects (PM -> CFO -> CEO)
                                              --live enables PAID LLM calls (key from .env); default is free/offline
@@ -38,6 +39,31 @@ def report_llm_usage(console: Console, entries: list[dict]) -> None:
         console.print(f"  [yellow]blocked[/yellow] {e['project']}: {e.get('reason', '')}")
 
 
+def run_autopilot_cli(console: Console, orch: Orchestrator, args) -> int:
+    live = orch.s.provider != "offline"
+    if args.live and not live:
+        console.print("[yellow]--live requested but no API key found in .env - running the offline chain.[/yellow]")
+    console.print(f"[bold]AI CEO auto-pilot[/bold] - {'[red]LIVE[/red] (cap $%.2f)' % args.max_spend if live else 'offline, $0.00'}")
+    icon = {"done": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "…"}
+    printed = {"n": 0}
+
+    def on_step(steps):  # print each step once, when it finishes
+        while printed["n"] < len(steps) and steps[printed["n"]]["status"] != "running":
+            s = steps[printed["n"]]
+            console.print(f"  {icon[s['status']]} {s['label']} - {s['detail']}")
+            printed["n"] += 1
+    result = orch.run_autopilot(live=live, discover=args.discover_targets and live, rotate=args.rotate_targets, on_step=on_step)
+    orch.ceo.render_dashboard(console)
+    l = result["llm"]
+    console.print(f"[bold]LLM:[/bold] {l['live_calls']} live (${l['spent_usd']:.5f}), {l['cache_hits']} cached, "
+                  f"{l['blocked']} blocked, {l['errors']} errors")
+    if result["status"] == "complete":
+        console.print(f"[green]Auto-pilot complete. Sell sheet: {result['sell_sheet']}[/green]")
+        return 0
+    console.print(f"[red]Auto-pilot finished with failed steps: {', '.join(result['failed_steps'])}[/red]")
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Autonomous AI Agency & Master Orchestrator")
     ap.add_argument("--web", action="store_true", help="start the local web command center (127.0.0.1 only)")
@@ -45,6 +71,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dashboard", action="store_true", help="render the live Executive Dashboard")
     ap.add_argument("--run-all", action="store_true", help="run a sprint across all 5 projects")
     ap.add_argument("--project", metavar="PRJ-0X", help="run a single project")
+    ap.add_argument("--ceo-autopilot", action="store_true",
+                    help="AI CEO runs the full chain (target dispatch, PRJ-03 audit, PRJ-01/02 sprint, sell sheet); "
+                         "add --live for paid LLM drafts (default cap $0.10)")
+    ap.add_argument("--discover-targets", action="store_true", help="with --ceo-autopilot --live: let the AI suggest extra prospects")
+    ap.add_argument("--rotate-targets", action="store_true", help="with --ceo-autopilot: load the next batch even if targets.csv has un-audited rows")
     ap.add_argument("--live", action="store_true",
                     help="enable paid LLM calls using the key in .env (default: offline deterministic, $0)")
     ap.add_argument("--watch", action="store_true", help="live-refresh the dashboard while running")
@@ -65,7 +96,11 @@ def main(argv: list[str] | None = None) -> int:
             ap.error(f"--web needs FastAPI and uvicorn: pip install fastapi uvicorn ({exc})")
         return serve(args.port)
 
-    if not (args.dashboard or args.run_all or args.project or args.log_revenue):
+    if (args.discover_targets or args.rotate_targets) and not args.ceo_autopilot:
+        ap.error("--discover-targets / --rotate-targets only apply with --ceo-autopilot")
+    if args.discover_targets and not args.live:
+        ap.error("--discover-targets asks the AI for prospects, so it needs --live")
+    if not (args.dashboard or args.run_all or args.project or args.log_revenue or args.ceo_autopilot):
         ap.print_help()
         return 2
 
@@ -74,12 +109,17 @@ def main(argv: list[str] | None = None) -> int:
     if not args.live:
         settings = replace(settings, provider="offline")  # never spend without an explicit --live
     orch = Orchestrator(settings)
+    if args.ceo_autopilot and args.live and args.max_spend is None:
+        args.max_spend = 0.10  # a paid autonomous chain is never uncapped
     if args.reset:
         orch.state.path.unlink(missing_ok=True)
         orch = Orchestrator(settings)
     if args.max_spend is not None:
         orch.cfo.set_run_cap(args.max_spend)
     ledger_start = len(orch.state.snapshot()["ledger"])
+
+    if args.ceo_autopilot:
+        return run_autopilot_cli(console, orch, args)
 
     if args.log_revenue:
         if args.amount is None:

@@ -22,7 +22,7 @@ from rich.console import Console  # noqa: E402
 
 from agents.ceo_agent import CEOAgent  # noqa: E402
 from agents.cfo_agent import compute_summary  # noqa: E402
-from config import Settings  # noqa: E402
+from config import Settings, sender_name  # noqa: E402
 from projects.prj_02_gap_cloner import launch_copy as lc  # noqa: E402
 from state import AgencyState  # noqa: E402
 
@@ -69,7 +69,7 @@ def section_outreach(out: Path, sender: str | None) -> tuple[list[str], int]:
     for i, r in enumerate(ready, 1):
         msg = r["outreach"].strip()
         if sender:
-            msg = msg.rsplit("\n", 1)[0].rstrip() + f"\n\n{sender}" if msg.splitlines()[-1].strip() == "Alex" else msg
+            msg = msg.rsplit("\n", 1)[0].rstrip() + f"\n\n{sender}" if msg.splitlines()[-1].strip() == sender_name() else msg
         lines += [f"### {i}. {r['company']} - {r['url']}", "",
                   f"- Greeting used: **{r['ceo']}**" + ("  _(leader not confidently verified - add the right name before sending)_" if r["ceo"] == "there" else "  _(leader confirmed from public sources)_"),
                   "- Bottlenecks cited (each independently re-checked against the raw HTML):"] + \
@@ -80,7 +80,7 @@ def section_outreach(out: Path, sender: str | None) -> tuple[list[str], int]:
     for r in failed:
         lines.append(f"- Skipped {r['url']}: {r.get('error', 'failed validation')}")
     lines += ["", "**Read before sending**", "",
-              "- The sign-off `Alex` is a placeholder - replace it with your name (or re-run this builder with `--sender \"Your Name\"`).",
+              f"- Messages are signed `{sender_name()}` (change it with `SENDER_NAME` in `.env`, or `--sender` when running this builder).",
               "- These are mature, well-run companies, so the findings are real but **modest**; expect low reply rates. Smaller companies "
               "with weaker sites make a stronger pitch - drop any list into `targets.csv` (url,ceo,company) and re-run.",
               "- Speed numbers were deliberately left out of the messages: one measurement from this host says little about real visitors.",
@@ -137,7 +137,7 @@ def section_audit(out: Path) -> list[str]:
             "modernized core with a regression test suite, and (4) a prioritized remediation roadmap.", "",
             "Here is a sample deliverable from a demo repo so you can judge the format: [link to the sample report].", "",
             "If one of your repositories is a candidate, I can start with a scoping call - would [day] work?", "",
-            "[Your name]  |  [postal address / opt-out line]", "```", "",
+            f"{sender_name()}  |  [postal address / opt-out line]", "```", "",
             "**Be precise when you sell it:** the tooling finds and auto-fixes a specific set of patterns (see the report's "
             "\"Automated Remediation\" and \"Remaining Findings Requiring Human Action\" sections); credential rotation, hash migration "
             "and query rewrites remain human work. Run it on the client's actual code before promising scope or a fixed price.", ""]
@@ -185,7 +185,7 @@ def build(s: Settings | None = None, sender: str | None = None) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--sender", help="replaces the placeholder sign-off 'Alex' in the outreach messages")
+    ap.add_argument("--sender", help="override the sign-off (default: SENDER_NAME from .env, else Mohamed)")
     a = ap.parse_args()
     try:
         r = build(Settings.load(), a.sender)
