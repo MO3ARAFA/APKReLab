@@ -30,7 +30,7 @@ python main.py --log-revenue PRJ-01 --amount 250   # record real revenue (unlock
 python main.py --run-all --watch # live-refreshing dashboard while the sprint runs
 python main.py --project PRJ-03 --live --max-spend 0.05   # PAID LLM calls (key from .env), capped for this run
 python tools/build_ready_to_sell.py   # assemble output/READY_TO_SELL_NOW.md from real artifacts + CFO state
-python -m pytest                # 152 tests: framework, budget, live-mode, web UI + every project
+python -m pytest                # 155 tests: framework, budget, live-mode, web UI + every project
 ```
 
 Flags: `--live` (**enables paid LLM calls**; without it every run is offline and free even if a key is in `.env`),
@@ -45,7 +45,16 @@ project is not CEO-approved.
 python main.py --web            # http://127.0.0.1:8080   (add --port 9090 to change)
 ```
 
-A dark, single-page executive UI (no Node build, no CDN - its own CSS/JS) over the same state files the CLI uses:
+Standard library only (no FastAPI, pydantic or Rust build), so it installs on a phone (Termux), a Raspberry Pi or a locked-down laptop:
+
+```bash
+pip install rich python-dotenv     # both pure Python
+python main.py --web               # then open http://127.0.0.1:8080 in a browser on the same device
+```
+
+On Termux: `pkg install python git`, clone the repo, run the two lines above, and open the URL in your phone's browser
+(keep Termux running while you use it). A dark, single-page executive UI (no Node build, no CDN - its own CSS/JS) over the
+same state files the CLI uses:
 
 * **CFO telemetry bar** - remaining seed capital with progress bar, total burn (live vs cached calls), cache savings, reserve vault
   (locked/unlocked) with the assumption-based revenue pipeline, and a green ACTIVE / red TRIPPED circuit-breaker badge. Refreshes every 3 s.

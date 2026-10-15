@@ -1,7 +1,9 @@
 """Local web command center: security, accurate telemetry, safe runs, spend caps, artifacts, targets."""
 import csv
+import http.client
 import json
 import re
+import socket
 import threading
 import time
 import zipfile
@@ -9,7 +11,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 import web_dashboard as wd
 from config import Settings
@@ -30,14 +31,51 @@ def mk_settings(tmp_path, provider="offline", key=""):
     return s
 
 
+class Resp:
+    def __init__(self, status, headers, body):
+        self.status_code, self.content = status, body
+        self.headers = {k.lower(): v for k, v in headers.items()}
+        self.text = body.decode("utf-8", "replace")
+
+    def json(self):
+        return json.loads(self.text)
+
+
+class Client:
+    """Calls the app's transport-independent handler directly (same code path the HTTP server uses)."""
+
+    def __init__(self, app, host="127.0.0.1:8080"):
+        self.app, self.host = app, host
+
+    def request(self, method, path, headers=None, json_body=None):
+        h = {"host": self.host, **{k.lower(): v for k, v in (headers or {}).items()}}
+        body = b""
+        if json_body is not None:
+            body = json.dumps(json_body).encode()
+            h["content-type"] = "application/json"
+        return Resp(*self.app.handle(method, path, h, body))
+
+    def get(self, path, headers=None):
+        return self.request("GET", path, headers)
+
+    def post(self, path, json=None, headers=None):
+        return self.request("POST", path, headers, json)
+
+    def delete(self, path, headers=None):
+        return self.request("DELETE", path, headers)
+
+    def options(self, path, headers=None):
+        return self.request("OPTIONS", path, headers)
+
+
 class Web:
-    """TestClient + CSRF token, mimicking the page."""
+    """Client + CSRF token, mimicking the page."""
 
     def __init__(self, settings, executor=None, targets=None):
         self.settings = settings
         self.targets = targets or settings.state_path.parent / "targets.csv"
         self.app = wd.create_app(settings, port=8080, targets_path=self.targets, executor=executor)
-        self.c = TestClient(self.app, base_url=BASE)
+        self.c = Client(self.app)
         self.token = re.search(r'csrf-token" content="([^"]+)"', self.c.get("/").text).group(1)
 
     def get(self, path, **kw):
@@ -172,17 +210,79 @@ def test_rejects_foreign_host_origin_and_missing_csrf(web):
     assert web.get("/api/state").headers["cache-control"] == "no-store"
 
 
-def test_serve_binds_loopback_only(monkeypatch):
-    import uvicorn
-    seen = {}
-    monkeypatch.setattr(uvicorn, "run", lambda app, host, port, log_level: seen.update(host=host, port=port))
+def test_serve_binds_loopback_only_and_validates_port(monkeypatch):
+    import inspect
     assert wd.HOST == "127.0.0.1"
-    assert wd.serve(8123) == 0 and seen == {"host": "127.0.0.1", "port": 8123}
+    assert "host" not in inspect.signature(wd.serve).parameters and "host" not in inspect.signature(wd.make_server).parameters
+    seen = {}
+
+    class FakeSrv:
+        def serve_forever(self):
+            raise KeyboardInterrupt
+
+        def server_close(self):
+            seen["closed"] = True
+    monkeypatch.setattr(wd, "make_server", lambda port: seen.update(port=port) or FakeSrv())
+    assert wd.serve(8123) == 0 and seen == {"port": 8123, "closed": True}
     for bad in (80, 70000):
         with pytest.raises(SystemExit):
             wd.serve(bad)
-    import inspect
-    assert "host" not in inspect.signature(wd.serve).parameters  # no way to bind elsewhere
+
+
+def test_serve_reports_port_in_use(monkeypatch):
+    blocker = socket.socket()
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    try:
+        with pytest.raises(SystemExit) as e:
+            wd.serve(blocker.getsockname()[1])
+        assert "cannot bind" in str(e.value)
+    finally:
+        blocker.close()
+
+
+def test_real_http_server_roundtrip(tmp_path):
+    """Actual sockets: loopback binding, headers, CSRF over the wire, body-size limit, HEAD."""
+    rec = Recorder()
+    srv = wd.make_server(0, settings=mk_settings(tmp_path), targets_path=tmp_path / "t.csv", executor=rec)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        host, port = srv.server_address
+        assert host == "127.0.0.1"
+
+        def call(method, path, body=None, headers=None):
+            conn = http.client.HTTPConnection(host, port, timeout=10)
+            conn.request(method, path, body=body, headers=headers or {})
+            r = conn.getresponse()
+            data = r.read()
+            conn.close()
+            return r, data
+        r, html = call("GET", "/")
+        assert r.status == 200 and r.getheader("Content-Security-Policy") and r.getheader("X-Frame-Options") == "DENY"
+        token = re.search(rb'csrf-token" content="([^"]+)"', html).group(1).decode()
+        r, data = call("GET", "/api/state")
+        assert r.status == 200 and json.loads(data)["summary"]["seed_usd"] == 10.0
+        assert call("GET", "/static/app.js")[0].getheader("Content-Type").startswith("application/javascript")
+        assert call("GET", "/", headers={"Host": "evil.example"})[0].status == 403
+        assert call("POST", "/api/run/PRJ-04", body=b"{}", headers={"Content-Type": "application/json"})[0].status == 403
+        ok_hdr = {"Content-Type": "application/json", "X-CSRF-Token": token}
+        r, data = call("POST", "/api/run/PRJ-04", body=b'{"mode": "offline"}', headers=ok_hdr)
+        assert r.status == 202 and json.loads(data)["job"]["status"] in {"running", "done"}
+        assert call("POST", "/api/run/PRJ-04", body=b"{not json", headers=ok_hdr)[0].status == 422
+        assert call("POST", "/api/run/PRJ-04", body=b"x" * (wd.MAX_BODY + 1), headers=ok_hdr)[0].status == 413
+        r, data = call("HEAD", "/api/state")
+        assert r.status == 200 and data == b""
+        assert call("GET", "/nope")[0].status == 404 and call("PUT", "/api/state", headers=ok_hdr)[0].status == 405
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_internal_errors_do_not_leak_details(tmp_path, monkeypatch):
+    w = Web(mk_settings(tmp_path))
+    monkeypatch.setattr(w.app, "state_payload", lambda: (_ for _ in ()).throw(RuntimeError("boom " + SECRET)))
+    r = w.get("/api/state")
+    assert r.status_code == 500 and r.json() == {"detail": "internal error"} and SECRET not in r.text
 
 
 def test_cli_web_flag(monkeypatch):

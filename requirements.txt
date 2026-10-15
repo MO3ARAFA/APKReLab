@@ -1,6 +1,6 @@
-python-dotenv>=1.0
-rich>=13.7
-fastapi>=0.110      # local web command center (python main.py --web)
-uvicorn>=0.29
-httpx>=0.27         # FastAPI TestClient (tests) and generated-service tests
-pytest>=8.0
+python-dotenv>=1.0   # pure Python
+rich>=13.7           # pure Python
+pytest>=8.0          # tests only
+# The web dashboard (python main.py --web) uses only the standard library: no FastAPI / pydantic / Rust build needed,
+# so it installs on Termux/Android and Raspberry Pi. FastAPI + httpx are optional and only exercise the generated
+# PRJ-01 microservice tests (they are skipped when absent).
