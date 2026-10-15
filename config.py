@@ -8,7 +8,22 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
-load_dotenv(ROOT / ".env")
+if not os.getenv("AGENCY_SKIP_DOTENV"):  # tests set this so a real .env can never leak into them
+    # override=True: the project's .env is authoritative (a stray ANTHROPIC_API_KEY in the shell must not win)
+    load_dotenv(ROOT / ".env", override=True)
+
+KEY_VARS = ("API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY")
+
+
+def detect_provider(key: str) -> str | None:
+    """Provider from the key prefix: sk-ant- -> anthropic, AIza -> gemini, other sk- -> openai."""
+    if key.startswith("sk-ant-"):
+        return "anthropic"
+    if key.startswith("AIza"):
+        return "gemini"
+    if key.startswith("sk-"):
+        return "openai"
+    return None
 
 
 def _f(name: str, default: float) -> float:
@@ -56,8 +71,12 @@ class Settings:
 
     @staticmethod
     def load() -> "Settings":
-        key = os.getenv("API_KEY", "").strip()
-        provider = os.getenv("LLM_PROVIDER", "anthropic").strip().lower()
+        key = next((os.getenv(v, "").strip() for v in KEY_VARS if os.getenv(v, "").strip()), "")
+        provider = os.getenv("LLM_PROVIDER", "").strip().lower()
+        detected = detect_provider(key) if key else None
+        if detected and provider != "ollama":
+            provider = detected  # the key's prefix is the source of truth over a stale LLM_PROVIDER
+        provider = provider or "anthropic"
         # No key for a hosted provider -> run offline (deterministic engines) unless ollama is requested.
         if provider in {"anthropic", "openai", "gemini"} and not key:
             provider = "offline"

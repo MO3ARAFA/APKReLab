@@ -345,3 +345,19 @@ def test_batch_audit_isolates_failures(tmp_path):
         assert [r["ready"] for r in res] == [True, True, False] and "error" in res[2]
     finally:
         srv.shutdown()
+
+
+def test_distill_keeps_plain_text_that_mentions_tags():
+    s = "Found 3 <h1> elements and 10 scripts in <head>; fix the <h1> count."
+    assert distill(s) == s
+    assert "<" not in distill("<html><body><p>a</p></body></html>")
+
+
+def test_finding_text_never_contains_angle_brackets():
+    import os
+    from projects.prj_03_deal_closer import b2b_sniper as bs
+    fr = bs.FetchResult("https://x.test/", 200, 1.3, 4.0, 90_000, 90_000, False, True, {}, "")
+    page = bs.parse_page(open("projects/prj_03_deal_closer/fixtures/bad_site.html").read())
+    for f in bs.diagnose(fr, page)[0]:
+        import re
+        assert not re.search(r"<[a-zA-Z/!]", f.detail + f.short), f.detail  # "< 0.8s" is fine; "<h1>" is not

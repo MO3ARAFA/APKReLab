@@ -28,6 +28,7 @@ from typing import Callable, Protocol
 
 from config import Settings
 
+MIN_MAX_TOKENS = 512  # floor: a too-small cap can be eaten by hidden reasoning and bill for an empty answer
 MAX_SYSTEM_TOKENS = 300
 MAX_INPUT_TOKENS = 500
 CACHE_MAX_ENTRIES = 2000
@@ -79,7 +80,10 @@ def _clip(text: str, max_tokens: int, head: float = 0.7) -> str:
 
 def distill(text: str, max_tokens: int = MAX_INPUT_TOKENS) -> str:
     """Hybrid pre-processing: strip markup, normalise whitespace, keep head+tail within the token budget."""
-    if re.search(r"<[a-zA-Z/!][^>]*>", text):
+    # Strip only real HTML documents (>=3 tags, or a document-level tag); a plain sentence that merely mentions
+    # "<h1>" or "<head>" must reach the model intact.
+    if (len(re.findall(r"<[a-zA-Z/!][^>]*>", text)) >= 3 and re.search(r"</[a-zA-Z][a-zA-Z0-9]*>", text)) \
+            or re.search(r"(?i)<(!doctype|html|body)\b", text):
         text = " ".join(strip_html(text).split())
     else:
         text = re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]+", " ", text)).strip()
@@ -108,6 +112,7 @@ class LLMResult:
     cached: bool = False
     saved_usd: float = 0.0
     blocked: str = ""  # reason a paid call was aborted by the circuit breaker
+    error: str = ""  # provider failure that forced the fallback (never contains credentials)
 
 
 class LLMError(RuntimeError):
@@ -190,6 +195,8 @@ class LLMClient:
             "https://api.anthropic.com/v1/messages",
             {"model": model, "max_tokens": max_tokens, "system": system,
              "output_config": {"effort": "low"},  # bounds hidden reasoning spend on adaptive-thinking models
+             # Haiku 5.5 may run with thinking off (accepted at effort <= high); Opus 5.5 cannot, so omit it there.
+             **({"thinking": {"type": "disabled"}} if model.startswith("claude-haiku-5") else {}),
              "messages": [{"role": "user", "content": prompt}]},
             {"x-api-key": self.s.api_key, "anthropic-version": "2023-06-01"},
         )
@@ -250,6 +257,8 @@ class LLMClient:
         """cache -> (breaker-gated) provider chain -> deterministic `fallback`. Always records exactly one result."""
         system = compress_system(system)
         prompt = distill(prompt, max_input_tokens)
+        max_tokens = max(max_tokens, MIN_MAX_TOKENS)
+        errors: list[str] = []
         chain: list[str] = []
         if self.s.provider in {"anthropic", "openai", "gemini"}:
             chain.append(self.s.provider)
@@ -281,9 +290,8 @@ class LLMClient:
                         reserved = est
                 try:
                     res = getattr(self, f"_{name}")(model, system, prompt, max_tokens)
-                    if not res.text.strip():
-                        raise LLMError("empty response")
-                except LLMError:
+                except LLMError as exc:
+                    errors.append(f"{name}/{model}: {str(exc)[:200]}")
                     if name == "ollama":
                         self._ollama_dead = True  # don't re-pay the connection timeout every call
                     if reserved and self.budget is not None:
@@ -292,11 +300,18 @@ class LLMClient:
                     continue
                 res.tier = tier
                 res.cost_usd = (res.tokens_in * pin + res.tokens_out * pout) / 1_000_000
-                self.cache.put(key, res.text, res.tokens_in, res.tokens_out, res.cost_usd, model)
+                if not res.text.strip():
+                    # Tokens were billed even though nothing usable came back: book the cost, use the fallback,
+                    # never cache, and don't retry on another provider.
+                    res.error = "empty response (tokens billed)"
+                    res.text, res.live = fallback, False
+                else:
+                    self.cache.put(key, res.text, res.tokens_in, res.tokens_out, res.cost_usd, model)
                 result = res
                 break
             if result is None:
-                result = LLMResult(fallback, "offline", "deterministic-engine", live=False, tier=tier, blocked=blocked)
+                result = LLMResult(fallback, "offline", "deterministic-engine", live=False, tier=tier, blocked=blocked,
+                                   error="; ".join(errors))
                 result.tokens_in, result.tokens_out = len(prompt) // 4, len(fallback) // 4
             if self.recorder:
                 self.recorder(result)  # spend is booked BEFORE the reservation is released (no overshoot window)

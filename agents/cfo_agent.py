@@ -72,9 +72,15 @@ class CFOAgent:
         self.rate = compute_rate_per_hour
         self._reserved: dict[str, float] = {pid: 0.0 for pid in PROJECT_META}
         self._rlock = threading.Lock()
+        self.run_ceiling: float | None = None  # optional per-run absolute burn limit (see set_run_cap)
 
     def gate(self, pid: str) -> ProjectGate:
         return ProjectGate(self, pid)
+
+    def set_run_cap(self, max_spend_usd: float | None) -> None:
+        """Limit how much *this run* may add on top of what has already been burned (never above the seed cap)."""
+        burn = sum(p["spent_usd"] for p in self.state.snapshot()["projects"].values())
+        self.run_ceiling = None if max_spend_usd is None else burn + max_spend_usd
 
     # -- circuit breaker -------------------------------------------------------------------
     def reserve(self, pid: str, est_usd: float) -> tuple[bool, str]:
@@ -91,6 +97,8 @@ class CFOAgent:
             glob_left = d.get("seed_usd", d["budget_usd"]) - burn - sum(self._reserved.values())
             if est_usd > glob_left + 1e-12:
                 return False, f"call est ${est_usd:.5f} exceeds global hard cap (${max(glob_left, 0):.5f} left)"
+            if self.run_ceiling is not None and est_usd > self.run_ceiling - burn - sum(self._reserved.values()) + 1e-12:
+                return False, f"call est ${est_usd:.5f} exceeds this run's --max-spend cap"
             self._reserved[pid] += est_usd
             return True, ""
 
@@ -103,6 +111,9 @@ class CFOAgent:
         def f(d):
             p = d["projects"][pid]
             entry = {"t": now(), "project": pid, "kind": "api", "provider": res.provider, "model": res.model, "tier": res.tier}
+            if res.error:
+                d["llm_errors"] = d.get("llm_errors", 0) + 1
+                entry["error"] = res.error
             if res.blocked:
                 p["blocked_calls"] += 1
                 d["blocked_calls"] = d.get("blocked_calls", 0) + 1

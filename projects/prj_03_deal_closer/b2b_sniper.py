@@ -22,8 +22,38 @@ PROOF_WORDS = re.compile(r"(testimonial|case stud(?:y|ies)|trusted by|rated \d|\
                          r"\d[\d,]*\+? (?:customers|clients|companies|shippers|teams|users))", re.I)
 
 
+PROOF_MARKUP = re.compile(r"testimonial|case[-_ ]?stud|customer[-_ ]?logos?|logo[-_ ]?(?:wall|cloud|strip|bar)|trusted[-_ ]?by|client[-_ ]?logos?", re.I)
+# Findings that are objective and re-checkable from the HTML; only these may be cited to a real prospect.
+# Judgement calls (social proof, CTA wording, contact path, brand-only titles) and single-sample timings are excluded.
+CITABLE_REMOTE = {"meta description", "meta description length", "mobile", "blocking scripts", "alt", "h1", "form",
+                  "structured data", "compression", "https"}
+
+
 class UnsafeURL(ValueError):
     pass
+
+
+class NotAuditable(ValueError):
+    """The response is not the real landing page (error status, bot challenge, near-empty shell)."""
+
+
+CHALLENGE_MARKERS = ("just a moment", "cf-chl", "attention required", "access denied", "enable javascript and cookies",
+                     "verify you are human", "captcha", "pardon our interruption", "request blocked")
+
+
+def _secs(x: float) -> str:
+    """Timing rounded to the nearest 0.5s so network jitter never changes prompt text (stable cache keys)."""
+    return f"{round(x * 2) / 2:.1f}s"
+
+
+def assert_auditable(fr: "FetchResult") -> None:
+    low = fr.html[:6000].lower()
+    if fr.status != 200:
+        raise NotAuditable(f"HTTP {fr.status} (page not publicly fetchable from the audit host)")
+    if any(m in low for m in CHALLENGE_MARKERS) and fr.html_bytes < 60_000:
+        raise NotAuditable("bot-protection/challenge page returned instead of the real site")
+    if fr.html_bytes < 1500:
+        raise NotAuditable(f"only {fr.html_bytes} bytes of HTML (JS-only shell or error page)")
 
 
 def check_url_safe(url: str, allow_private: bool = False) -> str:
@@ -208,7 +238,8 @@ def parse_page(html: str) -> dict:
         "scripts": p.scripts, "blocking_scripts": p.blocking_scripts, "stylesheets": p.stylesheets,
         "form_fields": p.forms, "ctas": ctas, "generic_ctas": generic, "has_structured_data": p.has_ldjson,
         "has_favicon": p.favicon, "text_words": len(text.split()),
-        "social_proof": bool(PROOF_WORDS.search(text)), "has_phone_or_email_link": p.tel_or_mail,
+        # visible copy OR markup hints (logo walls / carousels render as images, so text alone under-detects)
+        "social_proof": bool(PROOF_WORDS.search(text)) or bool(PROOF_MARKUP.search(html)), "has_phone_or_email_link": p.tel_or_mail,
         "has_pricing_link": any(re.search(r"pric|plans|quote", t + h, re.I) for t, h in p.links),
         "has_contact_link": any(re.search(r"contact|demo|book|talk", t + h, re.I) for t, h in p.links),
     }
@@ -229,28 +260,28 @@ class Finding:
 def diagnose(fr: FetchResult, page: dict) -> tuple[list[Finding], dict]:
     f: list[Finding] = []
     if fr.ttfb_s > 0.8:
-        f.append(Finding("speed", 3, "server", f"Server took {fr.ttfb_s:.2f}s to respond (target < 0.8s).", f"your server takes {fr.ttfb_s:.1f}s before sending a single byte"))
+        f.append(Finding("speed", 3, "server", f"Server took ~{_secs(fr.ttfb_s)} to respond (target < 0.8s).", f"your server takes ~{_secs(fr.ttfb_s)} before sending a single byte"))
     elif fr.ttfb_s > 0.4:
-        f.append(Finding("speed", 2, "server", f"Server took {fr.ttfb_s:.2f}s to respond.", f"server response takes {fr.ttfb_s:.1f}s"))
+        f.append(Finding("speed", 2, "server", f"Server took ~{_secs(fr.ttfb_s)} to respond.", f"server response takes ~{_secs(fr.ttfb_s)}"))
     if fr.total_s > 3:
-        f.append(Finding("speed", 3, "load", f"HTML download took {fr.total_s:.2f}s.", f"the page needs {fr.total_s:.1f}s just to download"))
+        f.append(Finding("speed", 3, "load", f"HTML download took ~{_secs(fr.total_s)}.", f"the page needs ~{_secs(fr.total_s)} just to download"))
     if fr.html_bytes > 10_000 and not fr.compressed:
         f.append(Finding("speed", 2, "compression", f"{fr.html_bytes // 1024} KB HTML served without gzip/brotli.", f"{fr.html_bytes // 1024} KB of HTML is served uncompressed"))
     if page["blocking_scripts"] >= 2:
-        f.append(Finding("speed", 2, "blocking scripts", f"{page['blocking_scripts']} render-blocking scripts in <head>.", f"{page['blocking_scripts']} render-blocking scripts delay first paint"))
+        f.append(Finding("speed", 2, "blocking scripts", f"{page['blocking_scripts']} render-blocking scripts in the page head.", f"{page['blocking_scripts']} render-blocking scripts delay first paint"))
     if not page["viewport"]:
         f.append(Finding("seo", 3, "mobile", "Missing viewport meta tag; page is not mobile-friendly.", "there is no mobile viewport tag, so phones get a shrunken desktop page"))
     if not page["meta_description"]:
         f.append(Finding("seo", 2, "meta description", "No meta description; search snippets are auto-generated.", "there is no meta description for search results"))
     elif len(page["meta_description"]) > 170:
-        f.append(Finding("seo", 1, "meta description", "Meta description is over 170 characters and will be truncated.", "your meta description gets truncated in search"))
+        f.append(Finding("seo", 1, "meta description length", f"Meta description is {len(page['meta_description'])} characters (search results truncate at roughly 155-160).", f"your meta description is {len(page['meta_description'])} characters, so search results truncate it"))
     t = page["title"]
     if not t or len(t) < 15 or t.lower() in {"home", "untitled", "welcome"}:
         f.append(Finding("seo", 2, "title", f"Weak page title: {t!r}.", f"your page title is just '{t or 'empty'}'"))
     if page["h1_count"] != 1:
-        f.append(Finding("seo", 1, "h1", f"{page['h1_count']} <h1> elements (expected exactly 1).", f"{page['h1_count']} competing H1 headings"))
+        f.append(Finding("seo", 1, "h1", f"{page['h1_count']} H1 headings on the page (expected exactly 1).", f"{page['h1_count']} competing H1 headings"))
     if page["images"] and page["images_missing_alt"] / page["images"] > 0.3:
-        f.append(Finding("seo", 1, "alt", f"{page['images_missing_alt']}/{page['images']} images lack alt text.", f"{page['images_missing_alt']} of {page['images']} images lack alt text"))
+        f.append(Finding("seo", 1, "alt", f"{page['images_missing_alt']} images have no alt attribute.", f"{page['images_missing_alt']} images on the page have no alt text"))
     if not page["ctas"]:
         f.append(Finding("conversion", 3, "call to action", "No clear call-to-action found.", "no clear call-to-action on the page"))
     elif len(page["generic_ctas"]) >= 2:
@@ -339,13 +370,18 @@ def generate_outreach(llm, url: str, ceo: str, company: str, findings: list[Find
     return fallback, meta
 
 
+TIMING_KEYWORDS = {"server", "load"}
+
+
 def run_sniper(url: str, ceo: str = "there", company: str | None = None, llm=None, allow_private: bool = False,
-               html_file: str | None = None, sender: str = "Alex") -> dict:
+               html_file: str | None = None, sender: str = "Alex", with_outreach: bool = True) -> dict:
     if html_file:
         html = open(html_file, encoding="utf-8", errors="replace").read()
         fr = FetchResult(url, 200, 0.0, 0.0, len(html.encode()), len(html.encode()), True, url.startswith("https"), {}, html)
     else:
         fr = fetch(url, allow_private=allow_private)
+        if not allow_private:
+            assert_auditable(fr)  # never write outreach about an error/challenge page
     page = parse_page(fr.html)
     findings, scores = diagnose(fr, page)
     if allow_private:  # local demo/test targets are plain http by construction
@@ -357,13 +393,20 @@ def run_sniper(url: str, ceo: str = "there", company: str | None = None, llm=Non
         from config import Settings
         from llm import LLMClient
         llm = LLMClient(Settings.load())
-    outreach, meta = generate_outreach(llm, url, ceo, company, findings, sender)
+    # Remote outreach cites only objective, re-checkable HTML findings (CITABLE_REMOTE). A single timing sample taken
+    # from this host (via a proxy) says little about real users, so timings stay in the diagnostics only.
+    outreach_findings = findings if allow_private else [f for f in findings if f.keyword in CITABLE_REMOTE]
+    if with_outreach:
+        outreach, meta = generate_outreach(llm, url, ceo, company, outreach_findings, sender)
+    else:
+        outreach, meta = "", {"source": "skipped", "attempts": 0, "errors": []}
     return {
         "url": url, "company": company, "ceo": ceo, "status": fr.status,
         "performance": {"ttfb_s": round(fr.ttfb_s, 3), "total_s": round(fr.total_s, 3), "html_kb": round(fr.html_bytes / 1024, 1),
                         "compressed": fr.compressed},
         "page": page, "findings": [f.to_dict() for f in findings], "scores": scores,
         "outreach": outreach, "outreach_words": word_count(outreach), "outreach_meta": meta,
+        "outreach_findings": [f.to_dict() for f in outreach_findings[:3]],
     }
 
 
@@ -388,8 +431,8 @@ def run_batch(targets: list[dict], llm, sender: str = "Alex", allow_private: boo
     for t in targets:
         try:
             r = run_sniper(t["url"], t["ceo"], t["company"], llm=llm, allow_private=allow_private, sender=sender)
-            r["ready"] = not validate_outreach(r["outreach"], r["ceo"], [Finding(**f) for f in r["findings"]])
-        except (UnsafeURL, urllib.error.URLError, OSError, ValueError) as exc:
+            r["ready"] = not validate_outreach(r["outreach"], r["ceo"], [Finding(**f) for f in r["outreach_findings"]])
+        except (UnsafeURL, NotAuditable, urllib.error.URLError, OSError, ValueError) as exc:
             r = {"url": t["url"], "ceo": t["ceo"], "error": str(exc), "ready": False}
         results.append(r)
     return results

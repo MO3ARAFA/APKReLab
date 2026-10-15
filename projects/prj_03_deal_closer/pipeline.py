@@ -70,7 +70,7 @@ def run(out_dir: Path, llm, dry_run: bool = False, feedback: list[str] | None = 
             srv, base = start_fixture_server()
             allow = True
             target, ceo, company = f"{base}/bad", "Dana", "Northwind Industrial"
-            good = bs.run_sniper(f"{base}/good", "Priya", "Contoso Logistics", llm=llm, allow_private=True)
+            good = bs.run_sniper(f"{base}/good", "Priya", "Contoso Logistics", llm=llm, allow_private=True, with_outreach=False)
         result = bs.run_sniper(target, ceo, company, llm=llm, allow_private=allow)
     finally:
         if srv:
@@ -83,10 +83,12 @@ def run(out_dir: Path, llm, dry_run: bool = False, feedback: list[str] | None = 
         batch_ready = sum(1 for r in batch if r.get("ready"))
         with (out_dir / "outreach_batch.csv").open("w", newline="") as fh:
             w = csv.writer(fh)
-            w.writerow(["url", "ceo", "score", "words", "ready", "outreach", "error"])
+            w.writerow(["url", "ceo", "score", "words", "ready", "bottlenecks", "outreach", "error"])
             for r in batch:
                 w.writerow([r["url"], r["ceo"], r.get("scores", {}).get("overall", ""), r.get("outreach_words", ""),
-                            r["ready"], r.get("outreach", ""), r.get("error", "")])
+                            r["ready"], " | ".join(f["detail"] for f in r.get("outreach_findings", [])),
+                            r.get("outreach", ""), r.get("error", "")])
+        (out_dir / "outreach_batch.json").write_text(json.dumps(batch, indent=2, default=str))
     (out_dir / "diagnostics.json").write_text(json.dumps(result, indent=2))
     (out_dir / "outreach.txt").write_text(result["outreach"] + "\n")
     f = result["findings"]

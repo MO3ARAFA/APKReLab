@@ -3,6 +3,7 @@
 
   python main.py --dashboard                 render the executive table from persisted state
   python main.py --run-all [--live]          sprint across all 5 projects (PM -> CFO -> CEO)
+                                             --live enables PAID LLM calls (key from .env); default is free/offline
   python main.py --project PRJ-01            run one project; artifacts land in output/PRJ-01/
   python main.py --log-revenue PRJ-01 --amount 250   record real revenue (unlocks Group B reinvestment)
 """
@@ -11,9 +12,29 @@ from __future__ import annotations
 import argparse
 import sys
 
+from dataclasses import replace
+
 from rich.console import Console
 
+from config import Settings
 from orchestrator import Orchestrator
+
+
+def report_llm_usage(console: Console, entries: list[dict]) -> None:
+    """Make live-call outcomes explicit so a silent fallback to offline output is never mistaken for a live run."""
+    api = [e for e in entries if e["kind"] == "api" and e.get("provider") not in ("offline",)]
+    cached = [e for e in entries if e["kind"] == "cache_hit"]
+    blocked = [e for e in entries if e["kind"] == "blocked"]
+    errors = [e for e in entries if e.get("error")]
+    if not (api or cached or blocked or errors):
+        return
+    spent = sum(e.get("usd", 0.0) for e in entries if e["kind"] == "api")
+    console.print(f"[bold]LLM calls this run:[/bold] {len(api)} live (${spent:.5f}), {len(cached)} cache hits ($0), "
+                  f"{len(blocked)} blocked by breaker, {len(errors)} provider errors")
+    for e in errors[:3]:
+        console.print(f"  [red]error[/red] {e['project']}: {e['error']}")
+    for e in blocked[:3]:
+        console.print(f"  [yellow]blocked[/yellow] {e['project']}: {e.get('reason', '')}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,7 +42,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dashboard", action="store_true", help="render the live Executive Dashboard")
     ap.add_argument("--run-all", action="store_true", help="run a sprint across all 5 projects")
     ap.add_argument("--project", metavar="PRJ-0X", help="run a single project")
-    ap.add_argument("--live", action="store_true", help="live-refresh the dashboard while running")
+    ap.add_argument("--live", action="store_true",
+                    help="enable paid LLM calls using the key in .env (default: offline deterministic, $0)")
+    ap.add_argument("--watch", action="store_true", help="live-refresh the dashboard while running")
+    ap.add_argument("--max-spend", type=float, metavar="USD",
+                    help="hard cap on what THIS run may spend (on top of the seed cap)")
     ap.add_argument("--sequential", action="store_true", help="disable parallel execution")
     ap.add_argument("--log-revenue", metavar="PRJ-0X", help="log revenue for a project")
     ap.add_argument("--amount", type=float, help="revenue amount in USD (with --log-revenue)")
@@ -33,10 +58,16 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     console = Console()
-    orch = Orchestrator()
+    settings = Settings.load()
+    if not args.live:
+        settings = replace(settings, provider="offline")  # never spend without an explicit --live
+    orch = Orchestrator(settings)
     if args.reset:
         orch.state.path.unlink(missing_ok=True)
-        orch = Orchestrator()
+        orch = Orchestrator(settings)
+    if args.max_spend is not None:
+        orch.cfo.set_run_cap(args.max_spend)
+    ledger_start = len(orch.state.snapshot()["ledger"])
 
     if args.log_revenue:
         if args.amount is None:
@@ -55,21 +86,25 @@ def main(argv: list[str] | None = None) -> int:
         run_ids = [args.project.upper()]
 
     if run_ids:
-        console.print(f"[bold]LLM provider:[/bold] {orch.s.provider}"
-                      + ("  (offline deterministic engines; set API_KEY in .env for LLM enrichment)"
-                         if orch.s.provider == "offline" else ""))
+        if orch.s.provider == "offline":
+            console.print("[bold]LLM:[/bold] offline deterministic engines ($0)"
+                          + ("  [yellow]--live requested but no API key found in .env[/yellow]" if args.live else
+                             "  (pass --live to enable paid calls)"))
+        else:
+            console.print(f"[bold]LLM:[/bold] [red]LIVE[/red] {orch.s.provider}  "
+                          f"tier1={orch.pms['PRJ-01'].llm.model_for(orch.s.provider, 1)} "
+                          f"tier2={orch.pms['PRJ-01'].llm.model_for(orch.s.provider, 2)}"
+                          + (f"  run cap ${args.max_spend:.2f}" if args.max_spend is not None else ""))
         try:
-            if args.live or args.dashboard:
+            if args.watch:
                 with orch.ceo.live(console):
                     orch.run_sprint(run_ids, parallel=not args.sequential)
             else:
                 orch.run_sprint(run_ids, parallel=not args.sequential)
         except ValueError as exc:
             ap.error(str(exc))
-        if not (args.live or args.dashboard):
-            orch.ceo.render_dashboard(console)
-        elif args.live:
-            orch.ceo.render_dashboard(console)
+        orch.ceo.render_dashboard(console)
+        report_llm_usage(console, orch.state.snapshot()["ledger"][ledger_start:])
     elif args.dashboard:
         orch.ceo.render_dashboard(console)
 

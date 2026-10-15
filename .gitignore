@@ -4,4 +4,8 @@ __pycache__/
 .pytest_cache/
 output/
 state/agency_state.json
+state/llm_cache.json
 state/*.lock
+
+# private prospect lists (real company names)
+targets.csv

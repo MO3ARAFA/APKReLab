@@ -26,11 +26,16 @@ python main.py --run-all        # sprint across all 5 projects (~3 s offline, $0
 python main.py --dashboard      # executive table from persisted state
 python main.py --project PRJ-01 # one project → output/PRJ-01/
 python main.py --log-revenue PRJ-01 --amount 250   # record real revenue (unlocks Group B reinvestment)
-python main.py --run-all --live # live-refreshing dashboard while the sprint runs
-python -m pytest                # 105 tests: framework, budget controls + every project
+python main.py --run-all --watch # live-refreshing dashboard while the sprint runs
+python main.py --project PRJ-03 --live --max-spend 0.05   # PAID LLM calls (key from .env), capped for this run
+python tools/build_ready_to_sell.py   # assemble output/READY_TO_SELL_NOW.md from real artifacts + CFO state
+python -m pytest                # 126 tests: framework, budget, live-mode safety + every project
 ```
 
-Flags: `--sequential` (no parallelism), `--reset` (wipe persisted state). Exit code is non-zero if any requested
+Flags: `--live` (**enables paid LLM calls**; without it every run is offline and free even if a key is in `.env`),
+`--max-spend USD` (hard cap for *this run*, on top of the seed cap), `--watch` (live-refreshing dashboard),
+`--sequential` (no parallelism), `--reset` (wipe persisted state). After a `--live` run the CLI prints how many calls were
+live / cached / blocked / failed, so a silent fallback to offline output can't be mistaken for a live run. Exit code is non-zero if any requested
 project is not CEO-approved.
 
 ## The Triple-Gate loop
@@ -110,11 +115,14 @@ extension ($39 LTD x an assumed 10 early sales). PRJ-03 batch mode (`TARGETS_FIL
 | `OLLAMA_HOST` / `OLLAMA_MODEL` / `LLM_FALLBACK_OLLAMA` | local fallback if the hosted call fails |
 | `SEED_CAPITAL_USD` (alias `AGENCY_BUDGET_USD`), `COMPUTE_RATE_USD_PER_HOUR` (default 0) | seed cap / compute pricing |
 | `LLM_MODEL_T1`, `LLM_MODEL_T2` | tier-1 / tier-2 model overrides |
-| `AGENCY_CACHE_PATH`, `ROI_VALUES_JSON`, `TARGETS_FILE`, `TARGETS_MAX` | cache location, ROI assumptions, PRJ-03 batch |
+| `AGENCY_CACHE_PATH`, `ROI_VALUES_JSON`, `TARGETS_FILE`, `TARGETS_MAX`, `REVIEWS_FILE` | cache location, ROI assumptions, PRJ-03 prospect batch, PRJ-02 real review export |
 | `QC_THRESHOLD`, `MAX_REVISION_CYCLES` | CEO gate |
 | `AGENCY_STATE_PATH`, `AGENCY_OUTPUT_DIR` | relocate state/output (used by the CLI tests) |
 
-Secrets are read only from `.env`/environment; `.env` is git-ignored.
+Secrets are read only from `.env` (which overrides shell variables) and `.env` is git-ignored, so it can never be committed.
+Key variables: `API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`; the provider is detected from the
+key prefix (`sk-ant-` -> Anthropic, `AIza` -> Gemini, other `sk-` -> OpenAI) and wins over a stale `LLM_PROVIDER`. The test suite ignores
+`.env`, API keys and the real state/cache files entirely.
 
 ## Installing the Chrome extension
 
@@ -138,6 +146,12 @@ state/agency_state.json   (created at runtime)       output/   (created at runti
 * The projects run on **bundled sample inputs** by default (a sample legacy repo, review set, fixture sites, a vulnerable
   Flask app, a sample customer CSV). Each engine accepts your own input (see each `pipeline.py`/CLI), but the
   CEO's 95% score measures *this tool's own verification checks*, not business value.
+* **Real-site outreach is deliberately conservative.** Messages to real prospects cite only objective findings that can be
+  re-checked in the page HTML (meta description, viewport, render-blocking scripts, alt text, H1 count, form fields, structured data);
+  judgement calls (social proof, CTA wording) and single-sample timings are excluded. Error/bot-challenge pages are never audited.
+  Verify every finding yourself and confirm the recipient's name before sending.
+* PRJ-02 launch copy never uses review statistics or quotes (the bundled review set is a synthetic sample); every feature claim is
+  checked against the extension source in tests. The extension itself has not been loaded in a real Chrome profile here.
 * PRJ-01 tests pin the behavior of the **modernized** code and execute legacy module code in a subprocess — only point
   it at repositories you trust. Python 2 files are detected but not auto-ported.
 * PRJ-04 analysis is intra-procedural and Flask-style; it is a triage aid, not a replacement for a SAST/pentest.

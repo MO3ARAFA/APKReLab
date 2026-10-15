@@ -62,3 +62,49 @@ def test_extension_logic_in_node():
     p = subprocess.run(["node", str(HERE / "tests" / "ext_logic.test.js"), str(HERE / "crm_clipper_extension" / "db.js")],
                        capture_output=True, text=True)
     assert p.returncode == 0, p.stderr
+
+
+# ---- launch copy -------------------------------------------------------------------------
+from projects.prj_02_gap_cloner import launch_copy as lc  # noqa: E402
+
+
+class _LLM:
+    def __init__(self, text, live=True):
+        self.text, self.live = text, live
+
+    def complete(self, *a, **k):
+        from llm import LLMResult
+        return LLMResult(self.text, "anthropic", "m", live=self.live)
+
+
+def test_every_feature_claim_is_backed_by_extension_source():
+    ext = HERE / "crm_clipper_extension"
+    src = "\n".join(p.read_text() for p in ext.glob("*") if p.suffix in {".js", ".json", ".html"})
+    for feature, token in lc.FEATURES:
+        assert token in src, f"unbacked claim: {feature}"
+
+
+def test_hero_validation_rejects_hype_and_invented_numbers():
+    assert lc.hero_ok("A simple clipper. One payment of $39.")
+    for bad in ("The best CRM ever.", "Trusted by 5,000 teams.", "100% risk-free.", "", "word " * 120):
+        assert not lc.hero_ok(bad)
+
+
+def test_launch_copy_uses_llm_hero_only_when_valid():
+    report = {"categories": {"pricing": {}, "performance": {}}}
+    good, meta = lc.build_launch_copy(report, _LLM("Clip leads in one click and keep them private in your browser."))
+    assert meta["hero_source"] == "llm" and "keep them private" in good
+    bad, meta = lc.build_launch_copy(report, _LLM("The #1 CRM, trusted by 10,000 users, guaranteed!"))
+    assert meta["hero_source"] == "template" and "10,000" not in bad and "guaranteed" not in bad.lower()
+
+
+def test_launch_copy_structure_and_sample_disclosure():
+    md, _ = lc.build_launch_copy({"categories": {}}, _LLM("", live=False), sample_data=True)
+    for needle in (lc.TITLE, "$39", "Lifetime - Team", "## FAQ", "chrome://extensions", "bundled **sample**"):
+        assert needle in md
+    assert "bundled **sample**" not in lc.build_launch_copy({"categories": {}}, _LLM("", False), sample_data=False)[0]
+
+
+def test_hero_validation_ignores_digits_inside_words_and_trailing_commas():
+    assert lc.hero_ok("Signed with HMAC-SHA256. One payment of $39, no subscription.")
+    assert not lc.hero_ok("Signed with HMAC-SHA256 and loved by 12 teams.")

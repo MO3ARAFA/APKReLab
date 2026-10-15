@@ -222,5 +222,6 @@ def test_llm_cost_accounting(monkeypatch, tmp_path):
 
 def test_settings_without_key_go_offline(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "anthropic")
-    monkeypatch.delenv("API_KEY", raising=False)
+    for v in ("API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.delenv(v, raising=False)
     assert Settings.load().provider == "offline"
