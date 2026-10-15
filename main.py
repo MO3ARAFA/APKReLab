@@ -3,6 +3,7 @@
 
   python main.py --web [--port 8080]         local web command center at http://127.0.0.1:8080 (localhost only)
   python main.py --ceo-autopilot [--live]    AI CEO runs the whole campaign: seed targets -> audit -> sprint -> sell sheet
+  python main.py --daemon [--every 12]       AI COO: unattended cycles + Telegram briefings/approvals (see docs/AUTOPILOT.md)
   python main.py --dashboard                 render the executive table from persisted state
   python main.py --run-all [--live]          sprint across all 5 projects (PM -> CFO -> CEO)
                                              --live enables PAID LLM calls (key from .env); default is free/offline
@@ -65,6 +66,49 @@ def run_autopilot_cli(console: Console, orch: Orchestrator, args) -> int:
     return 1
 
 
+def run_ops_cli(console: Console, settings: Settings, args) -> int:
+    import os
+    from ops.daemon import Daemon
+    from ops.telegram import Telegram, TelegramError, pair
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if args.telegram_setup:
+        if not token:
+            console.print("Create a bot with @BotFather in Telegram, then add  TELEGRAM_BOT_TOKEN=...  to .env and rerun.")
+            return 2
+        try:
+            chat = pair(token, say=console.print)
+        except TelegramError as exc:
+            console.print(f"[red]Telegram error: {exc}[/red]")
+            return 1
+        if not chat:
+            console.print("[yellow]Timed out waiting for the pairing message. Run --telegram-setup again.[/yellow]")
+            return 1
+        console.print(f"[green]Paired.[/green] Add this line to .env:  TELEGRAM_CHAT_ID={chat}")
+        return 0
+    if args.every:
+        settings = replace(settings, daemon_cycle_hours=args.every)
+    tg = Telegram.from_env()
+    if bool(token) != bool(os.getenv("TELEGRAM_CHAT_ID", "").strip()):
+        console.print("[yellow]Telegram needs BOTH TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID (run --telegram-setup). Continuing without it.[/yellow]")
+    d = Daemon(settings, tg, log=console.print)
+    if args.briefing:
+        text = d.briefing(analysis=True, title="Briefing", send=False)
+        console.print(text, markup=False, highlight=False)
+        if args.send:
+            if not tg:
+                console.print("[yellow]No Telegram configured; nothing sent.[/yellow]")
+                return 1
+            d.send(text, interactive=True)
+        return 0
+    if not tg:
+        console.print("[yellow]No Telegram configured: only $0 cycles will run (paid cycles need your approval there).[/yellow]")
+    if args.once:
+        d.tick(poll=0)
+        return 0
+    console.print(f"[bold]AI COO daemon[/bold] - cycle every {settings.daemon_cycle_hours:g}h, daily cap ${settings.daemon_daily_cap_usd:.2f}. Ctrl+C to stop.")
+    return d.run_forever()
+
+
 def run_growth_cli(console: Console, orch: Orchestrator, args) -> int:
     from rich.table import Table
     g = orch.growth
@@ -121,6 +165,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--free-tiers", action="store_true",
                     help="PM-06: show which free-tier providers are configured (and how to register by hand: docs/FREE_TIERS.md)")
     ap.add_argument("--check", action="store_true", help="with --free-tiers: send one tiny request to each configured provider")
+    ap.add_argument("--daemon", action="store_true",
+                    help="AI COO: run cycles on a schedule and report to Telegram; paid cycles wait for your approval")
+    ap.add_argument("--once", action="store_true", help="with --daemon: one pass (poll Telegram, run a cycle if due), then exit")
+    ap.add_argument("--every", type=float, metavar="HOURS", help="with --daemon: hours between cycles (default DAEMON_CYCLE_HOURS=12)")
+    ap.add_argument("--telegram-setup", action="store_true", help="pair this agency with your Telegram chat (needs TELEGRAM_BOT_TOKEN)")
+    ap.add_argument("--briefing", action="store_true", help="print the COO briefing now (add --send to also deliver it to Telegram)")
+    ap.add_argument("--send", action="store_true", help="with --briefing: deliver it to Telegram")
     ap.add_argument("--live", action="store_true",
                     help="enable paid LLM calls using the key in .env (default: offline deterministic, $0)")
     ap.add_argument("--watch", action="store_true", help="live-refresh the dashboard while running")
@@ -141,18 +192,25 @@ def main(argv: list[str] | None = None) -> int:
             ap.error(f"--web needs FastAPI and uvicorn: pip install fastapi uvicorn ({exc})")
         return serve(args.port)
 
+    if (args.once or args.every) and not args.daemon:
+        ap.error("--once / --every only apply with --daemon")
+    if args.send and not args.briefing:
+        ap.error("--send only applies with --briefing")
     if args.check and not args.free_tiers:
         ap.error("--check only applies with --free-tiers")
     if (args.discover_targets or args.rotate_targets) and not args.ceo_autopilot:
         ap.error("--discover-targets / --rotate-targets only apply with --ceo-autopilot")
     if args.discover_targets and not args.live:
         ap.error("--discover-targets asks the AI for prospects, so it needs --live")
-    if not (args.dashboard or args.run_all or args.project or args.log_revenue or args.ceo_autopilot or args.growth or args.free_tiers):
+    if not (args.dashboard or args.run_all or args.project or args.log_revenue or args.ceo_autopilot or args.growth or args.free_tiers
+            or args.daemon or args.telegram_setup or args.briefing):
         ap.print_help()
         return 2
 
     console = Console()
     settings = Settings.load()
+    if args.telegram_setup or args.daemon or args.briefing:
+        return run_ops_cli(console, settings, args)
     if args.growth or args.free_tiers:  # read-mostly PM-06 views: never run a sprint, never spend
         return run_growth_cli(console, Orchestrator(settings), args)
     if not args.live:

@@ -38,7 +38,8 @@ from typing import Any, Callable
 
 from agents.cfo_agent import compute_summary
 from agents.growth_agent import GrowthAgent
-from config import FREE_KEY_VARS, KEY_VARS, ROOT, Settings
+from config import ROOT, SECRET_VARS, Settings
+from ops.lock import RunLock
 from orchestrator import Orchestrator
 from projects.prj_03_deal_closer import prospects
 from state import PROJECT_META, AgencyState
@@ -53,8 +54,10 @@ WEB_DIR = ROOT / "web"
 MAX_BODY = 64 * 1024
 CONTENT_TYPES = {".js": "application/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
 
+LOCK_NAME = "agency.lock"  # state/agency.lock: held by whoever is currently writing the state file
 _KEY_PATTERNS = [re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}"), re.compile(r"sk-[A-Za-z0-9_\-]{20,}"),
-                 re.compile(r"AIza[0-9A-Za-z_\-]{20,}"), re.compile(r"gsk_[A-Za-z0-9]{20,}")]
+                 re.compile(r"AIza[0-9A-Za-z_\-]{20,}"), re.compile(r"gsk_[A-Za-z0-9]{20,}"),
+                 re.compile(r"\d{6,12}:[A-Za-z0-9_-]{30,}")]  # Telegram bot token
 
 
 class HttpError(Exception):
@@ -66,7 +69,7 @@ class HttpError(Exception):
 # ----------------------------------------------------------------------------------- secrets
 def make_scrubber(settings: Settings) -> Callable[[Any], Any]:
     """Redact the configured key(s) and anything key-shaped from any JSON-like structure or string."""
-    literals = {v for v in [settings.api_key, *(os.getenv(k, "") for k in (*KEY_VARS, *FREE_KEY_VARS))] if v and len(v) >= 8}
+    literals = {v for v in [settings.api_key, *(os.getenv(k, "") for k in SECRET_VARS)] if v and len(v) >= 8}
 
     def scrub(obj: Any) -> Any:
         if isinstance(obj, str):
@@ -113,24 +116,35 @@ class JobManager:
     """One mutating operation at a time: the state file has a single writer, so runs, revenue logging and sell-sheet
     rebuilds are mutually exclusive."""
 
-    def __init__(self) -> None:
+    def __init__(self, lock_path: Path | None = None) -> None:
         self._op = threading.Lock()
         self._guard = threading.Lock()
+        self._file_lock = RunLock(lock_path) if lock_path else None  # also excludes the unattended daemon (another process)
         self.jobs: dict[str, Job] = {}
         self.current: Job | None = None
 
+    def _take(self) -> None:
+        if not self._op.acquire(blocking=False):
+            raise Busy("another run is in progress")
+        if self._file_lock is not None and not self._file_lock.acquire():
+            self._op.release()
+            raise Busy("the AI COO daemon is running a cycle")
+
+    def _drop(self) -> None:
+        if self._file_lock is not None:
+            self._file_lock.release()
+        self._op.release()
+
     @contextmanager
     def exclusive(self):
-        if not self._op.acquire(blocking=False):
-            raise Busy("another operation is running")
+        self._take()
         try:
             yield
         finally:
-            self._op.release()
+            self._drop()
 
     def submit(self, kind: str, label: str, mode: str, max_spend: float | None, fn: Callable[..., dict]) -> Job:
-        if not self._op.acquire(blocking=False):
-            raise Busy("another run is in progress")
+        self._take()
         job = Job(uuid.uuid4().hex[:12], kind, label, mode, max_spend)
         with self._guard:
             self.jobs[job.id] = job
@@ -139,14 +153,15 @@ class JobManager:
                 del self.jobs[old]
 
         def work() -> None:
+            status = "done"
             try:
                 job.result = fn(job) if len(inspect.signature(fn).parameters) else fn()
-                job.status = "done"
             except Exception as exc:  # surfaced to the UI; never crashes the server
-                job.status, job.error = "failed", f"{type(exc).__name__}: {exc}"
+                status, job.error = "failed", f"{type(exc).__name__}: {exc}"
             finally:
                 job.finished = time.time()
-                self._op.release()
+                self._drop()  # release the locks BEFORE publishing the status: "done" must mean "a new run may start"
+                job.status = status
         threading.Thread(target=work, daemon=True, name=f"job-{job.id}").start()
         return job
 
@@ -223,7 +238,7 @@ class App:
         self.settings = settings
         self.targets_path = Path(targets_path)
         self.scrub = make_scrubber(settings)
-        self.jobs = JobManager()
+        self.jobs = JobManager(settings.state_path.parent / LOCK_NAME)
         self.csrf = secrets.token_urlsafe(32)
         self.allowed_hosts = {f"{HOST}:{port}", f"localhost:{port}"}
         self.allowed_origins = {f"http://{h}" for h in self.allowed_hosts}
@@ -242,7 +257,7 @@ class App:
             ("GET", r"^/api/targets$", self.api_targets), ("POST", r"^/api/targets$", self.api_add_target),
             ("DELETE", r"^/api/targets$", self.api_delete_target), ("POST", r"^/api/targets/audit$", self.api_audit_targets),
             ("POST", r"^/api/targets/rotate$", self.api_rotate_targets), ("POST", r"^/api/autopilot$", self.api_autopilot),
-            ("GET", r"^/api/growth$", self.api_growth), ("POST", r"^/api/growth/check$", self.api_growth_check)]
+            ("GET", r"^/api/ops$", self.api_ops), ("GET", r"^/api/growth$", self.api_growth), ("POST", r"^/api/growth/check$", self.api_growth_check)]
 
     # -- http plumbing ---------------------------------------------------------------------
     def handle(self, method: str, raw_path: str, headers: dict[str, str], body: bytes = b"") -> tuple[int, dict, bytes]:
@@ -411,7 +426,7 @@ class App:
         try:
             job = self.jobs.submit(kind, label, mode, cap, fn)
         except Busy:
-            raise HttpError(409, "A run is already in progress - wait for it to finish")
+            raise HttpError(409, "A run is already in progress (or the AI COO daemon is mid-cycle) - wait for it to finish")
         return self.ok({"job": job.to_dict()}, 202)
 
     @staticmethod
@@ -447,6 +462,18 @@ class App:
                  "free": bool(e.get("free")), "avoided_usd": e.get("avoided_usd", 0.0),
                  "note": f"{e['from']} -> {e['to']}" if e["kind"] == "policy" else (e.get("error") or e.get("reason") or "")} for e in reversed(entries[-limit:])]
         return self.ok({"entries": rows, "total": len(entries)})
+
+    def api_ops(self, req: Req):
+        """AI COO status (read-only): daemon heartbeat, pending decisions, last briefing. Never exposes tokens or chat ids."""
+        ops = self.snapshot().get("ops", {})
+        now = time.time()
+        pend = [{"id": p["id"], "type": p["type"], "text": p.get("text", ""), "age_s": int(now - p["t"])}
+                for p in ops.get("proposals", {}).values() if p.get("status") == "pending"]
+        return self.ok({"alive": now - ops.get("heartbeat", 0) < 180, "paused": bool(ops.get("paused")),
+                        "telegram": bool(ops.get("telegram")), "cycle_hours": ops.get("cycle_hours"),
+                        "last_cycle_t": ops.get("last_cycle_t"), "cycles": ops.get("cycles", 0), "failures": ops.get("failures", 0),
+                        "funnel": ops.get("funnel", {}), "pending": pend, "last_briefing": ops.get("last_briefing"),
+                        "limits": {"daily_cap": self.settings.daemon_daily_cap_usd, "live_cap": self.settings.daemon_live_cap_usd}})
 
     def growth(self) -> GrowthAgent:
         """Read-only PM-06 view: a second AgencyState writing the same file could clobber a running job's updates."""

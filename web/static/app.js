@@ -259,6 +259,8 @@
         const d = await api('/api/launch-copy'); setMarkdown($('#ext-body'), d.html);
         $('#ext-meta').textContent = d.zip.exists ? `${(d.zip.size / 1024).toFixed(1)} KB` : 'not built yet - run PRJ-02';
         $('#dl-ext').classList.toggle('hidden', !d.zip.exists);
+      } else if (tab === 'coo') {
+        renderCoo(await api('/api/ops'));
       } else if (tab === 'growth') {
         renderGrowth(await api('/api/growth'));
       } else if (tab === 'audit') {
@@ -280,6 +282,20 @@
       body.append(el('tr', {}, el('td', {text: new Date(e.t * 1000).toLocaleString()}), el('td', {text: e.project}), el('td', {text: kind}), el('td', {text: model}),
         el('td', {class: 'num', text: `${e.tokens_in} / ${e.tokens_out}`}), el('td', {class: 'num', text: cost}), el('td', {class: 'muted', text: e.note})));
     }
+  }
+
+  /* ---------- AI COO ---------- */
+  function renderCoo(d) {
+    const st = $('#coo-status');
+    st.textContent = d.paused ? 'PAUSED' : d.alive ? 'DAEMON RUNNING' : 'DAEMON NOT RUNNING';
+    st.className = 'st ' + (d.paused ? 'BREAKER' : d.alive ? 'APPROVED' : 'PENDING');
+    const f = d.funnel || {};
+    $('#coo-meta').textContent = `${d.cycles} cycles · every ${d.cycle_hours || '?'}h · telegram ${d.telegram ? 'on' : 'off'} · sent ${f.sent || 0} / replies ${f.replies || 0} · daily cap ${usd(d.limits.daily_cap, 2)}`
+      + (d.last_cycle_t ? ` · last cycle ${new Date(d.last_cycle_t * 1000).toLocaleString()}` : '');
+    const p = $('#coo-pending'); p.textContent = '';
+    if (!d.pending.length) p.append(el('p', {class: 'muted', text: 'Nothing is waiting for you.'}));
+    d.pending.forEach(x => p.append(el('blockquote', {text: x.text + `  (answer in Telegram, ${Math.round(x.age_s / 60)} min ago)`})));
+    $('#coo-brief').textContent = d.last_briefing ? d.last_briefing.text : 'No briefing yet. Start the daemon or run: python main.py --briefing';
   }
 
   /* ---------- PM-06 ---------- */

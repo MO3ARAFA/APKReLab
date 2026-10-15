@@ -30,9 +30,10 @@ python main.py --log-revenue PRJ-01 --amount 250   # record real revenue (unlock
 python main.py --run-all --watch # live-refreshing dashboard while the sprint runs
 python main.py --project PRJ-03 --live --max-spend 0.05   # PAID LLM calls (key from .env), capped for this run
 python tools/build_ready_to_sell.py   # assemble output/READY_TO_SELL_NOW.md from real artifacts + CFO state
+python main.py --daemon         # AI COO: unattended cycles + Telegram briefings/approvals (docs/AUTOPILOT.md)
 python main.py --growth         # PM-06 cost report, runway and routing policy
 python main.py --free-tiers     # which free-tier providers are configured (--check to ping them)
-python -m pytest                # 209 tests: framework, budget, live-mode, web UI, auto-pilot, PM-06 + every project
+python -m pytest                # 243 tests: framework, budget, live-mode, web UI, auto-pilot, PM-06 + every project
 ```
 
 Flags: `--live` (**enables paid LLM calls**; without it every run is offline and free even if a key is in `.env`),
@@ -40,6 +41,17 @@ Flags: `--live` (**enables paid LLM calls**; without it every run is offline and
 `--sequential` (no parallelism), `--reset` (wipe persisted state). After a `--live` run the CLI prints how many calls were
 live / cached / blocked / failed, so a silent fallback to offline output can't be mistaken for a live run. Exit code is non-zero if any requested
 project is not CEO-approved.
+
+## AI COO: unattended operation with Telegram approvals (Phase 7)
+
+`python main.py --daemon` runs an auto-pilot cycle every 12 hours and reports to your Telegram. **$0 work runs by itself**
+(templates or the free lane, with a spending cap of zero). **Anything that could spend money waits for your Approve tap**
+(hard per-cycle cap plus a daily cap; a "No" runs the $0 version instead). **Contacting prospects is never automatic**: on your
+approval the validated messages are delivered to your own chat to review and send yourself. The briefing's numbers are computed
+from state; the COO's analysis paragraph is model-written (or rule-based), labelled, and cannot trigger actions. It pauses itself
+after repeated failures, only one daemon runs at a time, and web/CLI runs wait while a cycle writes the state file.
+One-time setup: `@BotFather` token in `.env`, then `python main.py --telegram-setup` (code pairing so only you can command it).
+Full guide, Termux commands, privacy notes and limits: [`docs/AUTOPILOT.md`](docs/AUTOPILOT.md).
 
 ## PM-06: AI Growth & Cost-Hacking Agent (free lane)
 
@@ -208,6 +220,8 @@ extension ($39 LTD x an assumed 10 early sales). PRJ-03 batch mode (`TARGETS_FIL
 | `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_FREE_API_KEY`, `MISTRAL_API_KEY` | free-tier keys you registered yourself (PM-06 free lane) |
 | `FREE_PROVIDERS`, `FREE_MODEL_<NAME>`, `FREE_LIMITS_JSON` | pick/order free providers, override their models, override self-imposed rpm/rpd |
 | `FREE_LANE_ENABLED`, `FREE_LANE_THRESHOLD_USD`, `CONSERVE_BELOW_PCT`, `PAID_RETRY_HOURS` | PM-06 thresholds |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | AI COO Telegram bridge (chat id comes from `--telegram-setup`) |
+| `DAEMON_CYCLE_HOURS`, `DAEMON_QUIET_HOURS`, `DAEMON_DAILY_CAP_USD`, `DAEMON_LIVE_CAP_USD`, `DAEMON_MAX_FAILURES`, `DAEMON_PROPOSAL_TTL_HOURS`, `DAEMON_REJECT_COOLDOWN_HOURS` | daemon schedule and spending limits |
 | `QC_THRESHOLD`, `MAX_REVISION_CYCLES` | CEO gate |
 | `AGENCY_STATE_PATH`, `AGENCY_OUTPUT_DIR` | relocate state/output (used by the CLI tests) |
 
@@ -226,8 +240,9 @@ Chrome will prompt for that single host permission.
 
 ```
 main.py  orchestrator.py  config.py  llm.py  state.py  web_dashboard.py  web_markdown.py  web/ (index.html, static/)  tools/ (sell-sheet builder)
-agents/        ceo_agent.py  cfo_agent.py  growth_agent.py (PM-06)  policy.py  pm_agents.py
-docs/          FREE_TIERS.md
+agents/        ceo_agent.py  cfo_agent.py  growth_agent.py (PM-06)  coo_agent.py  policy.py  pm_agents.py
+ops/           daemon.py  telegram.py  lock.py
+docs/          FREE_TIERS.md  AUTOPILOT.md
 projects/      common.py  prj_01_legacy_migrator/  prj_02_gap_cloner/  prj_03_deal_closer/
                prj_04_zeroday_hunter/  prj_05_synthetic_foundry/   (each: pipeline.py, engine, sample data, tests/)
 tests/         framework + CLI end-to-end tests

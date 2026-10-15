@@ -66,6 +66,7 @@
         <button role="tab" class="tab" data-tab="ext" aria-selected="false">PRJ-02 Extension Kit</button>
         <button role="tab" class="tab" data-tab="audit" aria-selected="false">PRJ-01 Audit &amp; Spend Ledger</button>
         <button role="tab" class="tab" data-tab="growth" aria-selected="false">PM-06 Free Tiers</button>
+        <button role="tab" class="tab" data-tab="coo" aria-selected="false">AI COO</button>
       </div>
 
       <div id="tab-sheet" class="tabpane" role="tabpanel">
@@ -99,6 +100,15 @@
         <div class="tablewrap scroll"><table><thead><tr><th>Time</th><th>Project</th><th>Event</th><th>Model / tier</th><th class="num">Tokens in/out</th><th class="num">Cost (USD)</th><th>Note</th></tr></thead><tbody id="ledger-body"></tbody></table></div>
         <h3>Latest client modernization report (sample)</h3>
         <div class="md" id="audit-body"></div>
+      </div>
+
+      <div id="tab-coo" class="tabpane hidden" role="tabpanel">
+        <p class="muted">The AI COO runs cycles on a schedule (<code>python main.py --daemon</code>) and reports to your Telegram. Anything that could spend money waits for your tap; sending messages to prospects is always manual. This tab is a read-only mirror.</p>
+        <div class="row"><span class="st PENDING" id="coo-status">–</span><span class="muted" id="coo-meta"></span></div>
+        <h3>Waiting for your decision</h3>
+        <div class="md" id="coo-pending"></div>
+        <h3>Last briefing</h3>
+        <pre class="briefing" id="coo-brief"></pre>
       </div>
 
       <div id="tab-growth" class="tabpane hidden" role="tabpanel">

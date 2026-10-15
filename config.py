@@ -16,6 +16,8 @@ if not os.getenv("AGENCY_SKIP_DOTENV"):  # tests set this so a real .env can nev
 KEY_VARS = ("API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY")
 # Free-lane keys (PM-06). Never used as the primary key; listed so the scrubbers redact them too.
 FREE_KEY_VARS = ("GROQ_API_KEY", "OPENROUTER_API_KEY", "GEMINI_FREE_API_KEY", "MISTRAL_API_KEY")
+# Everything the scrubbers must redact from UI/JSON output (the Telegram bot token is a credential too).
+SECRET_VARS = (*KEY_VARS, *FREE_KEY_VARS, "TELEGRAM_BOT_TOKEN")
 
 
 def detect_provider(key: str) -> str | None:
@@ -77,6 +79,14 @@ class Settings:
     free_threshold_usd: float = 0.50  # remaining global budget at/below which everything moves to the free lane
     conserve_pct: float = 25.0  # remaining % at/below which heavy projects move to the free lane and flagship calls pause
     paid_retry_hours: float = 6.0  # how long a paid-provider failure (no credit / bad key) keeps the free lane on
+    # Unattended operation (Phase 7). The Telegram token / chat id are read straight from the environment, not stored here.
+    daemon_cycle_hours: float = 12.0  # hours between auto-pilot cycles
+    daemon_quiet_hours: str = "23-8"  # local hours when notifications are sent silently ("" = never quiet)
+    daemon_daily_cap_usd: float = 0.15  # most real money the daemon may spend per local day (approved cycles + briefings)
+    daemon_live_cap_usd: float = 0.10  # per-cycle cap for a paid cycle the owner approved
+    daemon_max_failures: int = 3  # consecutive failed cycles before the daemon pauses itself
+    daemon_proposal_ttl_hours: float = 24.0  # an unanswered decision expires (never executed late on stale facts)
+    daemon_reject_cooldown_hours: float = 24.0  # after a "no", the same proposal is not repeated for this long
     compute_rate_per_hour: float = 0.0  # local compute is free; the seed budget is for API spend
     qc_threshold: float = 95.0
     max_cycles: int = 3
@@ -110,6 +120,13 @@ class Settings:
             free_threshold_usd=_f("FREE_LANE_THRESHOLD_USD", 0.50),
             conserve_pct=_f("CONSERVE_BELOW_PCT", 25.0),
             paid_retry_hours=_f("PAID_RETRY_HOURS", 6.0),
+            daemon_cycle_hours=_f("DAEMON_CYCLE_HOURS", 12.0),
+            daemon_quiet_hours=os.getenv("DAEMON_QUIET_HOURS", "23-8").strip(),
+            daemon_daily_cap_usd=_f("DAEMON_DAILY_CAP_USD", 0.15),
+            daemon_live_cap_usd=_f("DAEMON_LIVE_CAP_USD", 0.10),
+            daemon_max_failures=int(_f("DAEMON_MAX_FAILURES", 3)),
+            daemon_proposal_ttl_hours=_f("DAEMON_PROPOSAL_TTL_HOURS", 24.0),
+            daemon_reject_cooldown_hours=_f("DAEMON_REJECT_COOLDOWN_HOURS", 24.0),
             ollama_host=os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/"),
             ollama_model=os.getenv("OLLAMA_MODEL", "llama3.1"),
             fallback_ollama=os.getenv("LLM_FALLBACK_OLLAMA", "true").lower() == "true",
