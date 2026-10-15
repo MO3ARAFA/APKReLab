@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from agents.ceo_agent import CEOAgent
 from agents.cfo_agent import CFOAgent
+from agents.growth_agent import GrowthAgent
 from agents.pm_agents import build_pms
 from config import ROOT, Settings
 from llm import LLMCache, LLMClient
@@ -24,6 +25,8 @@ class Orchestrator:
         self.cfo = CFOAgent(self.state, self.s.compute_rate_per_hour)
         self.ceo = CEOAgent(self.state, self.s.qc_threshold)
         self.cache = LLMCache(self.s.cache_path)  # shared by all PMs: identical prompts cost $0.00
+        self.growth = GrowthAgent(self.state, self.s, cache=self.cache, slot=self.cfo.free_allowed)  # PM-06
+        self.cfo.policy_hook = self.growth.assess  # re-evaluated before every routing decision
         self.pms = build_pms(self.s.output_dir,
                              lambda pid: LLMClient(self.s, lambda r, pid=pid: self.cfo.record_usage(pid, r),
                                                    budget=self.cfo.gate(pid), cache=self.cache))
@@ -32,6 +35,7 @@ class Orchestrator:
     def run_project(self, pid: str) -> dict:
         pm = self.pms[pid]
         st, cfo = self.state, self.cfo
+        self.growth.assess()
         feedback: list[str] = []
         st.set_project(pid, stage="starting", progress=0, cycle=0, blockers=[], feedback=[],
                        ceo_status="RUNNING", cfo_status="PENDING", ceo_score=None)
@@ -110,6 +114,7 @@ class Orchestrator:
                       n_targets: int = 5, on_step=None) -> dict:
         """The whole campaign in one call, run by the AI CEO with PM-03 / PM-01 / PM-02 (no manual data entry):
 
+          0. PM-06 growth check   - cost report + free-lane routing policy for this run
           1. CEO target dispatch  - make sure targets.csv holds fresh, un-audited prospects (pool, optionally LLM-discovered)
           2. PRJ-03 batch audit   - real HTTP diagnostics + outreach drafts (live LLM or deterministic templates)
           3. Group A sprint       - PRJ-01 audit package and PRJ-02 extension kit through the CFO and CEO gates
@@ -139,6 +144,13 @@ class Orchestrator:
                 entry["status"], entry["detail"] = "failed", f"{type(exc).__name__}: {exc}"
             notify()
             return entry
+
+        def growth() -> str:
+            pol = self.growth.assess()
+            rep = self.growth.cost_report()
+            lane = ", ".join(pol["free_lane"]) or "none (templates only)"
+            return (f"policy {pol['mode'].upper()} - {pol['reason']}; ${rep['remaining_usd']:.2f} left "
+                    f"({rep['remaining_pct']:.0f}%); free lane: {lane}")
 
         def dispatch() -> str:
             llm = self.pms["PRJ-03"].llm if (discover and live) else None
@@ -176,6 +188,7 @@ class Orchestrator:
             r = build(self.s)
             return f"{r['outreach_ready']} messages assembled -> {r['path']}"
 
+        run_step("growth", "PM-06: cost check + free-lane routing", growth)
         run_step("dispatch", "CEO: dispatch targets to PM-03", dispatch)
         run_step("audit", "PM-03: live batch audit + outreach drafts" if live else "PM-03: batch audit + outreach drafts (offline templates)", audit)
         run_step("group_a", "PM-01 / PM-02: legacy audit + extension kit", group_a)

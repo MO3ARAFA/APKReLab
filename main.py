@@ -43,7 +43,8 @@ def run_autopilot_cli(console: Console, orch: Orchestrator, args) -> int:
     live = orch.s.provider != "offline"
     if args.live and not live:
         console.print("[yellow]--live requested but no API key found in .env - running the offline chain.[/yellow]")
-    console.print(f"[bold]AI CEO auto-pilot[/bold] - {'[red]LIVE[/red] (cap $%.2f)' % args.max_spend if live else 'offline, $0.00'}")
+    mode = ("[green]FREE LANE[/green] ($0.00)" if orch.s.provider == "free" else "[red]LIVE[/red] (cap $%.2f)" % args.max_spend) if live else "offline, $0.00"
+    console.print(f"[bold]AI CEO auto-pilot[/bold] - {mode}")
     icon = {"done": "[green]✓[/green]", "failed": "[red]✗[/red]", "running": "…"}
     printed = {"n": 0}
 
@@ -64,6 +65,46 @@ def run_autopilot_cli(console: Console, orch: Orchestrator, args) -> int:
     return 1
 
 
+def run_growth_cli(console: Console, orch: Orchestrator, args) -> int:
+    from rich.table import Table
+    g = orch.growth
+    pol = g.assess()
+    if args.growth:
+        r = g.cost_report()
+        style = {"normal": "green", "conserve": "yellow", "free": "cyan"}[pol["mode"]]
+        console.print(f"[bold]PM-06 policy:[/bold] [{style}]{pol['mode'].upper()}[/{style}] - {pol['reason']}")
+        console.print(f"Budget: ${r['remaining_usd']:.2f} left of ${r['seed_usd']:.2f} ({r['remaining_pct']}%) | paid calls {r['paid_calls']}"
+                      f" | avg ${r['avg_cost_per_call_usd']:.5f}/call"
+                      + (f" | runway ~{r['runway_calls']} calls" if r["runway_calls"] is not None else "")
+                      + (f" | burn ${r['burn_usd_per_hour']:.4f}/h (~{r['runway_hours']} h)" if r["runway_hours"] else ""))
+        t = Table("Project", "Tokens", "Spent", "Free calls", "")
+        for x in r["by_project"]:
+            t.add_row(f"{x['project']} {x['name']}", str(x["tokens"]), f"${x['spent_usd']:.6f}", str(x["free_calls"]), "heavy" if x["heavy"] else "")
+        console.print(t)
+        if r["by_model"]:
+            m = Table("Model", "Calls", "Tokens in/out", "Cost")
+            for x in r["by_model"]:
+                m.add_row(x["model"], str(x["calls"]), f"{x['tokens_in']}/{x['tokens_out']}", f"${x['usd']:.6f}")
+            console.print(m)
+        f = r["free"]
+        console.print(f"Free lane so far: {f['requests']} requests, {f['tokens']} tokens, ~${f['avoided_usd']:.4f} of paid cost avoided")
+    if args.free_tiers:
+        t = Table("Provider", "Key", "Model", "Today (req/limit)", "Data use", "Register by hand")
+        for p in g.providers():
+            state = "ACTIVE" if p["active"] else ("off" if p["configured"] else "no key")
+            t.add_row(p["label"], state, p["model"] or "-", f"{p['requests_today']}/{p['rpd'] or '-'}", p["data_note"] or "-", p["signup_url"])
+        console.print(t)
+        console.print("Guide (official links, limits, data-use caveats): docs/FREE_TIERS.md - accounts must be created by you, one per person; "
+                      "PM-06 never signs up for anything.")
+        if args.check:
+            res = g.probe([n for n in g.free_lane()])
+            if not res:
+                console.print("[yellow]No free provider is configured yet - add a key to .env first (see the guide).[/yellow]")
+            for x in res:
+                console.print(f"  {'[green]OK[/green]' if x['ok'] else '[red]FAILED[/red]'} {x['name']}: {x['detail']}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Autonomous AI Agency & Master Orchestrator")
     ap.add_argument("--web", action="store_true", help="start the local web command center (127.0.0.1 only)")
@@ -76,6 +117,10 @@ def main(argv: list[str] | None = None) -> int:
                          "add --live for paid LLM drafts (default cap $0.10)")
     ap.add_argument("--discover-targets", action="store_true", help="with --ceo-autopilot --live: let the AI suggest extra prospects")
     ap.add_argument("--rotate-targets", action="store_true", help="with --ceo-autopilot: load the next batch even if targets.csv has un-audited rows")
+    ap.add_argument("--growth", action="store_true", help="PM-06 cost report: spend per model/project, runway, routing policy")
+    ap.add_argument("--free-tiers", action="store_true",
+                    help="PM-06: show which free-tier providers are configured (and how to register by hand: docs/FREE_TIERS.md)")
+    ap.add_argument("--check", action="store_true", help="with --free-tiers: send one tiny request to each configured provider")
     ap.add_argument("--live", action="store_true",
                     help="enable paid LLM calls using the key in .env (default: offline deterministic, $0)")
     ap.add_argument("--watch", action="store_true", help="live-refresh the dashboard while running")
@@ -96,16 +141,20 @@ def main(argv: list[str] | None = None) -> int:
             ap.error(f"--web needs FastAPI and uvicorn: pip install fastapi uvicorn ({exc})")
         return serve(args.port)
 
+    if args.check and not args.free_tiers:
+        ap.error("--check only applies with --free-tiers")
     if (args.discover_targets or args.rotate_targets) and not args.ceo_autopilot:
         ap.error("--discover-targets / --rotate-targets only apply with --ceo-autopilot")
     if args.discover_targets and not args.live:
         ap.error("--discover-targets asks the AI for prospects, so it needs --live")
-    if not (args.dashboard or args.run_all or args.project or args.log_revenue or args.ceo_autopilot):
+    if not (args.dashboard or args.run_all or args.project or args.log_revenue or args.ceo_autopilot or args.growth or args.free_tiers):
         ap.print_help()
         return 2
 
     console = Console()
     settings = Settings.load()
+    if args.growth or args.free_tiers:  # read-mostly PM-06 views: never run a sprint, never spend
+        return run_growth_cli(console, Orchestrator(settings), args)
     if not args.live:
         settings = replace(settings, provider="offline")  # never spend without an explicit --live
     orch = Orchestrator(settings)
@@ -142,6 +191,8 @@ def main(argv: list[str] | None = None) -> int:
             console.print("[bold]LLM:[/bold] offline deterministic engines ($0)"
                           + ("  [yellow]--live requested but no API key found in .env[/yellow]" if args.live else
                              "  (pass --live to enable paid calls)"))
+        elif orch.s.provider == "free":
+            console.print(f"[bold]LLM:[/bold] [green]FREE LANE[/green] {', '.join(orch.growth.free_lane()) or 'none'} ($0.00)")
         else:
             console.print(f"[bold]LLM:[/bold] [red]LIVE[/red] {orch.s.provider}  "
                           f"tier1={orch.pms['PRJ-01'].llm.model_for(orch.s.provider, 1)} "

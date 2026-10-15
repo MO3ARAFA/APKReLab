@@ -23,6 +23,8 @@
       <article class="card"><h2>Cache Savings</h2><div class="big good" id="c-cache">–</div><p class="sub" id="c-cache-sub"></p></article>
       <article class="card"><h2>Emergency Reserve Vault</h2><div class="big" id="c-vault">–</div><p class="sub" id="c-vault-sub"></p>
         <p class="sub"><b>Est. revenue pipeline</b> <span id="c-pipeline">–</span> <span class="muted">(assumption, not revenue)</span></p></article>
+      <article class="card"><h2>PM-06 · Cost Hacker</h2><div><span class="badge" id="c-policy">–</span></div><p class="sub" id="c-policy-sub"></p>
+        <p class="sub"><b>Free lane</b> <span id="c-free">–</span></p></article>
       <article class="card"><h2>Circuit Breaker</h2><div><span class="badge" id="c-breaker">–</span></div><p class="sub" id="c-breaker-sub"></p></article>
     </section>
 
@@ -63,6 +65,7 @@
         <button role="tab" class="tab" data-tab="targets" aria-selected="false">PRJ-03 Target Manager</button>
         <button role="tab" class="tab" data-tab="ext" aria-selected="false">PRJ-02 Extension Kit</button>
         <button role="tab" class="tab" data-tab="audit" aria-selected="false">PRJ-01 Audit &amp; Spend Ledger</button>
+        <button role="tab" class="tab" data-tab="growth" aria-selected="false">PM-06 Free Tiers</button>
       </div>
 
       <div id="tab-sheet" class="tabpane" role="tabpanel">
@@ -96,6 +99,18 @@
         <div class="tablewrap scroll"><table><thead><tr><th>Time</th><th>Project</th><th>Event</th><th>Model / tier</th><th class="num">Tokens in/out</th><th class="num">Cost (USD)</th><th>Note</th></tr></thead><tbody id="ledger-body"></tbody></table></div>
         <h3>Latest client modernization report (sample)</h3>
         <div class="md" id="audit-body"></div>
+      </div>
+
+      <div id="tab-growth" class="tabpane hidden" role="tabpanel">
+        <p class="muted">PM-06 watches the paid budget and moves work to free providers you have <b>registered yourself</b> (it never creates accounts). Keys go in <code>.env</code>; only key <i>presence</i> is shown here.</p>
+        <div class="row"><button type="button" class="btn good" id="g-check">Check free-provider connections</button><span class="muted" id="g-msg"></span></div>
+        <div class="md" id="g-policy"></div>
+        <h3>Cost report</h3>
+        <div class="tablewrap"><table><thead><tr><th>Model</th><th class="num">Calls</th><th class="num">Tokens in/out</th><th class="num">Cost</th></tr></thead><tbody id="g-models"></tbody></table></div>
+        <div class="tablewrap" style="margin-top:10px"><table><thead><tr><th>Project</th><th class="num">Tokens</th><th class="num">Spent</th><th class="num">Free calls</th><th></th></tr></thead><tbody id="g-projects"></tbody></table></div>
+        <h3>Free providers</h3>
+        <div class="tablewrap"><table><thead><tr><th>Provider</th><th>Key</th><th>Model</th><th class="num">Today</th><th>Data use</th><th>Register (manually)</th></tr></thead><tbody id="g-providers"></tbody></table></div>
+        <div class="md" id="g-guide"></div>
       </div>
     </section>
   </main>

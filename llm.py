@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Protocol
 
+from agents.policy import classify_paid_failure
 from config import Settings
 
 MIN_MAX_TOKENS = 512  # floor: a too-small cap can be eaten by hidden reasoning and bill for an empty answer
@@ -48,9 +49,27 @@ PRICING = {
 }
 
 
+# Free lane: providers that cost $0.00 per call. Endpoints are fixed here (never user-supplied), so a configured key can
+# only ever be sent to the provider it belongs to. Model defaults change often: override with FREE_MODEL_<NAME>.
+FREE_PROVIDERS: dict[str, dict] = {
+    "ollama": {"label": "Ollama (local)", "local": True, "key_env": None, "model": ""},
+    "groq": {"label": "Groq", "url": "https://api.groq.com/openai/v1/chat/completions", "key_env": "GROQ_API_KEY",
+             "model": "llama-3.1-8b-instant", "data": "check Groq's terms for data use"},
+    "openrouter": {"label": "OpenRouter (:free models)", "url": "https://openrouter.ai/api/v1/chat/completions",
+                   "key_env": "OPENROUTER_API_KEY", "model": "meta-llama/llama-3.3-70b-instruct:free",
+                   "data": "free-model providers may log prompts"},
+    "gemini_free": {"label": "Google AI Studio (free tier)", "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                    "key_env": "GEMINI_FREE_API_KEY", "model": "gemini-2.5-flash", "data": "free-tier content is used to improve Google products"},
+    "mistral": {"label": "Mistral (Experiment plan)", "url": "https://api.mistral.ai/v1/chat/completions", "key_env": "MISTRAL_API_KEY",
+                "model": "mistral-small-latest", "data": "Experiment-plan requests may be used to train Mistral models"},
+}
+FREE_ORDER = ["ollama", "groq", "openrouter", "gemini_free", "mistral"]  # most private first
+PAID_PROVIDERS = {"anthropic", "openai", "gemini"}
+
+
 def price_for(provider: str, model: str, tier: int = 2) -> tuple[float, float]:
     """Unknown/overridden models are priced at their provider's tier price (never as free) so the breaker stays safe."""
-    if provider in {"ollama", "offline"}:
+    if provider in {"ollama", "offline"} or provider in FREE_PROVIDERS:
         return (0.0, 0.0)
     if model in PRICING:
         return PRICING[model]
@@ -113,15 +132,22 @@ class LLMResult:
     saved_usd: float = 0.0
     blocked: str = ""  # reason a paid call was aborted by the circuit breaker
     error: str = ""  # provider failure that forced the fallback (never contains credentials)
+    free: bool = False  # served by the $0 free lane
+    paid_failure: str = ""  # "exhausted: ..." / "auth: ..." when the PAID provider refused (feeds PM-06's policy)
+    routed: str = ""  # why the paid provider was skipped by a PM-06 routing decision
 
 
 class LLMError(RuntimeError):
-    pass
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 class BudgetGate(Protocol):
-    def try_reserve(self, est_usd: float) -> tuple[bool, str]: ...
+    def try_reserve(self, est_usd: float, tier: int = 1) -> tuple[bool, str]: ...
     def release(self, est_usd: float) -> None: ...
+    def route(self, tier: int) -> tuple[bool, str]: ...
+    def free_allowed(self, provider: str) -> tuple[bool, str]: ...
 
 
 class LLMCache:
@@ -169,6 +195,16 @@ def _post(url: str, payload: dict, headers: dict, timeout: float = 60.0) -> dict
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:  # keep the API's own explanation (credit, auth, rate limit...) - it is the diagnosis
+        detail = ""
+        try:
+            raw = exc.read(2000).decode("utf-8", "replace")
+            body = json.loads(raw)
+            err = body.get("error", body) if isinstance(body, dict) else raw
+            detail = err.get("message", "") if isinstance(err, dict) else str(err)
+        except (ValueError, OSError, AttributeError):
+            pass
+        raise LLMError(f"HTTP {exc.code}: {(detail or exc.reason or '')[:300]}", status=exc.code) from exc
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
         raise LLMError(str(exc)) from exc
 
@@ -180,7 +216,7 @@ class LLMClient:
         self.recorder = recorder
         self.budget = budget
         self.cache = cache if cache is not None else LLMCache(settings.cache_path)
-        self._ollama_dead = False
+        self._cool: dict[str, float] = {}  # provider -> time.time() until which it is skipped after a failure
 
     # -- routing ---------------------------------------------------------------------------
     def model_for(self, provider: str, tier: int) -> str:
@@ -188,6 +224,48 @@ class LLMClient:
             return self.s.ollama_model
         override = self.s.model_t2 if tier == 2 else self.s.model_t1
         return override or TIER_MODELS[provider][1 if tier == 2 else 0]
+
+    # -- free lane ---------------------------------------------------------------------------
+    def free_names(self) -> list[str]:
+        """Free providers this installation can use: FREE_PROVIDERS=a,b overrides; otherwise every provider whose key is
+        present in the environment, plus local Ollama when fallback_ollama is on."""
+        if not self.s.free_lane:
+            return []
+        env = os.getenv("FREE_PROVIDERS")
+        if env is not None:
+            return [n.strip() for n in env.split(",") if n.strip() in FREE_PROVIDERS]
+        return [n for n in FREE_ORDER if (n == "ollama" and self.s.fallback_ollama)
+                or (n != "ollama" and os.getenv(FREE_PROVIDERS[n]["key_env"], "").strip())]
+
+    def free_model(self, name: str) -> str:
+        if name == "ollama":
+            return self.s.ollama_model
+        return os.getenv(f"FREE_MODEL_{name.upper()}", "").strip() or FREE_PROVIDERS[name]["model"]
+
+    def _free_call(self, name: str, model: str, system: str, prompt: str, max_tokens: int) -> LLMResult:
+        if name == "ollama":
+            return self._ollama(model, system, prompt, max_tokens)
+        spec = FREE_PROVIDERS[name]
+        key = os.getenv(spec["key_env"], "").strip()
+        if not key:
+            raise LLMError(f"{name}: no API key configured")
+        d = _post(spec["url"], {"model": model, "max_tokens": max_tokens,
+                                "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}]},
+                  {"authorization": f"Bearer {key}"})
+        try:
+            text = d["choices"][0]["message"]["content"] or ""
+            u = d.get("usage", {})
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LLMError(f"bad {name} response") from exc
+        return LLMResult(text, name, model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0), live=True, free=True)
+
+    def probe(self, name: str) -> tuple[bool, str]:
+        """One tiny call to a free provider (costs $0 but uses a little of its quota)."""
+        try:
+            r = self._free_call(name, self.free_model(name), "Be terse.", "Reply with the single word: OK", MIN_MAX_TOKENS)
+            return (bool(r.text.strip()), f"{r.model} replied in {r.tokens_out} tokens")
+        except LLMError as exc:
+            return False, str(exc)[:200]
 
     # -- providers (model passed explicitly) -----------------------------------------------
     def _anthropic(self, model: str, system: str, prompt: str, max_tokens: int) -> LLMResult:
@@ -254,51 +332,71 @@ class LLMClient:
     # -- public ----------------------------------------------------------------------------
     def complete(self, prompt: str, system: str = "You are a precise, concise assistant.", fallback: str = "",
                  max_tokens: int = 800, tier: int = 1, max_input_tokens: int = MAX_INPUT_TOKENS) -> LLMResult:
-        """cache -> (breaker-gated) provider chain -> deterministic `fallback`. Always records exactly one result."""
+        """cache -> PM-06 route -> (breaker-gated) paid provider -> free lane -> deterministic `fallback`.
+        Always records exactly one result."""
         system = compress_system(system)
         prompt = distill(prompt, max_input_tokens)
         max_tokens = max(max_tokens, MIN_MAX_TOKENS)
         errors: list[str] = []
+        paid_failure = routed = blocked = ""
+
         chain: list[str] = []
-        if self.s.provider in {"anthropic", "openai", "gemini"}:
-            chain.append(self.s.provider)
-        if self.s.provider == "ollama" or (self.s.fallback_ollama and self.s.provider != "offline"):
-            chain.append("ollama")
+        if self.s.provider in PAID_PROVIDERS:
+            allow, why = self.budget.route(tier) if self.budget is not None and hasattr(self.budget, "route") else (True, "")
+            if allow:
+                chain.append(self.s.provider)
+            else:
+                routed = why  # PM-06 decided this call goes to the free lane (or the templates)
+        if self.s.provider != "offline":
+            free = self.free_names()
+            if self.s.provider == "ollama" and "ollama" not in free:
+                free = ["ollama"] + free  # an explicit local provider is always allowed
+            chain += [n for n in free if n not in chain]
 
         result: LLMResult | None = None
-        blocked = ""
         reserved = 0.0
         try:
             for name in chain:
-                if name == "ollama" and self._ollama_dead:
+                is_free = name in FREE_PROVIDERS
+                if self._cool.get(name, 0) > time.time():
                     continue
-                model = self.model_for(name, tier)
-                key = LLMCache.key(model, system, prompt)
+                model = self.free_model(name) if is_free else self.model_for(name, tier)
+                key = LLMCache.key(f"{name}:{model}" if is_free else model, system, prompt)
                 hit = self.cache.get(key)
-                if hit:  # $0.00: no API call, no budget check
+                if hit:  # $0.00: no API call, no budget or quota check
                     result = LLMResult(hit["text"], name, model, 0, 0, 0.0, live=True, tier=tier, cached=True,
-                                       saved_usd=hit["usd"])
+                                       saved_usd=hit["usd"], free=is_free)
                     break
+                if is_free:
+                    ok, reason = self.budget.free_allowed(name) if self.budget is not None and hasattr(self.budget, "free_allowed") else (True, "")
+                    if not ok:
+                        blocked = blocked or reason
+                        continue
                 pin, pout = price_for(name, model, tier)
                 if pin or pout:  # paid provider: pre-flight estimate + circuit breaker
                     est = (est_tokens(system + prompt) * pin + max_tokens * pout) / 1_000_000
                     if self.budget is not None:
-                        ok, reason = self.budget.try_reserve(est)
+                        ok, reason = self.budget.try_reserve(est, tier)
                         if not ok:
                             blocked = blocked or reason
                             continue
                         reserved = est
                 try:
-                    res = getattr(self, f"_{name}")(model, system, prompt, max_tokens)
+                    res = self._free_call(name, model, system, prompt, max_tokens) if is_free else \
+                        getattr(self, f"_{name}")(model, system, prompt, max_tokens)
                 except LLMError as exc:
                     errors.append(f"{name}/{model}: {str(exc)[:200]}")
-                    if name == "ollama":
-                        self._ollama_dead = True  # don't re-pay the connection timeout every call
+                    if not is_free:
+                        kind = classify_paid_failure(exc.status, str(exc))
+                        if kind:
+                            paid_failure = f"{kind}: {str(exc)[:160]}"
+                    # cool the provider down so a dead/limited endpoint is not hammered (and Ollama's connect timeout is paid once)
+                    self._cool[name] = time.time() + (300 if name == "ollama" else 120 if exc.status == 429 else 60)
                     if reserved and self.budget is not None:
                         self.budget.release(reserved)
                         reserved = 0.0
                     continue
-                res.tier = tier
+                res.tier, res.free = tier, is_free
                 res.cost_usd = (res.tokens_in * pin + res.tokens_out * pout) / 1_000_000
                 if not res.text.strip():
                     # Tokens were billed even though nothing usable came back: book the cost, use the fallback,
@@ -310,9 +408,12 @@ class LLMClient:
                 result = res
                 break
             if result is None:
-                result = LLMResult(fallback, "offline", "deterministic-engine", live=False, tier=tier, blocked=blocked,
+                result = LLMResult(fallback, "offline", "deterministic-engine", live=False, tier=tier, blocked=blocked or routed,
                                    error="; ".join(errors))
                 result.tokens_in, result.tokens_out = len(prompt) // 4, len(fallback) // 4
+            result.paid_failure, result.routed = paid_failure, routed
+            if errors and not result.error:
+                result.error = "; ".join(errors)  # a provider failed but a later one answered: keep the diagnosis in the ledger
             if self.recorder:
                 self.recorder(result)  # spend is booked BEFORE the reservation is released (no overshoot window)
         finally:

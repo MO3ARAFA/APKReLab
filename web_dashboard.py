@@ -33,10 +33,12 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
 
 from agents.cfo_agent import compute_summary
-from config import KEY_VARS, ROOT, Settings
+from agents.growth_agent import GrowthAgent
+from config import FREE_KEY_VARS, KEY_VARS, ROOT, Settings
 from orchestrator import Orchestrator
 from projects.prj_03_deal_closer import prospects
 from state import PROJECT_META, AgencyState
@@ -52,7 +54,7 @@ MAX_BODY = 64 * 1024
 CONTENT_TYPES = {".js": "application/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
 
 _KEY_PATTERNS = [re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}"), re.compile(r"sk-[A-Za-z0-9_\-]{20,}"),
-                 re.compile(r"AIza[0-9A-Za-z_\-]{20,}")]
+                 re.compile(r"AIza[0-9A-Za-z_\-]{20,}"), re.compile(r"gsk_[A-Za-z0-9]{20,}")]
 
 
 class HttpError(Exception):
@@ -64,7 +66,7 @@ class HttpError(Exception):
 # ----------------------------------------------------------------------------------- secrets
 def make_scrubber(settings: Settings) -> Callable[[Any], Any]:
     """Redact the configured key(s) and anything key-shaped from any JSON-like structure or string."""
-    literals = {v for v in [settings.api_key, *(os.getenv(k, "") for k in KEY_VARS)] if v and len(v) >= 8}
+    literals = {v for v in [settings.api_key, *(os.getenv(k, "") for k in (*KEY_VARS, *FREE_KEY_VARS))] if v and len(v) >= 8}
 
     def scrub(obj: Any) -> Any:
         if isinstance(obj, str):
@@ -239,7 +241,8 @@ class App:
             ("GET", r"^/api/audit-report$", self.api_audit_report), ("GET", r"^/api/download/extension$", self.api_download),
             ("GET", r"^/api/targets$", self.api_targets), ("POST", r"^/api/targets$", self.api_add_target),
             ("DELETE", r"^/api/targets$", self.api_delete_target), ("POST", r"^/api/targets/audit$", self.api_audit_targets),
-            ("POST", r"^/api/targets/rotate$", self.api_rotate_targets), ("POST", r"^/api/autopilot$", self.api_autopilot)]
+            ("POST", r"^/api/targets/rotate$", self.api_rotate_targets), ("POST", r"^/api/autopilot$", self.api_autopilot),
+            ("GET", r"^/api/growth$", self.api_growth), ("POST", r"^/api/growth/check$", self.api_growth_check)]
 
     # -- http plumbing ---------------------------------------------------------------------
     def handle(self, method: str, raw_path: str, headers: dict[str, str], body: bytes = b"") -> tuple[int, dict, bytes]:
@@ -338,7 +341,7 @@ class App:
                         "vault_released_to": v.get("released_to"), "cache_entries": self.cache_entries(),
                         "llm_errors": snap.get("llm_errors", 0), "live_calls": ls["live_calls"],
                         "cached_calls": summ["cache_hits"]},
-            "projects": projects, "live_available": self.live_available, "warnings": self.warnings(),
+            "projects": projects, "live_available": self.live_available, "free_only": self.settings.provider == "free", "warnings": self.warnings(),
             "limits": {"single_default": SINGLE_DEFAULT, "all_default": ALL_DEFAULT, "click_ceiling": CLICK_CEILING},
             "job": job.to_dict() if job else None, "busy": self.jobs.running() is not None,
             "artifacts": {"sell_sheet": self.out_file("READY_TO_SELL_NOW.md") is not None,
@@ -437,12 +440,30 @@ class App:
             limit = max(1, min(int(req.query.get("limit", 200)), 1000))
         except ValueError:
             raise HttpError(422, "limit must be an integer")
-        entries = [e for e in self.snapshot().get("ledger", []) if e.get("kind") in {"api", "cache_hit", "blocked", "vault_release", "reinvest"}]
+        entries = [e for e in self.snapshot().get("ledger", []) if e.get("kind") in {"api", "cache_hit", "blocked", "vault_release", "reinvest", "policy"}]
         rows = [{"t": e["t"], "project": e.get("project", "-"), "kind": e["kind"], "provider": e.get("provider", ""),
                  "model": e.get("model", ""), "tier": e.get("tier"), "tokens_in": e.get("tokens_in", 0),
                  "tokens_out": e.get("tokens_out", 0), "usd": e.get("usd", 0.0), "saved_usd": e.get("saved_usd", 0.0),
-                 "note": e.get("error") or e.get("reason") or ""} for e in reversed(entries[-limit:])]
+                 "free": bool(e.get("free")), "avoided_usd": e.get("avoided_usd", 0.0),
+                 "note": f"{e['from']} -> {e['to']}" if e["kind"] == "policy" else (e.get("error") or e.get("reason") or "")} for e in reversed(entries[-limit:])]
         return self.ok({"entries": rows, "total": len(entries)})
+
+    def growth(self) -> GrowthAgent:
+        """Read-only PM-06 view: a second AgencyState writing the same file could clobber a running job's updates."""
+        return GrowthAgent(SimpleNamespace(snapshot=self.snapshot), self.settings, readonly=True)
+
+    def api_growth(self, req: Req):
+        """PM-06: routing policy, cost report and free-provider status (key *presence* only, never values)."""
+        g = self.growth()
+        guide = ROOT / "docs" / "FREE_TIERS.md"
+        text = guide.read_text(errors="replace") if guide.is_file() else ""
+        return self.ok({"policy": g.assess(), "report": g.cost_report(), "providers": g.providers(),
+                        "guide_html": render_markdown(text) if text else "<p class='muted'>docs/FREE_TIERS.md is missing.</p>"})
+
+    def api_growth_check(self, req: Req):
+        """One tiny request per configured free provider (cost $0, uses a little of its quota). Never creates accounts."""
+        g = self.growth()
+        return self.ok({"results": g.probe([n for n in g.free_lane() if n != "ollama"]) or []})
 
     def api_job(self, req: Req, job_id: str):
         job = self.jobs.jobs.get(job_id)

@@ -202,8 +202,8 @@ def test_autopilot_offline_from_a_clean_state_runs_the_whole_chain(tmp_path, net
     o = Orchestrator(s)
     seen_steps = []
     r = o.run_autopilot(on_step=lambda steps: seen_steps.append([(x["key"], x["status"]) for x in steps]))
-    assert r["status"] == "complete" and [x["key"] for x in r["steps"]] == ["dispatch", "audit", "group_a", "sheet"]
-    assert all(x["status"] == "done" for x in r["steps"]) and seen_steps[0] == [("dispatch", "running")]
+    assert r["status"] == "complete" and [x["key"] for x in r["steps"]] == ["growth", "dispatch", "audit", "group_a", "sheet"]
+    assert all(x["status"] == "done" for x in r["steps"]) and seen_steps[0] == [("growth", "running")]
     # step 1: CEO seeded targets.csv from the pool (it did not exist) and fetched exactly those sites
     rows = prospects.read_targets(s.targets_path)
     assert len(rows) == 5 and all(t["url"] in net for t in rows)
@@ -266,8 +266,8 @@ def test_a_failed_step_is_recorded_and_later_steps_still_run(tmp_path, net, monk
     o = Orchestrator(s)
     monkeypatch.setattr(o.ceo, "dispatch_targets", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("pool exhausted")))
     r = o.run_autopilot()
-    assert r["status"] == "partial" and r["failed_steps"][0] == "dispatch" and r["steps"][0]["detail"].startswith("RuntimeError: pool exhausted")
-    assert [x["status"] for x in r["steps"]][2] == "done"  # PRJ-01 / PRJ-02 still ran
+    assert r["status"] == "partial" and r["failed_steps"][0] == "dispatch" and r["steps"][1]["detail"].startswith("RuntimeError: pool exhausted")
+    assert [x["status"] for x in r["steps"]][3] == "done"  # PRJ-01 / PRJ-02 still ran
 
 
 # ------------------------------------------------------------------ CLI
@@ -281,7 +281,7 @@ def test_cli_autopilot_end_to_end_offline(tmp_path, net, monkeypatch, capsys):
     env_paths(monkeypatch, tmp_path)
     assert cli.main(["--ceo-autopilot"]) == 0
     out = capsys.readouterr().out
-    assert "offline, $0.00" in out and "Auto-pilot complete" in out and out.count("✓") == 4
+    assert "offline, $0.00" in out and "Auto-pilot complete" in out and out.count("✓") == 5
     assert (tmp_path / "targets.csv").exists() and len((tmp_path / "out" / "READY_TO_SELL_NOW.md").read_text()) > 2000
 
 
@@ -357,7 +357,7 @@ def test_autopilot_through_the_web_runs_everything_and_updates_the_sell_sheet_ta
     w = Web(mk(tmp_path), targets=tmp_path / "targets.csv")
     job = w.wait(w.post("/api/autopilot", {"mode": "offline"}), timeout=120)
     assert job["status"] == "done" and job["result"]["status"] == "complete"
-    assert [p["status"] for p in job["progress"]] == ["done"] * 4
+    assert [p["status"] for p in job["progress"]] == ["done"] * 5
     sheet = w.get("/api/sell-sheet").json()
     assert sheet["exists"] and "Mohamed" in sheet["markdown"] and "Alex" not in sheet["markdown"] and sheet["html"].count("Copy message") >= 5
     t = w.get("/api/targets").json()

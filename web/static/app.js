@@ -82,6 +82,12 @@
     $('#c-vault').textContent = usd(s.vault_amount, 2) + ' ' + (s.vault_locked ? 'LOCKED' : 'UNLOCKED');
     $('#c-vault-sub').textContent = s.vault_locked ? 'Unlocks on first verified Group A revenue' : `Released to ${s.vault_released_to}`;
     $('#c-pipeline').textContent = '$' + Number(s.pipeline_usd).toLocaleString(undefined, {maximumFractionDigits: 2});
+    const pol = s.policy || {mode: 'normal'};
+    const pb = $('#c-policy');
+    pb.textContent = pol.mode.toUpperCase();
+    pb.className = 'badge ' + (pol.mode === 'normal' ? 'ok' : pol.mode === 'conserve' ? 'warnb' : 'info');
+    $('#c-policy-sub').textContent = pol.reason || 'paid provider allowed';
+    $('#c-free').textContent = `${s.free_requests || 0} requests · ${(s.free_tokens || 0).toLocaleString()} tokens · ~${usd(s.free_savings_usd, 4)} avoided`;
     const b = $('#c-breaker');
     b.textContent = s.breaker_tripped ? 'TRIPPED' : 'ACTIVE';
     b.className = 'badge ' + (s.breaker_tripped ? 'bad' : 'ok');
@@ -123,7 +129,7 @@
   function renderTop(state) {
     renderWarnings(state.warnings || []);
     const pm = $('#pill-mode');
-    pm.textContent = state.live_available ? 'Live API available (paid, capped)' : 'Offline only (no API key)';
+    pm.textContent = state.free_only ? 'Live on the free lane ($0)' : state.live_available ? 'Live API available (paid, capped)' : 'Offline only (no API key)';
     pm.className = 'pill ' + (state.live_available ? 'live' : 'off');
     $('#pill-sync').textContent = 'updated ' + new Date(state.generated_at * 1000).toLocaleTimeString();
     $('#btn-all-live').disabled = !state.live_available || state.busy;
@@ -253,6 +259,8 @@
         const d = await api('/api/launch-copy'); setMarkdown($('#ext-body'), d.html);
         $('#ext-meta').textContent = d.zip.exists ? `${(d.zip.size / 1024).toFixed(1)} KB` : 'not built yet - run PRJ-02';
         $('#dl-ext').classList.toggle('hidden', !d.zip.exists);
+      } else if (tab === 'growth') {
+        renderGrowth(await api('/api/growth'));
       } else if (tab === 'audit') {
         const [led, rep] = await Promise.all([api('/api/ledger?limit=200'), api('/api/audit-report')]);
         renderLedger(led); if (!loaded.auditReport || force) { setMarkdown($('#audit-body'), rep.html); loaded.auditReport = true; }
@@ -267,12 +275,43 @@
     if (!d.entries.length) body.append(el('tr', {}, el('td', {colspan: 7, class: 'muted', text: 'No ledger entries yet.'})));
     for (const e of d.entries) {
       const model = e.model ? `${e.model}${e.tier ? ' · tier ' + e.tier : ''}` : '–';
-      const kind = {api: e.provider === 'offline' ? 'offline' : 'live call', cache_hit: 'cache hit', blocked: 'blocked', vault_release: 'vault release', reinvest: 'reinvest'}[e.kind] || e.kind;
-      const cost = e.kind === 'cache_hit' ? `saved ${usd(e.saved_usd, 6)}` : usd(e.usd, 6);
+      const kind = {api: e.provider === 'offline' ? 'offline' : e.free ? 'free call' : 'live call', policy: 'PM-06 policy', cache_hit: 'cache hit', blocked: 'blocked', vault_release: 'vault release', reinvest: 'reinvest'}[e.kind] || e.kind;
+      const cost = e.kind === 'cache_hit' ? `saved ${usd(e.saved_usd, 6)}` : e.free ? `free (avoided ${usd(e.avoided_usd, 6)})` : usd(e.usd, 6);
       body.append(el('tr', {}, el('td', {text: new Date(e.t * 1000).toLocaleString()}), el('td', {text: e.project}), el('td', {text: kind}), el('td', {text: model}),
         el('td', {class: 'num', text: `${e.tokens_in} / ${e.tokens_out}`}), el('td', {class: 'num', text: cost}), el('td', {class: 'muted', text: e.note})));
     }
   }
+
+  /* ---------- PM-06 ---------- */
+  function renderGrowth(d) {
+    const p = d.policy, r = d.report;
+    const pol = $('#g-policy'); pol.textContent = '';
+    pol.append(el('p', {}, el('b', {text: `Policy: ${p.mode.toUpperCase()} `}), document.createTextNode(`- ${p.reason}. ${usd(r.remaining_usd, 2)} left of ${usd(r.seed_usd, 2)} (${r.remaining_pct}%). `
+      + (r.runway_calls != null ? `At ${usd(r.avg_cost_per_call_usd, 5)}/paid call that is ~${r.runway_calls} more calls. ` : '')
+      + `Free lane: ${p.free_lane.length ? p.free_lane.join(' → ') : 'none configured (deterministic templates, $0)'}.`)));
+    const models = $('#g-models'); models.textContent = '';
+    if (!r.by_model.length) models.append(el('tr', {}, el('td', {colspan: 4, class: 'muted', text: 'No paid calls yet.'})));
+    r.by_model.forEach(m => models.append(el('tr', {}, el('td', {text: m.model}), el('td', {class: 'num', text: m.calls}), el('td', {class: 'num', text: `${m.tokens_in} / ${m.tokens_out}`}), el('td', {class: 'num', text: usd(m.usd, 6)}))));
+    const pr = $('#g-projects'); pr.textContent = '';
+    r.by_project.forEach(x => pr.append(el('tr', {}, el('td', {text: `${x.project} · ${x.name}`}), el('td', {class: 'num', text: x.tokens}), el('td', {class: 'num', text: usd(x.spent_usd, 6)}),
+      el('td', {class: 'num', text: x.free_calls}), el('td', {class: 'muted', text: x.heavy ? 'heavy consumer' : ''}))));
+    const pv = $('#g-providers'); pv.textContent = '';
+    d.providers.forEach(x => {
+      const link = el('a', {href: x.signup_url, target: '_blank', rel: 'noopener noreferrer', text: x.signup_url.replace('https://', '')});
+      pv.append(el('tr', {}, el('td', {}, el('b', {text: x.label}), el('small', {text: x.local ? 'local' : x.key_env})),
+        el('td', {}, el('span', {class: 'st ' + (x.active ? 'APPROVED' : 'PENDING'), text: x.active ? 'ACTIVE' : x.configured ? 'OFF' : 'NO KEY'})),
+        el('td', {text: x.model || '–'}), el('td', {class: 'num', text: `${x.requests_today}${x.rpd ? ' / ' + x.rpd : ''}`}),
+        el('td', {class: 'muted', text: x.data_note || '–'}), el('td', {}, link)));
+    });
+    setMarkdown($('#g-guide'), d.guide_html);
+  }
+  $('#g-check').addEventListener('click', async () => {
+    $('#g-msg').textContent = 'checking…';
+    try {
+      const d = await api('/api/growth/check', {method: 'POST', json: {}});
+      $('#g-msg').textContent = d.results.length ? d.results.map(x => `${x.name}: ${x.ok ? 'OK' : 'FAILED - ' + x.detail}`).join(' · ') : 'No free provider with a key is configured yet.';
+    } catch (e) { $('#g-msg').textContent = ''; toast(e.message, 'err'); }
+  });
 
   /* ---------- targets ---------- */
   async function loadTargets() {

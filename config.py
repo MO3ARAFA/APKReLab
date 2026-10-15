@@ -14,6 +14,8 @@ if not os.getenv("AGENCY_SKIP_DOTENV"):  # tests set this so a real .env can nev
     load_dotenv(ROOT / ".env", override=True)
 
 KEY_VARS = ("API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY")
+# Free-lane keys (PM-06). Never used as the primary key; listed so the scrubbers redact them too.
+FREE_KEY_VARS = ("GROQ_API_KEY", "OPENROUTER_API_KEY", "GEMINI_FREE_API_KEY", "MISTRAL_API_KEY")
 
 
 def detect_provider(key: str) -> str | None:
@@ -71,6 +73,10 @@ class Settings:
     model_t2: str = ""  # tier-2 gatekeeper override
     cache_path: Path = ROOT / "state" / "llm_cache.json"
     targets_path: Path = ROOT / "targets.csv"
+    free_lane: bool = True  # PM-06 may route to free providers when the paid budget is low
+    free_threshold_usd: float = 0.50  # remaining global budget at/below which everything moves to the free lane
+    conserve_pct: float = 25.0  # remaining % at/below which heavy projects move to the free lane and flagship calls pause
+    paid_retry_hours: float = 6.0  # how long a paid-provider failure (no credit / bad key) keeps the free lane on
     compute_rate_per_hour: float = 0.0  # local compute is free; the seed budget is for API spend
     qc_threshold: float = 95.0
     max_cycles: int = 3
@@ -88,6 +94,10 @@ class Settings:
         # No key for a hosted provider -> run offline (deterministic engines) unless ollama is requested.
         if provider in {"anthropic", "openai", "gemini"} and not key:
             provider = "offline"
+            # No paid key but the owner registered free-tier keys by hand: live mode runs on the free lane only ($0).
+            if os.getenv("FREE_LANE_ENABLED", "true").lower() == "true" and (
+                    any(os.getenv(v, "").strip() for v in FREE_KEY_VARS) or os.getenv("FREE_PROVIDERS", "").strip()):
+                provider = "free"
         return Settings(
             provider=provider,
             api_key=key,
@@ -96,6 +106,10 @@ class Settings:
             model_t2=os.getenv("LLM_MODEL_T2", "").strip(),
             cache_path=Path(os.getenv("AGENCY_CACHE_PATH", ROOT / "state" / "llm_cache.json")),
             targets_path=Path(os.getenv("AGENCY_TARGETS_PATH", ROOT / "targets.csv")),
+            free_lane=os.getenv("FREE_LANE_ENABLED", "true").lower() == "true",
+            free_threshold_usd=_f("FREE_LANE_THRESHOLD_USD", 0.50),
+            conserve_pct=_f("CONSERVE_BELOW_PCT", 25.0),
+            paid_retry_hours=_f("PAID_RETRY_HOURS", 6.0),
             ollama_host=os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/"),
             ollama_model=os.getenv("OLLAMA_MODEL", "llama3.1"),
             fallback_ollama=os.getenv("LLM_FALLBACK_OLLAMA", "true").lower() == "true",

@@ -30,7 +30,9 @@ python main.py --log-revenue PRJ-01 --amount 250   # record real revenue (unlock
 python main.py --run-all --watch # live-refreshing dashboard while the sprint runs
 python main.py --project PRJ-03 --live --max-spend 0.05   # PAID LLM calls (key from .env), capped for this run
 python tools/build_ready_to_sell.py   # assemble output/READY_TO_SELL_NOW.md from real artifacts + CFO state
-python -m pytest                # 181 tests: framework, budget, live-mode, web UI, auto-pilot + every project
+python main.py --growth         # PM-06 cost report, runway and routing policy
+python main.py --free-tiers     # which free-tier providers are configured (--check to ping them)
+python -m pytest                # 209 tests: framework, budget, live-mode, web UI, auto-pilot, PM-06 + every project
 ```
 
 Flags: `--live` (**enables paid LLM calls**; without it every run is offline and free even if a key is in `.env`),
@@ -38,6 +40,25 @@ Flags: `--live` (**enables paid LLM calls**; without it every run is offline and
 `--sequential` (no parallelism), `--reset` (wipe persisted state). After a `--live` run the CLI prints how many calls were
 live / cached / blocked / failed, so a silent fallback to offline output can't be mistaken for a live run. Exit code is non-zero if any requested
 project is not CEO-approved.
+
+## PM-06: AI Growth & Cost-Hacking Agent (free lane)
+
+PM-06 watches model spend and routes each call *before* it is made:
+
+| Mode | Trigger | Effect |
+|---|---|---|
+| normal | budget healthy | paid provider (the $10 breaker still guards it) |
+| conserve | <= `CONSERVE_BELOW_PCT` (25%) left | the 2 most token-hungry projects use the free lane; tier-2 flagship paused |
+| free | <= `FREE_LANE_THRESHOLD_USD` ($0.50) left, cap reached, or the paid provider refused (no credit / bad key) | every call uses the free lane; paid is retried after `PAID_RETRY_HOURS` |
+
+The free lane is local Ollama, then free-tier providers whose keys **you** registered by hand (Groq, OpenRouter `:free`, Google AI Studio,
+Mistral), each with self-imposed request limits below the published ones and a cool-down after errors; with nothing available the deterministic
+templates run ($0, lower quality). Free usage and the paid cost it avoided are shown on the dashboard card, the **PM-06 Free Tiers** tab and
+`--growth`. With no paid key but a free key in `.env`, live mode runs on the free lane alone.
+
+**What it will not do:** create accounts, solve CAPTCHAs/identity checks or rotate identities. That breaks provider terms and gets accounts
+banned. [`docs/FREE_TIERS.md`](docs/FREE_TIERS.md) is the manual, source-linked guide (limits, data-use caveats, startup-credit programs).
+There is no guarantee of "$0 forever": free tiers change and some use your prompts for training, so do not send client data through them.
 
 ## AI CEO auto-pilot (zero manual entry)
 
@@ -184,6 +205,9 @@ extension ($39 LTD x an assumed 10 early sales). PRJ-03 batch mode (`TARGETS_FIL
 | `SEED_CAPITAL_USD` (alias `AGENCY_BUDGET_USD`), `COMPUTE_RATE_USD_PER_HOUR` (default 0) | seed cap / compute pricing |
 | `LLM_MODEL_T1`, `LLM_MODEL_T2` | tier-1 / tier-2 model overrides |
 | `AGENCY_CACHE_PATH`, `ROI_VALUES_JSON`, `TARGETS_FILE`, `TARGETS_MAX`, `REVIEWS_FILE` | cache location, ROI assumptions, PRJ-03 prospect batch, PRJ-02 real review export |
+| `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_FREE_API_KEY`, `MISTRAL_API_KEY` | free-tier keys you registered yourself (PM-06 free lane) |
+| `FREE_PROVIDERS`, `FREE_MODEL_<NAME>`, `FREE_LIMITS_JSON` | pick/order free providers, override their models, override self-imposed rpm/rpd |
+| `FREE_LANE_ENABLED`, `FREE_LANE_THRESHOLD_USD`, `CONSERVE_BELOW_PCT`, `PAID_RETRY_HOURS` | PM-06 thresholds |
 | `QC_THRESHOLD`, `MAX_REVISION_CYCLES` | CEO gate |
 | `AGENCY_STATE_PATH`, `AGENCY_OUTPUT_DIR` | relocate state/output (used by the CLI tests) |
 
@@ -202,7 +226,8 @@ Chrome will prompt for that single host permission.
 
 ```
 main.py  orchestrator.py  config.py  llm.py  state.py  web_dashboard.py  web_markdown.py  web/ (index.html, static/)  tools/ (sell-sheet builder)
-agents/        ceo_agent.py  cfo_agent.py  pm_agents.py
+agents/        ceo_agent.py  cfo_agent.py  growth_agent.py (PM-06)  policy.py  pm_agents.py
+docs/          FREE_TIERS.md
 projects/      common.py  prj_01_legacy_migrator/  prj_02_gap_cloner/  prj_03_deal_closer/
                prj_04_zeroday_hunter/  prj_05_synthetic_foundry/   (each: pipeline.py, engine, sample data, tests/)
 tests/         framework + CLI end-to-end tests

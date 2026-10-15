@@ -3,7 +3,9 @@ import os
 
 os.environ["AGENCY_SKIP_DOTENV"] = "1"
 for _v in ("API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "LLM_PROVIDER",
-           "TARGETS_FILE", "TARGET_URL", "REVIEWS_FILE"):
+           "TARGETS_FILE", "TARGET_URL", "REVIEWS_FILE", "GROQ_API_KEY", "OPENROUTER_API_KEY", "GEMINI_FREE_API_KEY",
+           "MISTRAL_API_KEY", "FREE_PROVIDERS", "FREE_LANE_ENABLED", "FREE_LANE_THRESHOLD_USD", "CONSERVE_BELOW_PCT",
+           "PAID_RETRY_HOURS", "FREE_LIMITS_JSON"):
     os.environ.pop(_v, None)
 
 # Tests must never touch the real state/cache files (a polluted cache would fake "savings").

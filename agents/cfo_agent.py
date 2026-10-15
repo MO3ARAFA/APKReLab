@@ -12,10 +12,15 @@ Revenue is never invented: it is logged explicitly (`main.py --log-revenue PRJ-0
 from __future__ import annotations
 
 import threading
+import time
+from collections import defaultdict, deque
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Callable
 
+from agents.policy import free_limits, paid_allowed
 from config import roi_values
-from llm import LLMResult
+from llm import FREE_PROVIDERS, LLMResult, price_for
 from state import PROJECT_META, AgencyState, now
 
 REINVEST_RATE = 0.60
@@ -50,6 +55,10 @@ def compute_summary(snap: dict) -> dict:
         "breaker_tripped": tripped,
         "vault": ("LOCKED $%.2f" % v["amount"]) if v.get("locked") else f"RELEASED ${v.get('amount', 0):.2f} -> {v.get('released_to')}",
         "units": {pid: dict(p.get("units", {})) for pid, p in snap["projects"].items() if p.get("units")},
+        "free_requests": sum(day.get("requests", 0) for prov in snap.get("free_usage", {}).values() for day in prov.values()),
+        "free_tokens": sum(day.get("tokens", 0) for prov in snap.get("free_usage", {}).values() for day in prov.values()),
+        "free_savings_usd": snap.get("free_savings_usd", 0.0),
+        "policy": dict(snap.get("policy") or {"mode": "normal"}),
     }
 
 
@@ -59,8 +68,14 @@ class ProjectGate:
     def __init__(self, cfo: "CFOAgent", pid: str):
         self.cfo, self.pid = cfo, pid
 
-    def try_reserve(self, est_usd: float) -> tuple[bool, str]:
-        return self.cfo.reserve(self.pid, est_usd)
+    def try_reserve(self, est_usd: float, tier: int = 1) -> tuple[bool, str]:
+        return self.cfo.reserve(self.pid, est_usd, tier)
+
+    def route(self, tier: int) -> tuple[bool, str]:
+        return self.cfo.route(self.pid, tier)
+
+    def free_allowed(self, provider: str) -> tuple[bool, str]:
+        return self.cfo.free_allowed(provider)
 
     def release(self, est_usd: float) -> None:
         self.cfo.release(self.pid, est_usd)
@@ -73,6 +88,8 @@ class CFOAgent:
         self._reserved: dict[str, float] = {pid: 0.0 for pid in PROJECT_META}
         self._rlock = threading.Lock()
         self.run_ceiling: float | None = None  # optional per-run absolute burn limit (see set_run_cap)
+        self.policy_hook: Callable[[], None] | None = None  # PM-06 re-assesses the policy before routing decisions
+        self._free_calls: dict[str, deque] = defaultdict(deque)  # provider -> timestamps in the last 60 s
 
     def gate(self, pid: str) -> ProjectGate:
         return ProjectGate(self, pid)
@@ -82,11 +99,53 @@ class CFOAgent:
         burn = sum(p["spent_usd"] for p in self.state.snapshot()["projects"].values())
         self.run_ceiling = None if max_spend_usd is None else burn + max_spend_usd
 
+    # -- PM-06 routing ---------------------------------------------------------------------
+    def route(self, pid: str, tier: int) -> tuple[bool, str]:
+        """May this call use the PAID provider right now? (PM-06 policy; otherwise it goes to the free lane.)"""
+        if self.policy_hook is not None:
+            try:
+                self.policy_hook()
+            except Exception:  # noqa: BLE001 - a policy glitch must never break a run; the breaker still guards spend
+                pass
+        return paid_allowed(self.state.snapshot().get("policy"), pid, tier)
+
+    def free_allowed(self, provider: str) -> tuple[bool, str]:
+        """Consume one request slot of `provider`'s self-imposed rpm / daily limits, or refuse. Attempts count (even failed
+        ones), so we stay conservative relative to the provider's real quota."""
+        lim = free_limits(provider)
+        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        with self._rlock:
+            calls = self._free_calls[provider]
+            t = time.time()
+            while calls and t - calls[0] > 60:
+                calls.popleft()
+            if lim.get("rpm") and len(calls) >= lim["rpm"]:
+                return False, f"{provider} free lane: {lim['rpm']} requests/min self-limit reached"
+            ok = [True]
+
+            def f(d):
+                u = d.setdefault("free_usage", {}).setdefault(provider, {})
+                for old in sorted(u)[:-7]:
+                    u.pop(old, None)  # keep roughly a week of history
+                rec = u.setdefault(day, {"requests": 0, "tokens": 0})
+                if lim.get("rpd") and rec["requests"] >= lim["rpd"]:
+                    ok[0] = False
+                    return
+                rec["requests"] += 1
+            self.state.update(f)
+            if not ok[0]:
+                return False, f"{provider} free lane: {lim['rpd']} requests/day self-limit reached (resets 00:00 UTC)"
+            calls.append(t)
+            return True, ""
+
     # -- circuit breaker -------------------------------------------------------------------
-    def reserve(self, pid: str, est_usd: float) -> tuple[bool, str]:
+    def reserve(self, pid: str, est_usd: float, tier: int = 1) -> tuple[bool, str]:
         """Atomically reserve worst-case cost of a live call, or refuse (caller falls back to local execution)."""
         with self.state._lock, self._rlock:
             d = self.state.data
+            ok, why = paid_allowed(d.get("policy"), pid, tier)
+            if not ok:
+                return False, why
             p = d["projects"][pid]
             if p["group"] == "B" and not any(q["revenue_usd"] > 0 for q in d["projects"].values() if q["group"] == "A"):
                 return False, f"{pid} is local-only until Group A logs revenue"
@@ -126,12 +185,26 @@ class CFOAgent:
                 d["cache_savings_usd"] = round(d.get("cache_savings_usd", 0.0) + res.saved_usd, 8)
                 entry.update(kind="cache_hit", usd=0.0, saved_usd=res.saved_usd)
             else:
-                if res.provider != "offline":
+                if res.provider in FREE_PROVIDERS and res.live:
+                    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                    rec = d.setdefault("free_usage", {}).setdefault(res.provider, {}).setdefault(day, {"requests": 0, "tokens": 0})
+                    rec["tokens"] += res.tokens_in + res.tokens_out
+                    pin, pout = price_for("anthropic", "", res.tier)  # what the same tokens would have cost on the paid lane
+                    avoided = (res.tokens_in * pin + res.tokens_out * pout) / 1_000_000
+                    d["free_savings_usd"] = round(d.get("free_savings_usd", 0.0) + avoided, 8)
+                    entry.update(free=True, avoided_usd=round(avoided, 8))
+                    p["free_calls"] = p.get("free_calls", 0) + 1
+                elif res.provider != "offline":
                     p["api_calls"] += 1
                 p["tokens_in"] += res.tokens_in
                 p["tokens_out"] += res.tokens_out
                 p["spent_usd"] = round(p["spent_usd"] + res.cost_usd, 8)
                 entry.update(tokens_in=res.tokens_in, tokens_out=res.tokens_out, usd=res.cost_usd)
+            flags = d.setdefault("policy_flags", {})
+            if res.paid_failure:  # the paid provider refused (no credit / bad key): PM-06 switches to the free lane
+                flags["paid_failure"] = {"t": now(), "reason": res.paid_failure, "provider": res.provider}
+            elif res.live and not res.cached and res.provider not in FREE_PROVIDERS and res.provider not in ("offline", "ollama"):
+                flags.pop("paid_failure", None)  # a paid call succeeded again
             d["ledger"].append(entry)
             del d["ledger"][:-LEDGER_MAX]
         self.state.update(f)

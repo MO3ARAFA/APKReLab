@@ -70,3 +70,4 @@ padding:4px 11px;font:600 12px inherit;cursor:pointer;z-index:1}.copy-btn:hover{
 #toasts{position:fixed;right:16px;bottom:16px;display:grid;gap:8px;z-index:30}
 .toast{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);padding:10px 14px;border-radius:10px;max-width:380px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .toast.err{border-left-color:var(--bad)}.toast.ok{border-left-color:var(--good)}
+.badge.info{color:var(--info);border-color:#1d5a78;background:#0c2330}.badge.warnb{color:var(--warn);border-color:#7a5a1a;background:#2a200c}
