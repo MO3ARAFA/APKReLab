@@ -101,7 +101,7 @@ public class IrStatsTest {
                 cls("Lt/B;", OBJ, mm(3, "show(Ljava/lang/String;)V", "new-instance v0, Landroid/webkit/WebView;",
                         "invoke-virtual {v0, p1}, Landroid/webkit/WebView;->loadUrl(Ljava/lang/String;)V")));
         assertEquals(r.analyses, r.stats.analyses);
-        assertTrue(r.stats.slowest.size() >= 1 && r.stats.slowest.size() <= TaintIr.Stats.TOP);
+        assertTrue(r.stats.slowest.size() >= 1 && r.stats.slowest.size() <= TaintIr.Stats.KEEP);
         TaintIr.Stats.Slow s = r.stats.slowest.get(0);
         assertTrue(s.insns > 0);
         assertTrue(s.rounds >= 1);
@@ -125,5 +125,20 @@ public class IrStatsTest {
         assertTrue(line.startsWith("taint losses real/param-only: "));
         assertTrue(line.contains("top owners of real drops: com/lib/Foo 2"));
         assertFalse(line.contains("\n"));
+    }
+
+    /** 0.103.2: run counts of a method that is NOT always in the top 5 must add up across groups (before: 38 runs in one report, 73 in the next, for the same app). */
+    @Test
+    public void runCountsAddUpAcrossGroupsEvenForMethodsOutsideTheTopFive() {
+        TaintIr.Stats total = new TaintIr.Stats();
+        for (int group = 0; group < 3; group++) {
+            TaintIr.Stats g = new TaintIr.Stats();
+            for (int k = 0; k < 8; k++) g.slowest.add(new TaintIr.Stats.Slow("Lt/M" + k + ";->m()V", 1000L - k * 10, 1, 10 + k, 2));
+            total.merge(g);
+        }
+        assertEquals(8, total.slowest.size());                                       // none was dropped while merging
+        for (TaintIr.Stats.Slow x : total.slowest) assertEquals(x.key, 3, x.runs);   // the 8th method (never in the top 5) counted all three groups
+        String line = total.line();
+        assertTrue(line.contains("M0")); assertTrue(!line.contains("M5"));           // twin: only the top five are printed
     }
 }

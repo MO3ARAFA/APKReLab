@@ -76,4 +76,16 @@ class NativeScannerTest {
         assertTrue(c[0].detail.contains("1 libraries")); assertTrue(c[0].detail.contains("1 file(s) named .so are not ELF")); assertTrue(c[0].detail.contains("native CODE is not analysed"))
         assertTrue(scan(emptyMap()).isEmpty())
     }
+
+    // 0.103.2 (a device report: the "no RELRO" card carried the biometric-prompt risk text, as did every CWE-693 card)
+    @Test fun theRiskTextOfAHardeningCardIsAboutHardeningAndNoCweOf693CardTalksAboutBiometrics() {
+        val hard = SecurityScanner.Finding(SecurityScanner.Severity.MEDIUM, "Native libraries without basic hardening (1)", "d", "r", null, -1, -1, "CWE-693", "lib/").also { it.ruleId = "native-hardening" }
+        val e = VulnKnowledge.forFinding(hard)!!
+        assertTrue(e.scenario.contains("RELRO")); assertTrue(e.owasp.startsWith("M7")); assertTrue(e.good.contains("relro"))
+        for (rule in listOf("fintech-frida-detection", "androgoat-checks", "")) {                       // twin: the other CWE-693 cards get the generic text, not the hardening text and not the biometric one
+            val g = VulnKnowledge.forFinding(SecurityScanner.Finding(SecurityScanner.Severity.INFO, "Root detection logic (client-side)", "d", "r", null, -1, -1, "CWE-693").also { it.ruleId = rule })!!
+            assertFalse(g.scenario.contains("iometric")); assertFalse(g.scenario.contains("RELRO")); assertTrue(g.scenario.contains("client-side"))
+        }
+        assertTrue(VulnKnowledge.forCwe("CWE-287")!!.scenario.isNotEmpty())                             // the authentication entry is untouched
+    }
 }

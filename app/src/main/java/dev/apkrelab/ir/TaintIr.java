@@ -535,7 +535,9 @@ public final class TaintIr {
      * [0] = a real source (Intent / SharedPreferences ...) was in the dropped argument, [1] = only a parameter label was.
      */
     public static final class Stats {
-        public static final int TOP = 5;
+        public static final int TOP = 5;           // methods printed in the status line
+        /** 0.103.2: methods kept per group and while merging. With only TOP kept, a method that left the top list and came back lost its earlier run counts (the same app showed 38 runs in one report and 73 in the next). */
+        public static final int KEEP = 40;
 
         /** One expensive method: total time over all its analyses, runs, instructions, most rounds one run needed. */
         public static final class Slow {
@@ -585,7 +587,7 @@ public final class TaintIr {
             slowest.clear();
             slowest.addAll(byKey.values());
             Collections.sort(slowest, (x, y) -> Long.compare(y.nanos, x.nanos));
-            while (slowest.size() > TOP) slowest.remove(slowest.size() - 1);
+            while (slowest.size() > KEEP) slowest.remove(slowest.size() - 1);
         }
 
         private static String ms(long nanos) {
@@ -612,7 +614,7 @@ public final class TaintIr {
             sb.append("; caps hit: sink refs ").append(capRefs).append(", rounds ").append(capRounds).append(" method(s), requeue ").append(capRequeue).append(" method(s), ~ sites ").append(capApprox);
             if (!slowest.isEmpty()) {
                 sb.append("; slowest methods: ");
-                for (int i = 0; i < slowest.size(); i++) {
+                for (int i = 0; i < slowest.size() && i < TOP; i++) {
                     Slow x = slowest.get(i);
                     sb.append(i == 0 ? "" : ", ").append(shortKey(x.key)).append(' ').append(ms(x.nanos))
                             .append(" [").append(x.insns).append(" insns, ").append(x.rounds).append(" rounds, ").append(x.runs).append(" runs]");
@@ -771,7 +773,7 @@ public final class TaintIr {
             int c = Long.compare(y.getValue()[0], x.getValue()[0]);
             return c != 0 ? c : x.getKey().compareTo(y.getKey());
         });
-        for (int i = 0; i < es.size() && i < Stats.TOP; i++) {
+        for (int i = 0; i < es.size() && i < Stats.KEEP; i++) {
             long[] t = es.get(i).getValue();
             st.slowest.add(new Stats.Slow(es.get(i).getKey(), t[0], (int) t[1], (int) t[2], (int) t[3]));
         }

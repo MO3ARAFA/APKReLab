@@ -34,7 +34,7 @@ public class MeasureBig {
       if (head == null) continue;
       Matcher tm = tp.matcher(head);
       if (!tm.find()) continue;
-      if (Scope.isLib(tm.group(1), pkg)) continue;
+      if (!Boolean.getBoolean("all") && Scope.isLib(tm.group(1), pkg)) continue;   // -Dall=true: library classes count as app code (a bigger synthetic workload for timing / memory; the flows then mean nothing)
       app.add(p); types.add(tm.group(1));
     }
     System.out.println("APP pkg=" + pkg + " comps=" + comps.size() + " guarded=" + guarded.size() + " files=" + files.size() + " nonLib=" + app.size());

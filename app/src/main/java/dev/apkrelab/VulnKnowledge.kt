@@ -36,8 +36,15 @@ object VulnKnowledge {
         "SSLContext.getInstance(\"TLSv1.3\")   // or omit the protocol and use the platform default on modern Android",
         listOf("Transport_Layer_Security_Cheat_Sheet"))
 
+    /** 0.103.2: a native library built without RELRO / NX / PIE / stack protection: what that allows, and the linker flags that fix it. */
+    private val nativeHardeningEntry = Entry("CWE-693", "Protection Mechanism Failure", "M7 Insufficient Binary Protections", "MASVS-RESILIENCE",
+        "Without these protections a memory-corruption bug in the native code is much easier to turn into code execution: no RELRO leaves the GOT writable (an overwritten function pointer redirects calls), an executable stack lets injected code run, no stack canary / PIE removes the checks and the address randomisation that make the exploit unreliable.",
+        "# CMake / ndk-build: nothing hardened is requested and an old toolchain defaults to none\nadd_library(app SHARED app.c)",
+        "target_link_options(app PRIVATE -Wl,-z,relro,-z,now -Wl,-z,noexecstack)\ntarget_compile_options(app PRIVATE -fstack-protector-strong -fPIE)   # and a current NDK",
+        listOf("Mobile_Application_Security_Cheat_Sheet"))
+
     fun forFinding(f: SecurityScanner.Finding): Entry? =
-        if (f.ruleId == "tls-protocol-version") tlsProtocolEntry else if (f.cwe.isBlank()) null else forCwe(f.cwe)
+        if (f.ruleId == "tls-protocol-version") tlsProtocolEntry else if (f.ruleId == "native-hardening") nativeHardeningEntry else if (f.cwe.isBlank()) null else forCwe(f.cwe)
 
     /** (label, url) pairs for one finding: the CWE page, the OWASP index pages and the matching cheat sheets. */
     fun references(cwe: String): List<Pair<String, String>> {
@@ -444,13 +451,13 @@ if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)""",
 <!-- or keep backup and exclude secrets with fullBackupContent / dataExtractionRules -->""",
             listOf("Mobile_Application_Security_Cheat_Sheet")))
 
-        put(Entry("CWE-693", "Protection Mechanism Failure", M3, "MASVS-AUTH",
-            "A biometric prompt that is not bound to a Keystore key only returns a boolean; hooking the callback (Frida) skips authentication without knowing the fingerprint.",
-            """biometricPrompt.authenticate(promptInfo)   // result is just 'success'""",
-            """// bind the unlock to a key that requires user authentication
-biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
-// the key: setUserAuthenticationRequired(true) in KeyGenParameterSpec""",
-            listOf("Authentication_Cheat_Sheet")))
+        // 0.103.2: this entry used to hold the BIOMETRIC text (a copy-paste); the biometric rule uses CWE-287, so every CWE-693 card (native hardening, root / emulator / Frida detection) showed it
+        put(Entry("CWE-693", "Protection Mechanism Failure", "M7 Insufficient Binary Protections", "MASVS-RESILIENCE",
+            "A protection that is missing, switched off or only checked on the device leaves the attack it was meant to stop fully open; a client-side check (root, emulator, instrumentation) only slows a motivated attacker down, because the code that performs it can be patched or hooked.",
+            """if (isRooted()) finish()   // decided on the device, by code the attacker controls""",
+            """// treat client-side checks as one layer; verify the device / app integrity on your server (Play Integrity API)
+// and keep secrets and authorisation decisions off the device""",
+            listOf("Mobile_Application_Security_Cheat_Sheet")))
 
         put(Entry("CWE-287", "Improper Authentication", M3, "MASVS-AUTH",
             "Authentication decisions made on the client can be bypassed by editing the app or replaying requests.",

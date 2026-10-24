@@ -476,7 +476,15 @@ object LibraryScanner {
     @Synchronized
     fun mergeInventory(extra: List<DetectedLib>): List<DetectedLib> {
         if (extra.isEmpty()) return inventory
-        val cur = inventory.toMutableList()
+        val cur = merge(inventory, extra)
+        inventory = cur
+        return cur
+    }
+
+    /** 0.103.2: the merge as a pure function (the inventory a scan builds for ITS apk is kept local and published once, see MainActivity.scanResourcesAsync). */
+    fun merge(base: List<DetectedLib>, extra: List<DetectedLib>): List<DetectedLib> {
+        if (extra.isEmpty()) return base
+        val cur = base.toMutableList()
         val have = cur.mapTo(HashSet()) { it.group + ":" + it.artifact }
         // 0.49.2: a versioned bcprov-jdk15on / jdk18on already known: do not add the path-only twin under the other name
         for (l in cur) if (l.artifact.contains("-jdk")) have.add(l.group + ":" + l.artifact.substringBefore("-jdk") + "-jdk*")
@@ -486,19 +494,24 @@ object LibraryScanner {
             if (l.version == "?" && have.contains(twin)) continue
             if (have.add(key)) cur.add(l)
         }
-        inventory = cur
         return cur
+    }
+
+    /** Detects the exact-version libraries of [apk] WITHOUT touching [inventory] (0.103.2). */
+    fun scanApkLocal(apk: File): Pair<List<DetectedLib>, LibScanResult> {
+        val counts = IntArray(4)   // version files, pom.properties, native strings, dex strings
+        val libs = detect(apk, counts)
+        val stats = "libraries " + libs.size + " (version files " + counts[0] + ", pom " + counts[1] + ", native " + counts[2] +
+            ", dex " + counts[3] + ")"
+        return libs to LibScanResult(findingsFor(libs), stats)
     }
 
     @Synchronized
     fun scanApk(apk: File): LibScanResult {
         inventory = emptyList()
-        val counts = IntArray(4)   // version files, pom.properties, native strings, dex strings
-        val libs = detect(apk, counts)
+        val (libs, res) = scanApkLocal(apk)
         inventory = libs
-        val stats = "libraries " + libs.size + " (version files " + counts[0] + ", pom " + counts[1] + ", native " + counts[2] +
-            ", dex " + counts[3] + ")"
-        return LibScanResult(findingsFor(libs), stats)
+        return res
     }
 
     /**

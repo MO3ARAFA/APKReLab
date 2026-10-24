@@ -1760,18 +1760,24 @@ class MainActivity : Activity() {
             SecretFormats.load(assets.open("secret_formats.json").use { it.readBytes() }.toString(Charsets.UTF_8))
         } catch (_: Throwable) { RuleRegistry.noteError("secret-formats") }
         AndroGoatChecks.resStats = "running..."
+        val apk = apkFile            // 0.103.2: THIS apk, read now: the thread may run after another one was loaded
+        LibraryScanner.inventory = emptyList()   // the previous apk's libraries must not show in a report of this one while the scan runs
         Thread {
             val res = try {
-                ResourceScanner.scanApk(apkFile)
+                ResourceScanner.scanApk(apk)
             } catch (t: Throwable) {
                 ResourceScanResult(emptyList(), "failed: " + t.javaClass.simpleName + ": " + t.message)
             }
             // 0.45.0: software composition analysis (libraries inside the built APK); its findings carry a file, so they travel with the resource ones
+            // 0.103.2: the inventory of this apk is built LOCALLY (exact libraries, then the version probes, then the package-path rows) and published once, only if this apk is still the
+            // loaded one: a second apk loaded while this scan ran, or a report exported half-way, can no longer see a half-built or mixed list
+            var inv: List<DetectedLib> = emptyList()
             val sca = try {
                 LibraryScanner.loadDb(applicationContext)   // 0.47.2: vulnerability table from assets/vulns.json
-                LibraryScanner.scanApk(apkFile)
+                val (libs, r) = LibraryScanner.scanApkLocal(apk)
+                inv = libs
+                r
             } catch (t: Throwable) {
-                LibraryScanner.inventory = emptyList()
                 LibScanResult(emptyList(), "failed: " + t.javaClass.simpleName + ": " + t.message)
             }
             // 0.47.0: second SCA layer - package-path heuristics over the class type list (already in memory,
@@ -1793,11 +1799,12 @@ class MainActivity : Activity() {
                         val wanted = VersionProbes.wanted(typeSet, pathLibs).toHashSet()
                         val byType = if (wanted.isEmpty()) emptyMap() else classDefs.filter { it.type in wanted }.associateBy { it.type }
                         val probed = VersionProbes.resolve(typeSet, pathLibs) { t -> byType[t]?.let { agentIndexedText(it) } }
-                        if (probed.isNotEmpty()) LibraryScanner.mergeInventory(probed)
+                        if (probed.isNotEmpty()) inv = LibraryScanner.merge(inv, probed)
                     } catch (_: Throwable) {
                         RuleRegistry.noteError("sca-probe")
                     }
-                    val merged = LibraryScanner.mergeInventory(pathLibs)
+                    val merged = LibraryScanner.merge(inv, pathLibs)
+                    inv = merged
                     scaFindings = LibraryScanner.findingsFor(merged)
                     ScaScanner.summaryFinding(pathLibs, merged.size - pathLibs.size)?.let { scaFindings = scaFindings + it }
                     scaStats = sca.stats + "; package-path " + pathLibs.size
@@ -1805,6 +1812,7 @@ class MainActivity : Activity() {
             } catch (_: Throwable) {
                 RuleRegistry.noteError("sca-package")
             }
+            synchronized(LibraryScanner) { if (apkModule === module) LibraryScanner.inventory = inv }   // 0.103.2: the one publication
             AndroGoatChecks.resStats = res.stats + "; SCA: " + scaStats
             runOnUiThread {
                 if (apkModule !== module) return@runOnUiThread   // another APK was loaded meanwhile
@@ -2598,7 +2606,9 @@ class MainActivity : Activity() {
         // 0.101.0: one group needs about a gigabyte to run without the garbage collector taking half of the time (measured on a 18k-class app: at a 1 GB heap two threads spent 59 s
         // of 117 s in GC against 23 s of 78 s for one thread, and the phone's own report said "2 group(s) re-run for memory"); 256 MB per thread was far too little. The result
         // does not depend on the thread count.
-        val ssaThreads = if (groupIdx.size < 2) 1 else maxOf(1, minOf(rt.availableProcessors() - 1, heapMb / 1000))
+        // 0.103.2: Settings can force 1, 2 or 3 threads (0 = this automatic rule) so the owner can A/B it on the phone with the GC numbers of the status line; capped by cores - 1
+        val forcedThreads = prefs().getInt("ssa_threads", 0)
+        val ssaThreads = if (groupIdx.size < 2) 1 else if (forcedThreads > 0) maxOf(1, minOf(forcedThreads, rt.availableProcessors() - 1)) else maxOf(1, minOf(rt.availableProcessors() - 1, heapMb / 1000))
         val report = progress
         val budgetMs = ssaBudgetMin() * 60_000L
         ssaTimeUp = false
@@ -3157,6 +3167,20 @@ class MainActivity : Activity() {
         })
         box.addView(TextView(this).apply {
             text = "Big apps only (more than 6000 classes): the data-flow step stops after this time and keeps the flows found so far. The report then says INCOMPLETE with the share of groups analysed (best classes first). \"none\" = run to the end."
+            textSize = 12f
+        })
+        box.addView(Button(this).apply {
+            fun lbl(): String { val t = prefs().getInt("ssa_threads", 0); return "Analysis threads: " + (if (t == 0) "auto" else "$t") + "  (tap to change)" }
+            text = lbl()
+            setOnClickListener {
+                val opts = listOf(0, 1, 2, 3)
+                val i = opts.indexOf(prefs().getInt("ssa_threads", 0))
+                prefs().edit().putInt("ssa_threads", opts[(i + 1) % opts.size]).apply()
+                text = lbl()
+            }
+        })
+        box.addView(TextView(this).apply {
+            text = "Big apps only. Auto = one thread per 1000 MB of heap (one on most phones: the measured limit is memory, not cores). More threads can be faster or slower: after a Deep scan compare the time, the GC time and \"re-run for memory\" in the scan status line. The result does not depend on the thread count."
             textSize = 12f
         })
         box.addView(Button(this).apply {
