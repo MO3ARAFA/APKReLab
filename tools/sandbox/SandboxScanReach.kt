@@ -22,7 +22,7 @@ fun main(args: Array<String>) {
     }
     // 0.86.2: like the device (MainActivity: SecurityScanner.codePackage(...)): the code package, not the manifest package. Quillpad's code is in
     // org.qosp.notes while the manifest says io.github.quillpad; with the manifest package an app-bound renamed class looked like a library.
-    val pkg = SecurityScanner.codePackage(texts.map { it.first }, manifestPkg, mc.componentTypes(manifestPkg))   // 0.92.1: the components are evidence, like in the app
+    val pkg = SecurityScanner.codePackage(texts.map { it.first }, manifestPkg, mc.componentTypes(manifestPkg), mc.launcherTypes(manifestPkg))   // 0.92.1 + 0.106.0: components and launcher are evidence, like in the app
     PostureScanner.clear(); SecurityScanner.clearKeyTracking()   // 0.94.0
     for ((i, p) in texts.withIndex()) { all.addAll(SecurityScanner.scanSmali(p.first, i, p.second, pkg)); PostureScanner.observe(p.first, p.second, pkg) }   // 0.91.0
     all.addAll(ResourceScanner.scanApk(apk).findings)

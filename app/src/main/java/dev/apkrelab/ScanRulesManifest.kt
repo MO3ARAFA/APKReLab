@@ -57,6 +57,14 @@ class ManifestContext(val xml: String) {
         "L" + full.replace('.', '/') + ";"
     }
 
+    /** 0.106.0: the smali types of the launcher activities (MAIN + LAUNCHER; an alias counts as its target activity). */
+    fun launcherTypes(manifestPkg: String): List<String> = components.filter { it.isLauncher }.mapNotNull { c ->
+        val n = c.targetActivity ?: c.name
+        if (n == "(unnamed)" || n.isEmpty()) return@mapNotNull null
+        val full = if (n.startsWith(".")) manifestPkg + n else if (!n.contains('.')) "$manifestPkg.$n" else n
+        "L" + full.replace('.', '/') + ";"
+    }
+
     /** Requested permissions, short names (READ_SMS ...). */
     val permissions: Set<String> by lazy {
         rx("<uses-permission(?:-sdk-23)?\\b[^>]*android:name\\s*=\\s*\"([^\"]+)\"").findAll(xml)

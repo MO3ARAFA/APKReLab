@@ -115,12 +115,17 @@ object SecurityScanner {
      * 0.22.1: package prefix of the app's OWN code. After a package rename (or with a different applicationId vs namespace)
      * the manifest package no longer matches the code, so the most common non-library, non-obfuscated 2-segment prefix is used.
      */
-    fun codePackage(types: List<String>, manifestPkg: String, components: List<String> = emptyList()): String {
+    fun codePackage(types: List<String>, manifestPkg: String, components: List<String> = emptyList(), launchers: List<String> = emptyList()): String {
         // 0.92.1 (a white-label wallet: manifest package com.TE.WEWallet, 99 of its components under com.emeint.*, code scope never APP): where the app's COMPONENTS live is the
         // strongest evidence of where its code lives; a package that holds most of the non-library components wins over the manifest package
         val mk = manifestPkg.split('.').let { if (it.size >= 2) it[0] + "." + it[1] else manifestPkg }
+        // 0.106.0 (Paperless: 5 Expo provider components outvoted the app's single MainActivity; a Flutter app's notification-plugin receivers did the same): the launcher activity
+        // is the app's own entry; when it lives under the manifest package prefix, a plugin package cannot be the code package (a white-label app keeps its launcher in its code package)
+        val mkSlash = "L" + mk.replace('.', '/') + "/"
+        val launcherHere = manifestPkg.isNotEmpty() && launchers.any { it.startsWith(mkSlash) && scopeOf(it, "") != Scope.LIB }
+        val byPrefix = HashMap<String, Int>()
         if (components.isNotEmpty() && manifestPkg.isNotEmpty()) {
-            val byPrefix = HashMap<String, Int>(); var nonLib = 0; var underFull = 0
+            var nonLib = 0; var underFull = 0
             val fullSlash = "L" + manifestPkg.replace('.', '/') + "/"
             for (c in components) {
                 if (scopeOf(c, "") == Scope.LIB || c.startsWith("Landroid/") || c.startsWith("Landroidx/")) continue
@@ -132,6 +137,7 @@ object SecurityScanner {
             if (top != null && top.value >= 3 && top.value * 2 >= nonLib) {
                 // the components are in the manifest package itself: unchanged. In its first two segments but NOT under the full package (Shizuku: manifest moe.shizuku.privileged.api,
                 // components moe.shizuku.manager.*): the two-segment prefix, so that the code under it is the app's. Elsewhere (a white-label app): that prefix.
+                if (top.key != mk && launcherHere) return if (launchers.any { it.startsWith(fullSlash) }) manifestPkg else mk
                 return if (top.key == mk) (if (underFull * 2 >= top.value) manifestPkg else mk) else top.key
             }
         }
@@ -153,6 +159,10 @@ object SecurityScanner {
         val generated = Regex(".*/(?:R|BuildConfig|Manifest)(?:\\$[A-Za-z0-9_]+)*;")
         val mine = maxOf(counts[mkey] ?: 0, types.count { it.startsWith(mkeySlash) && !generated.matches(it) })
         val best = counts.maxByOrNull { it.value }
+        // 0.106.0 (Axis Pay, a Flutter app: 6 Java classes under com.axispay, 5 of its 12 non-library components there, and a readable Flutter plugin, com.visionflutter, with 30+
+        // classes and NO component won: com.axispay...MainActivity became "origin unknown" in the posture table; the same in 6 React Native / Expo / Flutter apps of the corpus):
+        // a package that holds none of the app's own components does not beat the manifest package when the manifest package holds some
+        if (best != null && best.key != mkey && (launcherHere || ((byPrefix[mkey] ?: 0) > 0 && (byPrefix[best.key] ?: 0) == 0))) return manifestPkg
         return if (best != null && best.value >= 30 && mine < best.value / 4) best.key else manifestPkg
     }
 

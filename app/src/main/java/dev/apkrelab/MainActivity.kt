@@ -3771,8 +3771,10 @@ class MainActivity : Activity() {
     /** 0.92.1: the app's code package, with the manifest components as evidence (white-label apps). */
     private fun codePackageOf(defs: List<com.android.tools.smali.dexlib2.iface.ClassDef>): String {
         val pkg = packageNameOrNull() ?: ""
-        val comps = try { ManifestContext(manifestFull).componentTypes(pkg) } catch (_: Throwable) { emptyList() }
-        return SecurityScanner.codePackage(defs.map { it.type }, pkg, comps)
+        val mc = try { ManifestContext(manifestFull) } catch (_: Throwable) { null }
+        val comps = try { mc?.componentTypes(pkg) ?: emptyList() } catch (_: Throwable) { emptyList() }
+        val launchers = try { mc?.launcherTypes(pkg) ?: emptyList() } catch (_: Throwable) { emptyList() }
+        return SecurityScanner.codePackage(defs.map { it.type }, pkg, comps, launchers)
     }
 
     private fun packageNameOrNull(): String? = try { apkModule?.androidManifest?.packageName } catch (_: Throwable) { null }
