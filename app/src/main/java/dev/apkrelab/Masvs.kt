@@ -47,6 +47,9 @@ object Masvs {
             "res-strings-aws-keys", "res-strings-firebase-url", "res-strings-google-api-key", "res-strings-jwt", "res-strings-known-tokens", "res-strings-secret-names", "res-strings-url-credentials", "firebase-db-url")
         put(p("MASVS-STORAGE-2"), "apkrelab-keyboard-cache-sensitive-input-field", "manifest-allow-backup", "log-credential-object", "log-sensitive-strings", "okhttp-logging", "androgoat-checks", "fintech-async-taint")
         put(p("MASVS-CRYPTO-1"), "crypto-cipher", "crypto-weak-hash", "crypto-sha1prng-seed", "crypto-static-iv", "crypto-pbkdf2-iterations", "weak-random", "weak-key-size")
+        put(p("MASVS-STORAGE-1"), "assets-secrets", "assets-private-key", "assets-firebase-db")
+        put(p("MASVS-NETWORK-1"), "assets-cleartext-url")
+        put(p("MASVS-PLATFORM-2"), "assets-cordova-access-wildcard", "assets-cordova-navigation-wildcard")
         put(p("MASVS-CRYPTO-2"), "crypto-hardcoded-key")
         put(p("MASVS-CRYPTO-2", "MASVS-STORAGE-1"), "crypto-db-passphrase")
         put(p("MASVS-NETWORK-1"), "cleartext-url", "cleartext-url-used", "manifest-cleartext-traffic", "manifest-network-security-config", "res-nsc-cleartext", "res-nsc-cleartext-domains",

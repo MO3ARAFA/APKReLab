@@ -1096,6 +1096,7 @@ object ResourceScanner {
         var nsc = 0; var edit = 0; var paths = 0; var vals = 0
         var firstErr = ""
         var arscInfo = "no resources.arsc"
+        var assetInfo = ""
         arscCandidates = 0
         try {
             ZipFile(apk).use { zip ->
@@ -1159,6 +1160,8 @@ object ResourceScanner {
                     }
                     try { found.addAll(scanXml(name, xml, apkFacts)) } catch (_: Throwable) { RuleRegistry.noteError("res-xml") }
                 }
+                // 0.103.0: the assets/ folder (JS bundles, web apps, configs): see AssetScanner
+                try { val a = AssetScanner.scan(zip); found.addAll(a.findings); assetInfo = a.stats } catch (_: Throwable) { RuleRegistry.noteError("res-assets") }
             }
         } catch (t: Throwable) {
             firstErr = t.javaClass.simpleName + ": " + t.message
@@ -1179,7 +1182,7 @@ object ResourceScanner {
         val errors = RuleRegistry.errorReport()
         val stats = "decoded $ok/$bin, failed $fail, NSC files $nsc, EditText layouts $edit, FileProvider path files $paths, values files $vals, $arscInfo" +
             (if (arscCandidates > 0) ", arsc strings checked $arscCandidates" + (if (arscNamed) " (with entry names)" else "") else "") +
-            ", resource rules " + RuleRegistry.resourceCount() +
+            (if (assetInfo.isNotEmpty()) ", $assetInfo" else "") + ", resource rules " + RuleRegistry.resourceCount() +
             (if (firstErr.isNotEmpty()) "; first error: $firstErr" else "") +
             (if (errors.isNotEmpty()) "; rule errors: " + errors.replace("\n", ", ") else "")
         return ResourceScanResult(uniq, stats)

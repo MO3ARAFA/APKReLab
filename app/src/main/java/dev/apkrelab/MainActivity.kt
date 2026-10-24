@@ -1756,6 +1756,9 @@ class MainActivity : Activity() {
      */
     private fun scanResourcesAsync() {
         val module = apkModule
+        if (!SecretFormats.loaded()) try {   // 0.103.0: the asset scan reads the vendor formats too (they were only loaded for the Deep scan)
+            SecretFormats.load(assets.open("secret_formats.json").use { it.readBytes() }.toString(Charsets.UTF_8))
+        } catch (_: Throwable) { RuleRegistry.noteError("secret-formats") }
         AndroGoatChecks.resStats = "running..."
         Thread {
             val res = try {

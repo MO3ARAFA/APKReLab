@@ -30,7 +30,7 @@ object NativeScanner {
     // documentation, schema and licence hosts that every Dart snapshot carries from its packages
     private val noiseHosts = listOf("dart.dev", "flutter.dev", "pub.dev", "w3.org", "apache.org", "github.com", "githubusercontent.com", "mozilla.org", "unicode.org", "iana.org", "ietf.org",
         "example.com", "example.org", "ibm.com", "localhost", "schemas.android.com", "xmlns.com", "opensource.org", "wikipedia.org", "developer.android.com", "stackoverflow.com", "creativecommons.org",
-        "gnu.org", "whatwg.org", "json-schema.org", "mit-license.org", "goo.gl", "bit.ly", "firebase.google.com", "support.google.com", "developers.google.com", "material.io", "chromium.org")
+        "gnu.org", "whatwg.org", "fb.me", "reactjs.org", "facebook.github.io", "opengis.net", "topografix.com", "sil.org", "npmjs.com", "sourceforge.net", "googlecode.com", "json-schema.org", "mit-license.org", "goo.gl", "bit.ly", "firebase.google.com", "support.google.com", "developers.google.com", "material.io", "chromium.org")
     internal fun noiseHost(h: String): Boolean = noiseHosts.any { h == it || h.endsWith(".$it") } || h.matches(Regex("^[0-9.]+$"))
 
     class Lib(val path: String, val abi: String, val name: String, val info: ElfAnalyzer.ElfInfo, val source: ZipFile? = null, val fromSplit: String? = null)
