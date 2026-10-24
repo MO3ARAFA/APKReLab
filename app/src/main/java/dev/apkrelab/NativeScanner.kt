@@ -28,6 +28,8 @@ object NativeScanner {
 
     private val dartUrl = Regex("https?://([A-Za-z0-9][A-Za-z0-9.-]{1,80}\\.[A-Za-z]{2,24})(?::\\d+)?(?:/[^\\s\"'<>]{0,80})?")
     // documentation, schema and licence hosts that every Dart snapshot carries from its packages
+    /** 0.105.0: an SPKI pin (sha256/ + base64 of 32 bytes) or a colon-separated SHA-256 fingerprint (32 hex pairs), the two forms pinning code carries. */
+    private val pinRe = Regex("sha256/[A-Za-z0-9+/]{43}=|(?<![0-9A-Fa-f:])(?:[0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}(?![0-9A-Fa-f:])")
     private val noiseHosts = listOf("dart.dev", "flutter.dev", "pub.dev", "w3.org", "apache.org", "github.com", "githubusercontent.com", "mozilla.org", "unicode.org", "iana.org", "ietf.org",
         "example.com", "example.org", "ibm.com", "localhost", "schemas.android.com", "xmlns.com", "opensource.org", "wikipedia.org", "developer.android.com", "stackoverflow.com", "creativecommons.org",
         "gnu.org", "whatwg.org", "fb.me", "reactjs.org", "facebook.github.io", "opengis.net", "topografix.com", "sil.org", "npmjs.com", "sourceforge.net", "googlecode.com", "json-schema.org", "mit-license.org", "goo.gl", "bit.ly", "firebase.google.com", "support.google.com", "developers.google.com", "material.io", "chromium.org")
@@ -159,8 +161,12 @@ object NativeScanner {
             val bytes = try { src.getInputStream(src.getEntry(app.path)).use { it.readBytes() } } catch (_: Throwable) { null }
             if (bytes != null) {
                 val hosts = HashMap<String, Int>(); val clear = LinkedHashSet<String>()
+                val pins = LinkedHashSet<String>(); var certs = 0
                 ElfAnalyzer.forEachString(bytes, 8) { str ->
                     if (str.length > 4000) return@forEachString
+                    // 0.105.0: certificate pinning material (Dart's HttpClient ignores the network security config: pinning, if any, is in the Dart code)
+                    for (m in pinRe.findAll(str)) if (pins.size < 50) pins.add(m.value)
+                    if (str.contains("-----BEGIN CERTIFICATE-----")) certs++
                     for (m in dartUrl.findAll(str)) {
                         val h = m.groupValues[1].lowercase()
                         if (noiseHost(h)) continue
@@ -172,7 +178,9 @@ object NativeScanner {
                 out.add(f(Severity.INFO, "native-flutter", "Flutter app: the Dart code is compiled into libapp.so and is NOT analysed",
                     "The business logic, the API client and the deep-link router of this app are Dart code inside ${app.path}${if (app.fromSplit != null) " (from " + app.fromSplit + ")" else ""}: this scanner reads only the Java plug-in layer and the strings of the Dart snapshot. " +
                         (if (hosts.isEmpty()) "No endpoint was found in the snapshot strings (they may be encrypted by a protector)."
-                        else "Hosts named in the snapshot (${hosts.size}; they can come from the app or from its packages, and a string in the snapshot is not proof that it is used): $top."),
+                        else "Hosts named in the snapshot (${hosts.size}; they can come from the app or from its packages, and a string in the snapshot is not proof that it is used): $top.") +
+                        (if (pins.isEmpty() && certs == 0) " No certificate pinning material in the snapshot strings (no sha256/ SPKI pin, no colon-separated SHA-256 fingerprint, no PEM certificate): unless pins live in an asset, in native code or in encrypted strings, the Dart HTTP client trusts the system CAs."
+                        else " Certificate pinning material in the snapshot: ${pins.size} pin(s)" + (if (pins.isNotEmpty()) " (" + pins.take(3).joinToString(", ") { it.take(24) + "…" } + ")" else "") + ", $certs PEM certificate(s): pinning is probably done in Dart; check that every API host is covered."),
                     "Review the Dart code for what it does with deep links, tokens and certificates (Dart's HTTP stack does not use the network security config; pinning has to be done in Dart), and test the endpoints listed here.", "", app.path))
                 if (clear.isNotEmpty())
                     out.add(f(Severity.LOW, "native-flutter-cleartext", "Cleartext http:// endpoints named in the Dart snapshot (${clear.size})",

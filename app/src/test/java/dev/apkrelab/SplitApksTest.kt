@@ -63,6 +63,23 @@ class SplitApksTest {
         assertTrue(scan(base).none { it.ruleId == "native-flutter" })
     }
 
+    // 0.105.0: pinning material in the Dart snapshot (Dart's HttpClient ignores the network security config)
+    @Test fun pinsAndCertificatesInTheSnapshotAreReportedAndTheirAbsenceToo(): Unit = guarded {
+        val base = zip("base.apk", mapOf("classes.dex" to ByteArray(8)))
+        fun info(vararg rodata: String): String {
+            NativeScanner.extraArchives = listOf(zip("split_config.arm64_v8a.apk", mapOf("lib/arm64-v8a/libapp.so" to ElfTestBuilder.build(rodata = listOf("https://api.pay-example.net/v1/login") + rodata.toList()))))
+            return scan(base).single { it.ruleId == "native-flutter" }.detail
+        }
+        val spki = "sha256/" + "A".repeat(42) + "Q="
+        val colon = (1..32).joinToString(":") { "%02X".format(it) }
+        assertTrue(info(spki).contains("1 pin(s)"))
+        assertTrue(info(colon).contains("1 pin(s)"))
+        assertTrue(info("-----BEGIN CERTIFICATE-----MIIBszCCAVmgAwIBAgIU").contains("1 PEM certificate(s)"))
+        // twins: a bare 64-hex digest, a 31-pair fingerprint and a short sha256/ string are not pins
+        val none = info("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", (1..31).joinToString(":") { "%02X".format(it) }, "sha256/short")
+        assertTrue(none, none.contains("No certificate pinning material"))
+    }
+
     @Test fun aBundleIsRecognisedAndItsApksExtractedWithSafeNames() {
         val apk = zip("a.apk", mapOf("classes.dex" to ByteArray(4), "AndroidManifest.xml" to ByteArray(4)))
         val bundle = zip("app.apks", mapOf("base-master.apk" to apk.readBytes(), "splits/split_config.arm64_v8a.apk" to ByteArray(10), "../../evil.apk" to ByteArray(3), "toc.pb" to ByteArray(2)))
