@@ -11,8 +11,17 @@ Owner speaks Egyptian Arabic, wants concise, actionable answers.
 - (Edge-to-edge insets: handled since 0.24.0 as part of the redesign - see below; still unverified on device.)
 - (AI cache eviction: LRU since 0.69.2, a cache hit refreshes the file time; MAX_FILES = 300.)
 
-## Current version: 0.106.0
+## Current version: 0.107.0
 - **0.104.1 VERIFIED ON THE PHONE (report 9, Axis Pay, second Deep scan without re-picking the app)**: "cache: 25 of 25 groups reused", **groups 8 s instead of 743-752 s** (plan 21 s still runs; the 8 s include the hash pass over the unique classes and reading 25 cache files), GC 0.9 s in 32 collections instead of 447-620 s. The report is identical to the full run's (report 8) except the status line: 80 cards, +16 flows, same loss counters. So the 0.104.0 miss was the workspace wipe, as suspected. Note: the "slowest methods" of a cached run are the CACHED measurements of the run that produced them (their times are not this run's). Still unmeasured: the cold-run overhead of writing the 25 files.
+- 0.107.0 (the owner's 0.107.0 charter; premises checked first). Version 0.107.0 / code 220. Kotlin 333 -> 336, ir 306, typecheck: only the 6 `R` references. Numbers in `tools/sandbox/PERF.md` "0.107.0".
+  - Provenance: `tools/bin/r8.jar` and the `/tools/bin/` line in `.gitignore` were already in the working tree when this round started (not written in this round's visible steps); the jar was verified (R8 8.13.25, SHA-1 = Google Maven's).
+  - Corpus: 5 more open-source APKs from F-Droid (hash-checked), decoded under ~/r8b (not in the repo).
+  - T1 (measured, not built): flows through Object fields of renamed classes are 30-85% of the flows of R8-repackaged apps. Needs interprocedural tracking of R8's class-id; next engine item.
+  - T2 (measured, not built): no Base64.decode or constant-filled array reaches a crypto / reflection sink in the 11 decoded apps.
+  - T3 (done): native root / hooking / debugger strings feed the posture table (0 hits on 39 APKs). RegisterNatives is not a signal (normal binding style).
+  - T4 (done): QR/barcode rule fixed (R8 reuses library class names for merged app code: 10 false cards in K-9 / Thunderbird). Judged: KeePassDX AES-ECB = KDBX AES-KDF (BY-DESIGN); K-9 SettingsProvider caller-certificate check (already lowered on the device since 0.94.0); AntennaPod PODCASTINDEX_API_SECRET in BuildConfig (TP).
+  - T5 (not done in this round).
+  - Device checks: the Axis Pay posture table may now list native root / Frida checks from its arm64 split (`lib/arm64-v8a/....so (native)`, origin unknown unless a known library).
 - 0.106.0 (the owner's "wave 2" directive, 6 targets; premises checked first). Version 0.106.0 / code 219. Kotlin 323 -> 333, ir 306 (unchanged), typecheck: only the 6 `R` references. Numbers in `tools/sandbox/PERF.md` "0.106.0".
   - Device result of 0.104.3 + 0.105.0 (owner's reports, Axis Pay 3.0.4): cold groups 743 -> 211 s, blocking GC 538,329 -> 31,133 ms; warm re-scan plan 4 s + groups 0 s.
   - T1 (done): `SecurityScanner.codePackage` returned a Flutter plugin's package (com.visionflutter) for Axis Pay, so its own MainActivity was "origin unknown". The launcher activity and component evidence now keep the manifest package; 5 corpus apps corrected (React Native / Expo / Flutter), 29 unchanged.
