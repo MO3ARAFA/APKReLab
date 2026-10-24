@@ -24,6 +24,8 @@ public class MeasureBig {
     // 0.69.1: -Dguard.file=<file written by GuardList> = exported components behind a signature-level permission (one smali type per line); absent = 0.69.0 behaviour
     final List<String> guarded = new ArrayList<>();
     if (System.getProperty("guard.file") != null) guarded.addAll(Files.readAllLines(Paths.get(System.getProperty("guard.file"))));
+    final Set<String> sdkx = new HashSet<>();
+    if (System.getProperty("sdkx") != null) for (String l : Files.readAllLines(Paths.get(System.getProperty("sdkx")))) sdkx.add(l.split("\t")[0]);
     List<Path> files;
     try (Stream<Path> s = Files.walk(dec)) { files = s.filter(p -> p.toString().endsWith(".smali") && dec.relativize(p).toString().startsWith("smali")).collect(Collectors.toList()); }
     final List<Path> app = new ArrayList<>(); final List<String> types = new ArrayList<>();
@@ -34,7 +36,8 @@ public class MeasureBig {
       if (head == null) continue;
       Matcher tm = tp.matcher(head);
       if (!tm.find()) continue;
-      if (!Boolean.getBoolean("all") && Scope.isLib(tm.group(1), pkg)) continue;   // -Dall=true: library classes count as app code (a bigger synthetic workload for timing / memory; the flows then mean nothing)
+      if (!Boolean.getBoolean("all") && Scope.isLib(tm.group(1), pkg)) continue;
+      if (sdkx.contains(tm.group(1))) continue;   // -Dsdkx=<file>: renamed classes attributed to an SDK (type<TAB>family) are left out like library code   // -Dall=true: library classes count as app code (a bigger synthetic workload for timing / memory; the flows then mean nothing)
       app.add(p); types.add(tm.group(1));
     }
     System.out.println("APP pkg=" + pkg + " comps=" + comps.size() + " guarded=" + guarded.size() + " files=" + files.size() + " nonLib=" + app.size());

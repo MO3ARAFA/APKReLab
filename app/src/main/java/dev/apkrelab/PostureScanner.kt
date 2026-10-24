@@ -95,7 +95,7 @@ object PostureScanner {
     fun clear() { StringOverlay.current?.resetStats(); hits.clear(); scopes.clear(); withSource.set(0); withLines.set(0); appClasses.set(0); strEnc.set(0); reflMarshal.set(0); decryptCalls.clear() }
 
     /** 0.103.1: the network security config facts belong to the LOADED APK (the resource scan sets them once, in the background): reset them when an APK is loaded, NOT at the start of every Deep scan (that wiped them whenever the resource scan had finished first, and the report said "not checked" for the same APK). */
-    fun clearApk() { nscPins = null; nscDeclared = null; declaredNames = emptySet() }
+    fun clearApk() { nscPins = null; nscDeclared = null; declaredNames = emptySet(); sdkTypes = emptySet() }
 
     /** Called with the text of every class the FULL deep scan reads (not by a single-class review: that would count a class twice). */
     fun observe(classType: String, text: String, appPkg: String) {
@@ -132,7 +132,7 @@ object PostureScanner {
     class Row(val sig: Sig, val app: List<String>, val obf: List<String>, val lib: List<String>)
 
     fun rows(): List<Row> = signals.map { s ->
-        val h = (hits[s.id]?.toList() ?: emptyList()).map { if (it.origin == Origin.OBF && boundByName(it.type)) Hit(it.type, Origin.APP) else it }
+        val h = (hits[s.id]?.toList() ?: emptyList()).map { if (it.origin == Origin.OBF && it.type in sdkTypes) Hit(it.type, Origin.LIB) else if (it.origin == Origin.OBF && boundByName(it.type)) Hit(it.type, Origin.APP) else it }
         Row(s, h.filter { it.origin == Origin.APP }.map { it.type }, h.filter { it.origin == Origin.OBF }.map { it.type }, h.filter { it.origin == Origin.LIB }.map { it.type })
     }
 
@@ -142,6 +142,8 @@ object PostureScanner {
      * yet it carries the name of the app's declared `Mwallet2ApplicationClass`. Set from the decoded manifest of the loaded APK (kept until the next APK).
      */
     @Volatile var declaredNames: Set<String> = emptySet()
+    /** 0.106.0: renamed classes the structure gives to one bundled SDK (SdkAttribution): their hits are the library's, not "origin unknown". Set after each Deep scan. */
+    @Volatile var sdkTypes: Set<String> = emptySet()
     internal const val NAME_PREFIX_MIN = 12
 
     fun setManifest(xml: String) {

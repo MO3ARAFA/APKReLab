@@ -2434,6 +2434,7 @@ class MainActivity : Activity() {
             val parts = Array(workers) { ArrayList<SecurityScanner.Finding>() }
             val partEdges = Array(workers) { SecurityScanner.CallIndex() }
             val xlinker = TaintLinker(appPkg)   // 0.49.0: cross-class taint summaries (stage A in the workers, stage B after join)
+            val sdkAttr = SdkAttribution(appPkg)   // 0.106.0: renamed root-package classes that only one bundled SDK names
             val threads = ArrayList<Thread>()
             for (w in 0 until workers) {
                 val th = Thread {
@@ -2448,6 +2449,7 @@ class MainActivity : Activity() {
                             } catch (_: Throwable) { errorCount.incrementAndGet(); "" }
                             if (text.isNotEmpty()) {
                                 try {
+                                    try { sdkAttr.observe(def.type, text) } catch (_: Throwable) { }
                                     val fs = SecurityScanner.scanSmali(def.type, i, text, appPkg)
                                     try { PostureScanner.observe(def.type, text, appPkg) } catch (_: Throwable) { }   // 0.91.0: only the full scan feeds the posture table (not a single-class review)
                                     parts[w].addAll(fs)
@@ -2473,6 +2475,12 @@ class MainActivity : Activity() {
             for (th in threads) { try { th.join() } catch (_: InterruptedException) { } }
             val found = ArrayList<SecurityScanner.Finding>()
             for (part in parts) found.addAll(part)
+            // 0.106.0: findings in classes the structure gives to one SDK are that SDK's (library scope: hidden with the libraries, out of the report's app list), with the evidence
+            sdkFamilies = if (secScanCancel || !prefs().getBoolean("sdk_attr", true)) emptyMap() else try { sdkAttr.compute { SecurityScanner.scopeOf(it, appPkg) == SecurityScanner.Scope.LIB } } catch (_: Throwable) { emptyMap() }
+            PostureScanner.sdkTypes = sdkFamilies.keys
+            // NOT left out of the data-flow step: measured on 3 R8-repackaged corpus apps, renamed library code (DataStore, Room, Compose) sits on the path of the app's own flows
+            // (Keep It lost a HIGH/HIGH flow). A flow card is re-scoped only when its source is in the same SDK as its sink (an app value reaching a library helper stays the app's).
+            applySdkScope(found)
             if (!secScanCancel) {
                 try { found.addAll(xlinker.link()) } catch (_: Throwable) { RuleRegistry.noteError("taint-xclass") }
             }
@@ -2482,6 +2490,7 @@ class MainActivity : Activity() {
                 runOnUiThread { if (secScanning) prog("Data-flow analysis (SSA) ...") }
                 try {
                     val extra = ssaFindings(defs, appPkg, found) { msg -> runOnUiThread { if (secScanning) prog(msg) } }
+                    applySdkScope(extra)
                     found.addAll(extra)
                     // 0.75.2: per-class dedupe ran before the SSA flows existed; run it again so an SSA flow absorbs the text rule of the same class
                     try {
@@ -2560,6 +2569,19 @@ class MainActivity : Activity() {
     private fun runtimeStat(key: String): Long = try { android.os.Debug.getRuntimeStat(key)?.trim()?.toLongOrNull() ?: 0L } catch (_: Throwable) { 0L }
 
     private var planDigestNote = ""
+
+    /** 0.106.0: renamed root-package class -> the SDK family that alone names it (SdkAttribution), from the last Deep scan of this APK. */
+    @Volatile private var sdkFamilies: Map<String, String> = emptyMap()
+    private fun applySdkScope(list: List<SecurityScanner.Finding>) {
+        for (f in list) {
+            val fam = sdkFamilies[f.classType ?: continue] ?: continue
+            val src = f.sourceMethod.substringBefore("->", "")
+            if (src.isNotEmpty() && src != f.classType && sdkFamilies[src] != fam) continue
+            f.scope = SecurityScanner.Scope.LIB; f.detail += sdkNote(fam)
+        }
+    }
+
+    private fun sdkNote(fam: String) = "\n\nRenamed SDK code: R8 renamed this class into the root package, and the only classes that name it belong to $fam (a bundled library can only name its own types); it is shown with the libraries. Not for a class that names the app's own package or that R8 merged from several classes."
 
     /**
      * 0.105.0: the file of planner digests for the code being scanned. Its name hashes everything a digest depends on besides the class text: the engine (version code + install
