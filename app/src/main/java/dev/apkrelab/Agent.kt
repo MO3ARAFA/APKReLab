@@ -17,6 +17,12 @@ interface AgentHost {
     fun manifest(): String
     fun findings(limit: Int, minSeverity: String): String
     fun entryPoints(): String
+    /** 0.103.0: direct callers of a method from the Deep scan's call index (see GraphTools). */
+    fun callers(name: String, method: String, limit: Int): String
+    /** 0.103.0: the invokes inside a method, split into app / library / framework. */
+    fun callees(name: String, method: String, limit: Int): String
+    /** 0.103.0: rule, SSA data path and entry chain of one finding ("#3" from get_findings, or part of its title). */
+    fun flowPath(finding: String): String
     fun listEdits(): String
     fun openClass(cls: String): String
     /** Runs the security scan (mode: smart | manifest | deep) and waits for it. */
@@ -214,6 +220,9 @@ object Agent {
             "app_capabilities" -> Capabilities.topic(a.optString("topic"))
             "get_findings" -> host.findings(a.optInt("limit", 15).coerceIn(1, 40), a.optString("min_severity", "LOW"))
             "entry_points" -> host.entryPoints()
+            "callers" -> host.callers(a.optString("name"), a.optString("method"), a.optInt("limit", 25).coerceIn(1, 80))
+            "callees" -> host.callees(a.optString("name"), a.optString("method"), a.optInt("limit", 40).coerceIn(1, 120))
+            "flow_path" -> host.flowPath(a.optString("finding"))
             "list_edits" -> host.listEdits()
             "open_class" -> host.openClass(a.optString("class"))
             "scan_security" -> host.runScan(a.optString("mode", "smart").trim().lowercase(), ctx)

@@ -4308,6 +4308,9 @@ class MainActivity : Activity() {
         override fun manifest() = agentManifest()
         override fun findings(limit: Int, minSeverity: String) = agentFindings(limit, minSeverity)
         override fun entryPoints() = agentEntryPoints()
+        override fun callers(name: String, method: String, limit: Int) = agentCallers(name, method, limit)
+        override fun callees(name: String, method: String, limit: Int) = agentCallees(name, method, limit)
+        override fun flowPath(finding: String) = agentFlowPath(finding)
         override fun listEdits() = agentListEdits()
         override fun openClass(cls: String) = agentOpenClass(cls)
         override fun runScan(mode: String, ctx: AgentCtx) = agentRunScan(mode, ctx)
@@ -4806,12 +4809,13 @@ class MainActivity : Activity() {
     private fun agentFindings(limit: Int, minSeverity: String): String {
         if (secFindings.isEmpty()) return "No scan results yet. Ask the user to run 'Smart scan' in the Security tab first."
         val minRank = when (minSeverity.trim().uppercase()) { "CRITICAL" -> 0; "HIGH" -> 1; "MEDIUM" -> 2; "LOW" -> 3; else -> 4 }
-        val list = secSorted(secFindings).filter { it.severity.rank <= minRank && it.verdict != "FP" }.take(limit)
+        val all = secSorted(secFindings).filter { it.verdict != "FP" }
+        val list = all.filter { it.severity.rank <= minRank }.take(limit)
         val sb = StringBuilder()
-        sb.append(secFindings.size).append(" findings in total; showing ").append(list.size).append(" (AI-marked false positives hidden):\n")
+        sb.append(secFindings.size).append(" findings in total; showing ").append(list.size).append(" (AI-marked false positives hidden; #N is the number for flow_path):\n")
         for (f in list) {
             try { traceFinding(f) } catch (_: Throwable) { }
-            sb.append("- [").append(f.severity.label).append("] ").append(f.title).append(" | ").append(f.location)
+            sb.append("- #").append(all.indexOf(f) + 1).append(" [").append(f.severity.label).append("] ").append(f.title).append(" | ").append(f.location)
             if (f.count > 1) sb.append(" x").append(f.count)
             if (f.cwe.isNotEmpty()) sb.append(" | ").append(f.cwe)
             if (f.reach.isNotEmpty()) sb.append(" | reachable from an exported component: ").append(f.reach)
@@ -4819,6 +4823,54 @@ class MainActivity : Activity() {
             sb.append("\n    ").append(f.detail.take(200).replace("\n", " ")).append('\n')
         }
         return sb.toString()
+    }
+
+    /** 0.103.0: the text of the class [name] and the signatures of its methods called [method], or an "error: ..." string. */
+    private fun agentMethodOf(name: String, method: String): Triple<ClassDef, String, List<String>>? {
+        val (idx, err) = agentResolve(name)
+        if (idx < 0) { agentGraphErr = err; return null }
+        val def = classDefs[idx]
+        val text = try { agentIndexedText(def) } catch (t: Throwable) { agentGraphErr = "error: could not read ${agentCname(def.type)}: " + (t.message ?: t.javaClass.simpleName); return null }
+        val sigs = GraphTools.signatures(text, method)
+        if (sigs.isEmpty()) { agentGraphErr = "error: no method named \"${method.trim()}\" in ${agentCname(def.type)}. Use get_class to see its methods."; return null }
+        return Triple(def, text, sigs)
+    }
+
+    @Volatile private var agentGraphErr = ""
+
+    private fun agentCallers(name: String, method: String, limit: Int): String {
+        agentIndexed()?.let { return "error: $it" }
+        val idx = callIdx ?: return "error: the call index is built by the Deep scan. Run scan_security with mode deep first, then ask again."
+        val (def, _, sigs) = agentMethodOf(name, method) ?: return agentGraphErr
+        val sb = StringBuilder()
+        for (sig in sigs.take(4)) {
+            val refs = idx.callersOf((def.type + "->" + sig).hashCode())
+            sb.append(GraphTools.renderCallers(def.type, sig, refs, { ref ->
+                val c = classDefs.getOrNull((ref ushr 32).toInt()) ?: return@renderCallers null
+                val m = try { GraphTools.methodByHash(c.type, agentIndexedText(c), ref.toInt()) } catch (_: Throwable) { null }
+                agentCname(c.type) + "." + (m ?: "?")
+            }, limit)).append('\n')
+        }
+        if (sigs.size > 4) sb.append("(").append(sigs.size - 4).append(" more overloads not shown: give the full signature in \"method\")\n")
+        return sb.toString().trimEnd()
+    }
+
+    private fun agentCallees(name: String, method: String, limit: Int): String {
+        agentIndexed()?.let { return "error: $it" }
+        val (def, text, sigs) = agentMethodOf(name, method) ?: return agentGraphErr
+        val sb = StringBuilder()
+        for (sig in sigs.take(4)) sb.append(GraphTools.renderCallees(def.type, sig, GraphTools.callees(text, sig), { classDex.containsKey(it) }, limit)).append('\n')
+        if (sigs.size > 4) sb.append("(").append(sigs.size - 4).append(" more overloads not shown: give the full signature in \"method\")\n")
+        return sb.toString().trimEnd()
+    }
+
+    private fun agentFlowPath(query: String): String {
+        if (secFindings.isEmpty()) return "No scan results yet. Ask the user to run 'Smart scan' in the Security tab first."
+        val all = secSorted(secFindings).filter { it.verdict != "FP" }
+        val (no, f) = GraphTools.pick(all, query) ?: return "error: no finding matches \"$query\". Use the #N number from get_findings, or part of a title."
+        try { traceFinding(f) } catch (_: Throwable) { }
+        val method = try { classDefs.getOrNull(f.clsIndex)?.let { SecurityScanner.methodKeyAt(it.type, agentIndexedText(it), f.at) } } catch (_: Throwable) { null }
+        return GraphTools.flowPath(f, no, method)
     }
 
     private fun agentEntryPoints(): String {
