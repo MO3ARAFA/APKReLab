@@ -99,7 +99,7 @@ object SecurityScanner {
         "wallet/core/", "org/ton/", "io/github/novacrypto/",
         "me/leolin/shortcutbadger/", "net/openid/appauth/",
         // 0.85.0 (set 9, Axis Pay / InstaPay): marketing, analytics and attribution SDKs that are in most fintech apps
-        "net/gotev/uploadservice/", "com/scottyab/rootbeer/", "net/sqlcipher/", "com/j256/ormlite/", "com/sleepbot/datetimepicker/", "com/fourmob/datetimepicker/", "com/akexorcist/", "com/lamudi/phonefield/", "org/simpleframework/", "org/zeroturnaround/zip/", "commons/collections/", "com/braze/", "com/appboy/", "com/moengage/", "com/moe/pushlibrary/", "com/dynatrace/", "co/ab180/airbridge/",   // 0.83.0 (FairEmail): launcher badge library, OAuth client library
+        "net/gotev/uploadservice/", "com/scottyab/rootbeer/", "net/sqlcipher/", "com/j256/ormlite/", "com/sleepbot/datetimepicker/", "com/fourmob/datetimepicker/", "com/akexorcist/", "com/lamudi/phonefield/", "org/simpleframework/", "org/zeroturnaround/zip/", "commons/collections/", "com/braze/", "com/appboy/", "bo/app/", "com/moengage/", "com/moe/pushlibrary/", "com/dynatrace/", "co/ab180/airbridge/",   // 0.106.0: bo/app/ = the Braze SDK's own pre-obfuscated internals (861 classes in Axis Pay calling com/braze/support/BrazeLogger 1,639 times). 0.83.0 (FairEmail): launcher badge library, OAuth client library
         "com/tonyodev/fetch2"   // 0.79.0: Fetch2 download library (Kiwix), reported as app code
     )
 
@@ -683,15 +683,33 @@ object SecurityScanner {
      */
     fun aggregate(list: List<Finding>): List<Finding> {
         val merged = LinkedHashMap<String, Finding>()
+        val more = HashMap<Finding, LinkedHashSet<String>>()            // 0.106.0: the other classes a cross-class card stands for
         for (f in list) {
             val rule = if (f.ruleId.isNotEmpty()) f.ruleId else f.title
-            val scope = if (f.severity == Severity.INFO) "*" else f.clsIndex.toString() + "|" + f.file
+            val acrossClasses = f.severity == Severity.INFO || crossClassLow(f)
+            val scope = if (acrossClasses) "*" + (if (f.severity == Severity.INFO) "" else f.scope.name) else f.clsIndex.toString() + "|" + f.file
             val key = rule + "|" + f.title + "|" + scope
             val prev = merged[key]
-            if (prev == null) merged[key] = f else prev.count += f.count
+            if (prev == null) merged[key] = f
+            else {
+                prev.count += f.count
+                if (f.severity != Severity.INFO && f.location != prev.location) more.getOrPut(prev) { LinkedHashSet() }.add(f.location)
+            }
+        }
+        for ((f, locs) in more) {
+            locs.remove(f.location)
+            if (locs.isNotEmpty()) f.detail += "\n\nThe same finding in ${locs.size} more ${if (f.scope == Scope.LIB) "library" else "renamed"} class(es) (one card for all; open each one from the class list): " + locs.joinToString(", ") + "."
         }
         return dedupe(merged.values.toList())
     }
+
+    /**
+     * 0.106.0 (Axis Pay: 12 "receiver without export flag" cards, 6 "clipboard", 4 "temp file" ... one per renamed or SDK class, burying the app's own findings): a LOW rule finding
+     * in renamed (OBF) or library code is one card per rule and title across classes, listing every class. App-code findings, flows (their chains differ) and MEDIUM and above stay
+     * one card per class.
+     */
+    private fun crossClassLow(f: Finding): Boolean =
+        f.severity == Severity.LOW && (f.scope == Scope.OBF || f.scope == Scope.LIB) && !f.ruleId.startsWith("taint") && f.clsIndex >= 0
 
     /** 0.48.4: one rule that makes the other rules' report of the SAME issue in the SAME class redundant. */
     private class Absorb(val primary: (Finding) -> Boolean, val absorbed: (Finding) -> Boolean, val sameTitle: Boolean = false)
