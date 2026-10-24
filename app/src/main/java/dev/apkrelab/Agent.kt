@@ -25,6 +25,10 @@ interface AgentHost {
     fun callees(name: String, method: String, limit: Int): String
     /** 0.103.0: rule, SSA data path and entry chain of one finding ("#3" from get_findings, or part of its title). */
     fun flowPath(finding: String): String
+    /** 0.106.0: SDK attribution, R8-merge signs and named packages of one class (ClassTools.classify). */
+    fun classifyClass(name: String): String
+    /** 0.106.0: assembles a smali edit in memory and diffs the class's findings before / after (ClassTools.verifyEdit). Nothing is saved. */
+    fun verifyClassEdit(name: String, modified: String): String
     fun listEdits(): String
     fun openClass(cls: String): String
     /** Runs the security scan (mode: smart | manifest | deep) and waits for it. */
@@ -226,6 +230,8 @@ object Agent {
             "callers" -> host.callers(a.optString("name"), a.optString("method"), a.optInt("limit", 25).coerceIn(1, 80))
             "callees" -> host.callees(a.optString("name"), a.optString("method"), a.optInt("limit", 40).coerceIn(1, 120))
             "flow_path" -> host.flowPath(a.optString("finding"))
+            "classify_class" -> host.classifyClass(a.optString("name"))
+            "verify_class_edit" -> host.verifyClassEdit(a.optString("name"), a.optString("modified"))
             "list_edits" -> host.listEdits()
             "open_class" -> host.openClass(a.optString("class"))
             "scan_security" -> host.runScan(a.optString("mode", "smart").trim().lowercase(), ctx)

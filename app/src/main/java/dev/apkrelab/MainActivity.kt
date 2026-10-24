@@ -4427,6 +4427,8 @@ class MainActivity : Activity() {
         override fun callers(name: String, method: String, limit: Int) = agentCallers(name, method, limit)
         override fun callees(name: String, method: String, limit: Int) = agentCallees(name, method, limit)
         override fun flowPath(finding: String) = agentFlowPath(finding)
+        override fun classifyClass(name: String) = agentClassify(name)
+        override fun verifyClassEdit(name: String, modified: String) = agentVerifyEdit(name, modified)
         override fun listEdits() = agentListEdits()
         override fun openClass(cls: String) = agentOpenClass(cls)
         override fun runScan(mode: String, ctx: AgentCtx) = agentRunScan(mode, ctx)
@@ -4953,6 +4955,30 @@ class MainActivity : Activity() {
     }
 
     @Volatile private var agentGraphErr = ""
+
+    private fun agentClassify(name: String): String {
+        agentIndexed()?.let { return "error: $it" }
+        val (idx, err) = agentResolve(name)
+        if (idx < 0) return err
+        val def = classDefs[idx]
+        val text = try { agentIndexedText(def) } catch (t: Throwable) { return "error: could not read the class: " + (t.message ?: t.javaClass.simpleName) }
+        val appPkg = codePackageOf(classDefs)
+        return ClassTools.classify(def.type, text, appPkg, sdkFamilies[def.type], callIdx != null)
+    }
+
+    private fun agentVerifyEdit(name: String, modified: String): String {
+        agentIndexed()?.let { return "error: $it" }
+        if (modified.isBlank()) return "error: pass the full smali text of the edited class as 'modified'"
+        val (idx, err) = agentResolve(name)
+        if (idx < 0) return err
+        val def = classDefs[idx]
+        val original = try { smaliTextOf(def) } catch (t: Throwable) { return "error: could not read the class: " + (t.message ?: t.javaClass.simpleName) }
+        val appPkg = codePackageOf(classDefs)
+        val work = File(cacheDir, "verifyedit/" + System.nanoTime())
+        return try {
+            ClassTools.verifyEdit(def.type, original, modified, appPkg, entryTypeMap().keys) { text -> Rebuilder(wsDir) { }.assembleTexts(listOf(text), work).second }
+        } finally { work.deleteRecursively() }
+    }
 
     private fun agentCallers(name: String, method: String, limit: Int): String {
         agentIndexed()?.let { return "error: $it" }
