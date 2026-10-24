@@ -89,7 +89,7 @@ class StringOverlay(val method: String, val strings: Map<Int, String>) {
     private fun nextReg(r: String): String = r.take(1) + ((r.drop(1).toIntOrNull() ?: -2) + 1)
 
     companion object {
-        private val argRe = Regex("""invoke-static(?:/range)?\s+\{\s*([vp]\d+)\s*(?:\.\.\s*[vp]\d+\s*)?}|\{\s*([vp]\d+)\s*}""")
+        private val argRe = Regex("""invoke-static(?:/range)?\s+\{\s*([vp]\d+)\s*(?:\.\.\s*[vp]\d+\s*)?\}|\{\s*([vp]\d+)\s*\}""")      // braces escaped: Android's ICU engine rejects a bare '}' (Java accepts it)
         private val constRe = Regex("""^const(?:/4|/16|/high16)?\s+([vp]\d+),\s*(-?0x[0-9a-fA-F]+)""")
         private val destRe = Regex("""^[a-z0-9/\-]+\s+([vp]\d+)""")
 

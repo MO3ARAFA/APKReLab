@@ -1179,7 +1179,7 @@ class MainActivity : Activity() {
 
     private fun analyzeFile(apk: File): Result {
         scanDetail = ""; scanDetailOpen = false   // 0.101.0: another APK, another scan
-        StringOverlay.current = StringOverlay.load(File(apk.parentFile, "strings.overlay"))   // 0.102.0: the decoded-strings dump of THIS workspace (null for a freshly picked APK)
+        StringOverlay.current = try { StringOverlay.load(File(apk.parentFile, "strings.overlay")) } catch (_: Throwable) { null }   // 0.102.0: the decoded-strings dump of THIS workspace (null for a freshly picked APK)
         // 0.99.0: the split archives kept next to the base (empty for any other APK)
         NativeScanner.extraArchives = File(apk.parentFile, "splits").listFiles()?.filter { it.name.endsWith(".apk", true) }?.sortedBy { it.name } ?: emptyList()
         val all = ArrayList<Pair<String, Long>>()
@@ -4737,7 +4737,7 @@ class MainActivity : Activity() {
     }
 
     /** The class text every scan reads: edited smali, else the cached index, else a fresh disassembly; with the decoded-strings overlay applied when one is loaded (0.102.0). */
-    private fun agentIndexedText(def: ClassDef): String = StringOverlay.view(agentIndexedTextRaw(def), def.type)
+    private fun agentIndexedText(def: ClassDef): String { val raw = agentIndexedTextRaw(def); return try { StringOverlay.view(raw, def.type) } catch (_: Throwable) { raw } }
 
     private fun agentIndexedTextRaw(def: ClassDef): String {
         if (smaliFile("smali", def.type).exists()) return smaliTextOf(def)
