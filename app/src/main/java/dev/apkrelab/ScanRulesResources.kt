@@ -1169,7 +1169,9 @@ object ResourceScanner {
         // 0.95.0 (a wallet app whose posture table said "no config file read" although its manifest declares one): when the manifest points to a network security config and no such
         // file was found / decoded, say so: its cleartext, user-CA and pinning rules were NOT evaluated (renamed resources, or a file the scanner could not read).
         try {
-            val declared = java.util.zip.ZipFile(apk).use { zf -> zf.getEntry("AndroidManifest.xml")?.let { e -> Axml.decode(zf.getInputStream(e).use { it.readBytes() })?.contains("android:networkSecurityConfig") == true } == true }
+            val mxml = java.util.zip.ZipFile(apk).use { zf -> zf.getEntry("AndroidManifest.xml")?.let { e -> Axml.decode(zf.getInputStream(e).use { it.readBytes() }) } }
+            val declared = mxml?.contains("android:networkSecurityConfig") == true
+            if (mxml != null) PostureScanner.setManifest(mxml)      // 0.105.0: the app's own declared class names (PostureScanner.boundByName)
             PostureScanner.nscDeclared = declared
             if (declared && nsc == 0) found.add(Finding(Severity.INFO, "Network Security Config declared but not found in the APK",
                 "The manifest declares android:networkSecurityConfig, but no <network-security-config> file could be located or decoded in the package (resource names may be obfuscated, or the file was not readable). Its cleartext, user-CA and pinning settings were NOT evaluated: this is not a pass. (Resource scan: decoded $ok of $bin binary XML files, $fail failed.)",

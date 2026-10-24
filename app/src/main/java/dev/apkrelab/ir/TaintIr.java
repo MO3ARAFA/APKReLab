@@ -873,6 +873,7 @@ public final class TaintIr {
         final Map<String, List<Flow>> flowsOf = new HashMap<>();
         final Map<HeapKey, Tv> heap = new HashMap<>();                       // 0.69.0: keyed by HeapKey (object space + field); GLOBAL space = old per-field-ref behaviour
         final Map<HeapKey, Set<String>> heapReaders = new HashMap<>();
+        final Map<HeapKey, Boolean> heapAllString = new HashMap<>();          // 0.105.0: true while every tainted write to the key stored a value statically known to be a String
         final Set<String> dirtyReaders = new LinkedHashSet<>();
         // 0.66.5 (measurement only): per method, replaced by every analysis of that method except the time, which adds up
         final Map<String, long[]> timing = new HashMap<>();                  // key -> {nanos, runs, insns, most rounds}
@@ -912,13 +913,32 @@ public final class TaintIr {
         }
 
         void raiseField(String ref, Tv t, String writer) {
-            raiseHeap(HeapKey.global(ref), t, writer);
+            raiseHeap(HeapKey.global(ref), t, writer, false);
+        }
+
+        void raiseField(String ref, Tv t, String writer, boolean isString) {
+            raiseHeap(HeapKey.global(ref), t, writer, isString);
+        }
+
+        /** 0.105.0: true when every tainted value written to field [ref] so far was a String (see Intra.castsAwayFromString). */
+        boolean allStrings(String ref) {
+            return Boolean.TRUE.equals(heapAllString.get(HeapKey.global(ref)));
         }
 
         /** 0.69.0: every heap write goes through here, so a later object-sensitive HeapKey needs no call-site change. */
-        void raiseHeap(HeapKey k, Tv t, String writer) {
+        void raiseHeap(HeapKey k, Tv t, String writer, boolean isString) {
             Tv r = t.realOnly();
             if (r.isNone()) return;
+            Boolean was = heapAllString.get(k);
+            boolean now = was == null ? isString : was && isString;
+            if (was == null || was != now) {
+                heapAllString.put(k, now);
+                // a reader that dropped the value because every write was a String must look again
+                if (was != null) {
+                    Set<String> rd = heapReaders.get(k);
+                    if (rd != null) dirtyReaders.addAll(rd);
+                }
+            }
             Tv old = heap.get(k);
             if (old != null && old.covers(r)) return;
             Tv withVia = Tv.real(r.level, r.src, "field " + shortRef(k.field) + " (written in " + shortKey(writer) + ")", r.weak, r.internal);
@@ -1175,6 +1195,9 @@ public final class TaintIr {
                 }
                 case FIELD_GET: {
                     Tv t = run.readHeap(HeapKey.global(in.ref), m.key());
+                    // 0.105.0: every tainted write stored a String, and every use of this read casts it to a type no String has: the cast would throw for the tainted
+                    // value, so what gets through is something else the field held (R8 merges unrelated classes into one Object field: Axis Pay m42.c)
+                    if (t != null && t.level > 0 && d.length == 1 && run.allStrings(in.ref) && castsAwayFromString(d[0])) t = null;
                     if (t != null && t.level > 0 && !t.weak && isMergedObjectField(in.ref)) t = t.asWeak();   // 0.68.5
                     if (t != null) for (SsaForm.Value y : d) raise(y, t);
                     break;
@@ -1182,7 +1205,7 @@ public final class TaintIr {
                 case FIELD_PUT: {
                     int vc = in.op.contains("-wide") ? 2 : 1;
                     Tv t = joinAll(u, 0, vc);
-                    if (t.level > 0) run.raiseField(in.ref, t, m.key());
+                    if (t.level > 0) run.raiseField(in.ref, t, m.key(), vc == 1 && u.length > 0 && isString(u[0], 0));
                     break;
                 }
                 case ARRAY_GET:
@@ -1420,6 +1443,54 @@ public final class TaintIr {
             String type = ref.substring(1, a - 1);
             for (String seg : type.split("/")) if (seg.isEmpty() || seg.length() > 3) return false;
             return true;
+        }
+
+        private static final Set<String> STRING_SUPERS = new HashSet<>(Arrays.asList("Ljava/lang/String;", "Ljava/lang/Object;", "Ljava/lang/CharSequence;",
+                "Ljava/lang/Comparable;", "Ljava/io/Serializable;", "Ljava/lang/constant/Constable;", "Ljava/lang/constant/ConstantDesc;"));
+
+        /** 0.105.0: the value is statically a String (String is final: the object IS a String): a string constant, a cast to String, a String-returning call or field, a move of one. */
+        static boolean isString(SsaForm.Value v, int depth) {
+            if (v == null || v.def == null || depth > 8) return false;
+            Insn d = v.def;
+            switch (d.kind) {
+                case CONST: return d.op.startsWith("const-string");
+                case CHECK_CAST: return d.ref.equals("Ljava/lang/String;");
+                case INVOKE: return d.hasResult && d.targetSig().endsWith(")Ljava/lang/String;");
+                case FIELD_GET: return d.ref.endsWith(":Ljava/lang/String;");
+                default: return false;
+            }
+        }
+
+        private Map<SsaForm.Value, List<Insn>> users;
+
+        /** 0.105.0: every use of [v] (through plain moves) is a check-cast to a type that no String can have; false when [v] meets a phi, any other use, or no use. */
+        boolean castsAwayFromString(SsaForm.Value v) {
+            if (users == null) {
+                users = new IdentityHashMap<>();
+                for (Insn in : m.insns) for (SsaForm.Value u : ssa.usesOf(in)) if (u != null) users.computeIfAbsent(u, x -> new ArrayList<>()).add(in);
+                for (List<SsaForm.Phi> ps : ssa.phis) for (SsaForm.Phi p : ps) for (SsaForm.Value o : p.operands) if (o != null) users.computeIfAbsent(o, x -> new ArrayList<>()).add(null);
+            }
+            ArrayDeque<SsaForm.Value> q = new ArrayDeque<>();
+            Set<SsaForm.Value> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+            q.add(v);
+            seen.add(v);
+            boolean cast = false;
+            while (!q.isEmpty()) {
+                List<Insn> us = users.get(q.poll());
+                if (us == null) continue;
+                for (Insn in : us) {
+                    if (in == null) return false;                                    // a phi: followed nowhere, keep the taint
+                    if (in.kind == Insn.Kind.MOVE) {
+                        for (SsaForm.Value y : ssa.defsOf(in)) if (y != null && seen.add(y)) q.add(y);
+                    } else if (in.kind == Insn.Kind.CHECK_CAST) {
+                        if (STRING_SUPERS.contains(in.ref)) return false;
+                        cast = true;
+                    } else {
+                        return false;
+                    }
+                }
+            }
+            return cast;
         }
 
         /** 0.67.0: what Editor.put* stored for the key a SharedPreferences read asks for (av[0] = the preferences object, av[1] = the key). */

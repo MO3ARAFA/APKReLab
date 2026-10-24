@@ -171,4 +171,24 @@ class PostureScannerTest {
             assertTrue(PostureScanner.section().contains("not checked"))
         } finally { PostureScanner.clearApk() }
     }
+
+    // 0.105.0 (WE Wallet: DexGuard moved the app's own Mwallet2ApplicationClassResetPasswordMode to the root package; the posture table said "origin unknown")
+    @Test fun aRootPackageClassNamedAfterTheAppsDeclaredClassIsTheApps() {
+        fresh(); PostureScanner.clearApk()
+        PostureScanner.setManifest("<manifest package=\"com.wallet.app\"><application android:name=\"com.wallet.app.Mwallet2ApplicationClass\"><activity android:name=\".ui.MainHomeScreenActivity\"/>" +
+            "<service android:name=\"com.google.firebase.messaging.FirebaseMessagingService\"/></application></manifest>")
+        val su = m("    const-string v0, \"/system/xbin/su\"\n")
+        PostureScanner.observe("LMwallet2ApplicationClassResetPasswordMode;", cls("LMwallet2ApplicationClassResetPasswordMode;", su), "com.wallet.app")
+        assertEquals(listOf("LMwallet2ApplicationClassResetPasswordMode;"), row("root-paths").app)
+        // twins: a short shared prefix, a class in a package, a name taken from a LIBRARY component of the manifest: origin stays unknown
+        fresh()
+        PostureScanner.observe("LMwallet2ApXyzQ;", cls("LMwallet2ApXyzQ;", su), "com.wallet.app")                               // 13 chars, only 10 in common
+        PostureScanner.observe("Lx/Mwallet2ApplicationClassX;", cls("Lx/Mwallet2ApplicationClassX;", su), "com.wallet.app")       // not the root package
+        PostureScanner.observe("LFirebaseMessagingServiceImpl;", cls("LFirebaseMessagingServiceImpl;", su), "com.wallet.app")     // an SDK's declared name
+        assertTrue(row("root-paths").app.isEmpty()); assertEquals(3, row("root-paths").obf.size)
+        PostureScanner.observe("LMainHomeScreenActivityHelper;", cls("LMainHomeScreenActivityHelper;", su), "com.wallet.app")     // a relative (".ui.X") declared name
+        assertEquals(listOf("LMainHomeScreenActivityHelper;"), row("root-paths").app)
+        PostureScanner.clearApk(); assertTrue(row("root-paths").app.isEmpty())                                                   // the next APK forgets the names
+        fresh()
+    }
 }

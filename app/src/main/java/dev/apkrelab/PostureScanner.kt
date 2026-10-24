@@ -95,7 +95,7 @@ object PostureScanner {
     fun clear() { StringOverlay.current?.resetStats(); hits.clear(); scopes.clear(); withSource.set(0); withLines.set(0); appClasses.set(0); strEnc.set(0); reflMarshal.set(0); decryptCalls.clear() }
 
     /** 0.103.1: the network security config facts belong to the LOADED APK (the resource scan sets them once, in the background): reset them when an APK is loaded, NOT at the start of every Deep scan (that wiped them whenever the resource scan had finished first, and the report said "not checked" for the same APK). */
-    fun clearApk() { nscPins = null; nscDeclared = null }
+    fun clearApk() { nscPins = null; nscDeclared = null; declaredNames = emptySet() }
 
     /** Called with the text of every class the FULL deep scan reads (not by a single-class review: that would count a class twice). */
     fun observe(classType: String, text: String, appPkg: String) {
@@ -132,8 +132,36 @@ object PostureScanner {
     class Row(val sig: Sig, val app: List<String>, val obf: List<String>, val lib: List<String>)
 
     fun rows(): List<Row> = signals.map { s ->
-        val h = hits[s.id]?.toList() ?: emptyList()
+        val h = (hits[s.id]?.toList() ?: emptyList()).map { if (it.origin == Origin.OBF && boundByName(it.type)) Hit(it.type, Origin.APP) else it }
         Row(s, h.filter { it.origin == Origin.APP }.map { it.type }, h.filter { it.origin == Origin.OBF }.map { it.type }, h.filter { it.origin == Origin.LIB }.map { it.type })
+    }
+
+    /**
+     * 0.105.0: simple names of the classes the app's manifest declares as its OWN (application, activities, services, receivers, providers that are not a known library's).
+     * A protector (DexGuard) moves classes to the root package and keeps their names: WE Wallet's `Mwallet2ApplicationClassResetPasswordMode` is "origin unknown" by package,
+     * yet it carries the name of the app's declared `Mwallet2ApplicationClass`. Set from the decoded manifest of the loaded APK (kept until the next APK).
+     */
+    @Volatile var declaredNames: Set<String> = emptySet()
+    internal const val NAME_PREFIX_MIN = 12
+
+    fun setManifest(xml: String) {
+        val pkg = Regex("<manifest[^>]*\\spackage=\"([^\"]+)\"").find(xml)?.groupValues?.get(1) ?: ""
+        val out = HashSet<String>()
+        for (m in Regex("<(application|activity-alias|activity|service|receiver|provider)\\b[^>]*?android:(?:name|targetActivity)=\"([^\"]+)\"").findAll(xml)) {
+            var n = m.groupValues[2]
+            if (n.startsWith(".")) n = pkg + n
+            val type = "L" + n.replace('.', '/') + ";"
+            if (try { SecurityScanner.scopeOf(type, pkg) == SecurityScanner.Scope.LIB } catch (_: Throwable) { true }) continue
+            out.add(n.substringAfterLast('.'))
+        }
+        declaredNames = out
+    }
+
+    /** A renamed class in the ROOT package whose name starts with at least [NAME_PREFIX_MIN] characters of a class the manifest declares as the app's own. */
+    internal fun boundByName(type: String): Boolean {
+        if (!type.startsWith("L") || !type.endsWith(";") || type.indexOf('/') >= 0) return false
+        val simple = type.substring(1, type.length - 1).substringAfterLast('/')
+        return declaredNames.any { d -> d.length >= NAME_PREFIX_MIN && simple.length >= NAME_PREFIX_MIN && simple.commonPrefixWith(d).length >= NAME_PREFIX_MIN }
     }
 
     fun obfuscationLine(): String {
