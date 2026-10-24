@@ -41,6 +41,11 @@ public final class ScopePlanner {
 
         String text(int i);
 
+        /** 0.105.0: what the planner needs from class i's text; a host may serve it from a store kept between scans (it must equal {@code CallSkeleton.digest(text(i))}). */
+        default CallSkeleton.Digest digest(int i) {
+            return CallSkeleton.digest(text(i));
+        }
+
         default boolean cancelled() {
             return false;
         }

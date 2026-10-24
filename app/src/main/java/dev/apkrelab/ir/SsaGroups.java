@@ -52,6 +52,11 @@ public final class SsaGroups {
             return null;
         }
 
+        /** 0.105.0: the 64-bit hash of class index's text for the group cache key; a host may serve it from the plan's digests (it must equal the hash of {@link #text}). */
+        default long textHash(int index) throws Exception {
+            return fnv(text(index));
+        }
+
         /** 0.104.0: names the engine in the cache key (the app's version code). It MUST change whenever a result could change. */
         default String engineId() {
             return "";
@@ -181,7 +186,12 @@ public final class SsaGroups {
         return res;
     }
 
-    private static long fnv(String t) {
+    /** The text hash of the group cache key (64-bit FNV-1a, xor the length). */
+    public static long fnvOf(String t) {
+        return fnv(t);
+    }
+
+    static long fnv(String t) {
         long h = 0xcbf29ce484222325L;
         for (int i = 0, n = t.length(); i < n; i++) {
             h ^= t.charAt(i);
@@ -203,7 +213,7 @@ public final class SsaGroups {
                 if (host.cancelled()) return new String[groups.size()];
                 long h;
                 try {
-                    h = fnv(host.text(i));
+                    h = host.textHash(i);
                 } catch (Throwable t) {
                     h = Long.MIN_VALUE;                  // unreadable: marks the groups that contain it as not cacheable
                 }

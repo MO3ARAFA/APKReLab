@@ -40,10 +40,21 @@ public class MeasureBig {
     System.out.println("APP pkg=" + pkg + " comps=" + comps.size() + " guarded=" + guarded.size() + " files=" + files.size() + " nonLib=" + app.size());
     long t0 = System.currentTimeMillis();
     final ScopePlanner.Groups gr;
+    // -Ddigest=<file> (0.105.0): planner digests kept between runs, as the app does; READS counts the class texts read by the plan + the cache keys
+    final java.util.concurrent.atomic.AtomicLong reads = new java.util.concurrent.atomic.AtomicLong();
+    final String dgf = System.getProperty("digest");
+    final DigestStore dstore = dgf == null ? null : DigestStore.load(new java.io.File(dgf));
+    final int dloaded = dstore == null ? 0 : dstore.size();
     ScopePlanner.Source src = new ScopePlanner.Source() {
       public int count() { return app.size(); }
       public String type(int i) { return types.get(i); }
-      public String text(int i) { try { return new String(Files.readAllBytes(app.get(i)), StandardCharsets.UTF_8); } catch (Exception e) { return ""; } }
+      public String text(int i) { reads.incrementAndGet(); try { return new String(Files.readAllBytes(app.get(i)), StandardCharsets.UTF_8); } catch (Exception e) { return ""; } }
+      public CallSkeleton.Digest digest(int i) {
+        if (dstore == null) return CallSkeleton.digest(text(i));
+        CallSkeleton.Digest d = dstore.get(types.get(i));
+        if (d == null) { d = CallSkeleton.digest(text(i)); dstore.put(types.get(i), d); }
+        return d;
+      }
     };
     List<List<Integer>> groupIdx = new ArrayList<>();
     String planNote;
@@ -54,6 +65,9 @@ public class MeasureBig {
     } else {
       List<Integer> all = new ArrayList<>(); for (int i = 0; i < app.size(); i++) all.add(i); groupIdx.add(all); planNote = "1 group (whole app)";
     }
+    { Map<Integer, Integer> mult = new HashMap<>(); long slots = 0; for (List<Integer> g : groupIdx) for (int x : g) { slots++; mult.merge(x, 1, Integer::sum); }
+      int[] hist = new int[6]; for (int v : mult.values()) hist[Math.min(5, v - 1)]++;
+      System.out.println("OVERLAP slots " + slots + " unique " + mult.size() + " (in 1/2/3/4/5/6+ groups: " + Arrays.toString(hist) + ")"); }
     long t1 = System.currentTimeMillis();
     SsaGroups.Host host = new SsaGroups.Host() {
       public String text(int i) throws Exception { return new String(Files.readAllBytes(app.get(i)), StandardCharsets.UTF_8); }
@@ -62,13 +76,16 @@ public class MeasureBig {
       // -Dcache=<dir>: finished groups are kept there (0.104.0); -Dengine=<id> names the engine in the key
       public GroupCache groupCache() { return System.getProperty("cache") == null ? null : new GroupCache.Disk(new java.io.File(System.getProperty("cache")), 1000); }
       public String engineId() { return System.getProperty("engine", "sandbox"); }
+      public long textHash(int i) throws Exception { CallSkeleton.Digest d = dstore == null ? null : dstore.get(types.get(i)); if (d != null) return d.textHash; reads.incrementAndGet(); return SsaGroups.fnvOf(text(i)); }
       public void progress(int d, int t) { if (t > 1 && (d % 5 == 0 || d == t)) System.err.println("group " + d + "/" + t + " " + (System.currentTimeMillis() - t1) / 1000 + "s"); }
       public void groupFailed() { System.out.println("GROUP FAILED"); }
       public Collection<String> guardedEntries() { return guarded; }
     };
     SsaGroups.Result res = SsaGroups.run(groupIdx, comps, null, host, 200, threads);
     long t2 = System.currentTimeMillis();
-    System.out.println("PLAN " + planNote + " (" + (t1 - t0) / 1000 + "s)");
+    System.out.println("PLAN " + planNote + " (" + (t1 - t0) + " ms)");
+    if (dstore != null) { boolean w = dstore.changed() && dstore.save(new java.io.File(dgf)); System.out.println("DIGEST loaded " + dloaded + ", now " + dstore.size() + (w ? ", written" : "")); }
+    System.out.println("READS " + reads.get() + " class texts read by the plan + cache keys");
     System.out.println("RETRIED " + res.groupsRetried + " of " + res.groupsTotal + " stopped=" + res.stopped);
     System.out.println("TIME groups=" + (t2 - t1) / 1000 + "s threads=" + res.threads + " cpu: parse " + res.parseMs / 1000 + "s + analysis " + res.analyseMs / 1000 + "s, groups from cache " + res.groupsCached + " of " + res.groupsTotal);
     TreeSet<String> lines = new TreeSet<>();

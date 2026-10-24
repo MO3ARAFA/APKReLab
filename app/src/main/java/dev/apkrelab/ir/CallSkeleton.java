@@ -126,41 +126,23 @@ public final class CallSkeleton {
             types[i] = src.type(i);
             idx.put(types[i], i);
         }
-        Set<String> sinkOwners = TaintIr.sinkOwners();
         byte[] flags = new byte[n];
         int[][] direct = new int[n][];     // classes named by an invoke / const-class
         int[][] parents = new int[n][];    // super + interfaces that are app classes
         for (int i = 0; i < n; i++) {
             if (src.cancelled()) return null;
-            String text = src.text(i);
-            if (text == null) text = "";
+            Digest d = src.digest(i);
             int f = 0;
+            if ((d.bits & D_SRC) != 0 || (includePrefs && (d.bits & D_SRC_WEAK) != 0)) f |= SRC;
+            if ((d.bits & D_SINK) != 0) f |= SINK;
             Set<Integer> refs = new HashSet<>();
             Set<Integer> par = new HashSet<>();
-            Matcher sm = SUPER.matcher(text);
-            if (sm.find()) {
-                String s = sm.group(1);
-                if (s.endsWith("Provider;")) f |= SRC;
-                Integer j = idx.get(s);
+            for (String t : d.parents) {
+                Integer j = idx.get(t);
                 if (j != null && j != i) par.add(j);
             }
-            Matcher im = IFACE.matcher(text);
-            while (im.find()) {
-                Integer j = idx.get(im.group(1));
-                if (j != null && j != i) par.add(j);
-            }
-            Matcher m = INVOKE.matcher(text);
-            while (m.find()) {
-                String owner = m.group(1), name = m.group(2);
-                TaintIr.Tv tv = TaintIr.sourceOf(owner, name);
-                if (tv != null && (includePrefs || tv.level >= 2)) f |= SRC;
-                if (sinkOwners.contains(owner) && TaintIr.isSink(owner, name)) f |= SINK;
-                Integer j = idx.get(owner);
-                if (j != null && j != i) refs.add(j);
-            }
-            Matcher cm = CONST_CLASS.matcher(text);
-            while (cm.find()) {
-                Integer j = idx.get(cm.group(1));
+            for (String t : d.refs) {
+                Integer j = idx.get(t);
                 if (j != null && j != i) refs.add(j);
             }
             flags[i] = (byte) f;
@@ -207,6 +189,58 @@ public final class CallSkeleton {
             if (j != null) entry.set(j);
         }
         return new CallSkeleton(n, types, flags, entry, callees, callers, parents, edges);
+    }
+
+    static final int D_SRC = 1, D_SRC_WEAK = 2, D_SINK = 4;
+
+    /**
+     * 0.105.0: everything the planner takes from ONE class text, as a value that depends on that text and the engine only: source / sink marks, the super type and interfaces,
+     * the types named by invokes and const-class, and the text's 64-bit hash (the group cache key, {@link SsaGroups#fnv}). The phone spent 21-29 s of a warm re-scan reading and
+     * decompressing 10,586 class texts for the plan (and once more for the cache keys); a host that keeps digests between scans ({@link DigestStore}) reads none.
+     */
+    public static final class Digest {
+        public final int bits;
+        public final String[] parents;   // super type first (when there is one), then the interfaces, in text order
+        public final String[] refs;      // distinct invoke owners and const-class types, in first-seen order
+        public final long textHash;
+
+        Digest(int bits, String[] parents, String[] refs, long textHash) {
+            this.bits = bits;
+            this.parents = parents;
+            this.refs = refs;
+            this.textHash = textHash;
+        }
+    }
+
+    public static Digest digest(String text) {
+        if (text == null) text = "";
+        Set<String> sinkOwners = TaintIr.sinkOwners();
+        int f = 0;
+        java.util.LinkedHashSet<String> par = new java.util.LinkedHashSet<>(), refs = new java.util.LinkedHashSet<>();
+        Matcher sm = SUPER.matcher(text);
+        if (sm.find()) {
+            String s = sm.group(1);
+            if (s.endsWith("Provider;")) f |= D_SRC;
+            par.add(s);
+        }
+        Matcher im = IFACE.matcher(text);
+        while (im.find()) par.add(im.group(1));
+        Matcher m = INVOKE.matcher(text);
+        while (m.find()) {
+            String owner = m.group(1), name = m.group(2);
+            TaintIr.Tv tv = TaintIr.sourceOf(owner, name);
+            if (tv != null) f |= tv.level >= 2 ? D_SRC : D_SRC_WEAK;
+            if (sinkOwners.contains(owner) && TaintIr.isSink(owner, name)) f |= D_SINK;
+            refs.add(owner);
+        }
+        Matcher cm = CONST_CLASS.matcher(text);
+        while (cm.find()) refs.add(cm.group(1));
+        String[] p = new String[par.size()], r = new String[refs.size()];
+        int k = 0;
+        for (String x : par) p[k++] = Canon.of(x);
+        k = 0;
+        for (String x : refs) r[k++] = Canon.of(x);
+        return new Digest(f, p, r, SsaGroups.fnv(text));
     }
 
     private static void addAncestors(int j, int[][] parents, Set<Integer> out) {

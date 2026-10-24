@@ -2559,6 +2559,25 @@ class MainActivity : Activity() {
     /** ART runtime counter ("art.gc.gc-time" in ms, "art.gc.gc-count" ...) or 0 when this device does not report it. */
     private fun runtimeStat(key: String): Long = try { android.os.Debug.getRuntimeStat(key)?.trim()?.toLongOrNull() ?: 0L } catch (_: Throwable) { 0L }
 
+    private var planDigestNote = ""
+
+    /**
+     * 0.105.0: the file of planner digests for the code being scanned. Its name hashes everything a digest depends on besides the class text: the engine (version code + install
+     * time), the app's dex files (name, CRC and size from the APK's zip directory: the same APK picked again keeps its digests) and the loaded strings overlay.
+     */
+    private fun planDigestFile(): File? = try {
+        val sb = StringBuilder(engineVersionCode())
+        java.util.zip.ZipFile(File(wsDir, "original.apk")).use { z ->
+            val dex = z.entries().toList().filter { it.name.matches(Regex("classes\\d*\\.dex")) }.sortedBy { it.name }
+            if (dex.isEmpty()) return null
+            for (e in dex) sb.append('|').append(e.name).append(':').append(e.crc).append(':').append(e.size)
+        }
+        val o = StringOverlay.current
+        sb.append("|overlay=").append(if (o == null) "none" else o.method + ":" + o.strings.size + ":" + o.strings.hashCode())
+        val h = java.security.MessageDigest.getInstance("SHA-1").digest(sb.toString().toByteArray()).joinToString("") { "%02x".format(it) }
+        File(File(filesDir, "plancache"), "$h.dg")
+    } catch (_: Throwable) { null }
+
     private fun ssaFindings(defs: List<ClassDef>, appPkg: String, known: List<SecurityScanner.Finding>, progress: (String) -> Unit = {}): List<SecurityScanner.Finding> {
         val appIdx = ArrayList<Int>()
         for ((i, d) in defs.withIndex()) {
@@ -2570,8 +2589,15 @@ class MainActivity : Activity() {
         ssaScopeNote = ""
         ssaIncomplete = ""
         ssaPlanLine = ""
+        planDigestNote = ""
         val entries = entryTypeMap().keys
         var planMs = 0L
+        // 0.105.0: the planner's digest of every class (marks, super types, called types, text hash) kept between scans: a re-scan of the same code reads no class text for
+        // the plan nor for the group cache keys (the phone spent 21-29 s there on a warm re-scan of an 18k-class app). Edited classes are always read and never stored.
+        val dstoreFile = if (appIdx.size > maxClasses && prefs().getBoolean("ssa_cache", true)) planDigestFile() else null
+        val dstore = dstoreFile?.let { dev.apkrelab.ir.DigestStore.load(it) }
+        val dLoaded = dstore?.size() ?: 0
+        val edited = HashSet(modified)
         if (appIdx.size > maxClasses) {
             // 0.59.0 (P1 step 4, part 2): no total cap any more. ScopePlanner.groups reads every class text once (keeps only int arrays),
             // then covers EVERY class with a source or a sink in some group, best classes first; each group is parsed, analysed and freed
@@ -2580,9 +2606,19 @@ class MainActivity : Activity() {
                 override fun count(): Int = appIdx.size
                 override fun type(i: Int): String = defs[appIdx[i]].type
                 override fun text(i: Int): String = try { agentIndexedText(defs[appIdx[i]]) } catch (_: Throwable) { "" }
+                override fun digest(i: Int): dev.apkrelab.ir.CallSkeleton.Digest {
+                    val t = defs[appIdx[i]].type
+                    if (dstore == null || t in edited) return dev.apkrelab.ir.CallSkeleton.digest(text(i))
+                    return dstore.get(t) ?: dev.apkrelab.ir.CallSkeleton.digest(text(i)).also { dstore.put(t, it) }
+                }
                 override fun cancelled(): Boolean = secScanCancel
             }, entries, groupSize, false, false, false)   // 0.59.3: nothing is left out, accuracy before time
             planMs = System.currentTimeMillis() - tPlan
+            if (dstore != null && dstoreFile != null && dstore.changed() && !secScanCancel && !gr.cancelled) {
+                dstore.save(dstoreFile)
+                File(filesDir, "plancache").listFiles()?.filter { it.name.endsWith(".dg") }?.sortedByDescending { it.lastModified() }?.drop(6)?.forEach { it.delete() }
+            }
+            planDigestNote = if (dstore == null) "" else ", plan digests: ${minOf(dLoaded, appIdx.size)} of ${appIdx.size} reused"
             if (secScanCancel || gr.cancelled) return emptyList()
             groupIdx = gr.groups.map { g -> g.map { appIdx[it] } }
             ssaScopeNote = "${gr.groups.size} groups of up to $groupSize classes, ${gr.marked} classes with a source or sink of ${appIdx.size}" +
@@ -2626,6 +2662,11 @@ class MainActivity : Activity() {
             override fun groupCache(): dev.apkrelab.ir.GroupCache? = if (prefs().getBoolean("ssa_cache", true)) dev.apkrelab.ir.GroupCache.Disk(File(filesDir, "groupcache"), 400) else null
             override fun engineId(): String = engineVersionCode()
             override fun text(index: Int): String = agentIndexedText(defs[index])
+            override fun textHash(index: Int): Long {
+                val t = defs[index].type
+                val d = if (t in edited) null else dstore?.get(t)
+                return d?.textHash ?: dev.apkrelab.ir.SsaGroups.fnvOf(text(index))
+            }
             override fun type(index: Int): String = defs[index].type
             override fun cancelled(): Boolean {
                 // 0.66.2: optional time limit for the group loop (Settings). Flows found so far are kept, the status says INCOMPLETE with the coverage.
@@ -2654,7 +2695,7 @@ class MainActivity : Activity() {
                 ssaIncomplete = (if (ssaIncomplete.isNotEmpty()) "$ssaIncomplete; " else "") + "stopped: only $cov% of the groups were analysed"
             }
         }
-        if (groupIdx.size > 1) ssaScopeNote += ", time: plan ${planMs / 1000}s + groups ${(System.currentTimeMillis() - tStart) / 1000}s on ${gres.threads} thread(s) (heap $heapMb MB, ${rt.availableProcessors()} cores${if (prefs().getBoolean("ssa_cache", true)) ", cache: ${gres.groupsCached} of ${groupIdx.size} groups reused" else ", cache off"}, GC ${runtimeStat("art.gc.gc-time") - gcT0} ms in ${runtimeStat("art.gc.gc-count") - gcN0} collections, ${runtimeStat("art.gc.blocking-gc-time") - gcB0} ms blocking)" +
+        if (groupIdx.size > 1) ssaScopeNote += ", time: plan ${planMs / 1000}s + groups ${(System.currentTimeMillis() - tStart) / 1000}s on ${gres.threads} thread(s) (heap $heapMb MB, ${rt.availableProcessors()} cores${if (prefs().getBoolean("ssa_cache", true)) ", cache: ${gres.groupsCached} of ${groupIdx.size} groups reused$planDigestNote" else ", cache off"}, GC ${runtimeStat("art.gc.gc-time") - gcT0} ms in ${runtimeStat("art.gc.gc-count") - gcN0} collections, ${runtimeStat("art.gc.blocking-gc-time") - gcB0} ms blocking)" +
             ", cpu: parse ${gres.parseMs / 1000}s + analysis ${gres.analyseMs / 1000}s (summed over threads)" +
             (if (gres.groupsRetried > 0) ", ${gres.groupsRetried} group(s) re-run for memory" else "")
         // 0.66.5: where taint is lost, which caps were hit, which methods are slowest (measurement only, no result changes)
