@@ -85,7 +85,13 @@ object PostureScanner {
     @Volatile var nscPins: Boolean? = null
     @Volatile var nscDeclared: Boolean? = null   // 0.96.0: does the manifest declare a network security config at all
 
-    fun clear() { hits.clear(); scopes.clear(); withSource.set(0); withLines.set(0); appClasses.set(0); strEnc.set(0); reflMarshal.set(0); decryptCalls.clear(); nscPins = null; nscDeclared = null }
+    /** 0.102.0: the app's dominant string decryptor as a smali method reference (`Lvs/C;->d(I)Ljava/lang/String;`), or null when no deep scan has seen DECRYPTOR_MIN_CALLS calls of one. */
+    fun dominantDecryptor(): String? {
+        val dec = decryptCalls.entries.maxByOrNull { it.value.get() } ?: return null
+        return if (dec.value.get() >= DECRYPTOR_MIN_CALLS) dec.key + "(I)Ljava/lang/String;" else null
+    }
+
+    fun clear() { StringOverlay.current?.resetStats(); hits.clear(); scopes.clear(); withSource.set(0); withLines.set(0); appClasses.set(0); strEnc.set(0); reflMarshal.set(0); decryptCalls.clear(); nscPins = null; nscDeclared = null }
 
     /** Called with the text of every class the FULL deep scan reads (not by a single-class review: that would count a class twice). */
     fun observe(classType: String, text: String, appPkg: String) {
@@ -161,8 +167,12 @@ object PostureScanner {
             val cls = dec.key.substringBefore(";->").removePrefix("L").replace('/', '.'); val m = dec.key.substringAfter(";->")
             sb.append("\nString decryption table: the static method ").append(cls).append('.').append(m).append("(int) is called ").append(dec.value.get())
                 .append(" times: the strings of this app are decrypted at run time (a protector or an in-app scheme; the method may be native). Every rule that reads string constants (secrets, URLs, cipher names, extra names, root-check paths) is BLIND here: ")
-                .append("0 findings of those kinds means nothing. To read the strings, dump them on a test device (your own build):\n\n```js\n// frida -U -f <package> -l dump.js\nJava.perform(function () {\n  var C = Java.use('").append(cls).append("');\n  C['").append(m)
-                .append("'].overload('int').implementation = function (i) { var s = this['").append(m).append("'](i); console.log(i + '\\t' + s); return s; };\n});\n```\n")
+                .append("0 findings of those kinds means nothing. To read the strings, dump them on a test device (your own build) and import the file with the Security screen's Strings button (0.102.0: the rules then see the real strings):\n\n```js\n// frida -U -f <package> -l dump.js\nJava.perform(function () {\n  console.log('#decryptor\\t").append(dec.key).append("(I)Ljava/lang/String;');\n  var C = Java.use('").append(cls).append("');\n  C['").append(m)
+                .append("'].overload('int').implementation = function (i) { var s = this['").append(m).append("'](i); console.log(i + '\\t' + JSON.stringify(s)); return s; };\n});\n```\n")
+        }
+        StringOverlay.current?.let { o ->
+            sb.append("\nDecoded-strings overlay: ").append(o.strings.size).append(" strings imported for ").append(o.method).append("; ").append(o.replaced).append(" call site(s) in the classes read were replaced by their plaintext, ")
+                .append(o.unresolved).append(" stay encrypted (the index is not a constant in the same block, or is not in the dump). The string rules see the plaintext of the replaced sites only.\n")
         }
         if (strEnc.get() >= 20 || reflMarshal.get() >= 20) sb.append("\nString encryption / reflection marshalling (DexGuard-style): ").append(strEnc.get()).append(" classes carry a string-decrypting method and ").append(reflMarshal.get())
             .append(" call the app's own code through a reflection lookup. Everything that reads string constants (secrets, URLs, cipher names, the names of Intent extras) and every call-graph edge made this way is BLIND in those classes: a finding that is absent there is not a pass, and the names in a call path can be misleading.\n")

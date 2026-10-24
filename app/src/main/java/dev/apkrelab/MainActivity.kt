@@ -76,6 +76,7 @@ class MainActivity : Activity() {
     private val exportKeyRequest = 1003
     private val importKeyRequest = 1004
     private val reportRequest = 1005
+    private val stringsRequest = 1007                                  // 0.102.0: decoded-strings dump (StringOverlay)
     private val attachRequest = 1006                                   // 0.37.5: AI Hub chat attachments
     private var attachCallback: ((List<Uri>) -> Unit)? = null          // set by the open AI Hub dialog, cleared when it closes
     private var pendingReport: String? = null
@@ -582,6 +583,10 @@ class MainActivity : Activity() {
             text = "Compare with baseline"; textSize = 12f
             setOnClickListener { compareWithBaseline() }
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        secCmpBar.addView(Button(this).apply {
+            text = "Strings"; textSize = 12f
+            setOnClickListener { launchStringsPicker() }       // 0.102.0: import a decoded-strings dump
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.6f))
         root.addView(secCmpBar)
         secChips = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -990,6 +995,41 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * 0.102.0: import a decoded-strings dump (`index<TAB>"plaintext"` lines, or JSON) for an app that decrypts its strings through one method (see StringOverlay). The dump is kept in the
+     * workspace next to the APK (so "Last APK" keeps it) and applied to every class text the scans read; run the Deep scan again to see its effect.
+     */
+    private fun launchStringsPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "*/*" }
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, stringsRequest)
+        } catch (t: Throwable) {
+            Toast.makeText(this, "No file picker available", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun importStringsDump(uri: Uri) {
+        Thread {
+            val msg = try {
+                val raw = contentResolver.openInputStream(uri)!!.use { it.readBytes().take(48_000_000).toByteArray().toString(Charsets.UTF_8) }
+                val fallback = PostureScanner.dominantDecryptor()
+                val ov = StringOverlay.from(raw, fallback)
+                if (ov == null) "Not imported: no strings found, or the dump does not name its method (a '#decryptor' line) and no deep scan has found the app's decryptor yet. Run the Deep scan first, or use the Frida snippet of the report."
+                else {
+                    val saved = if (StringOverlay.parse(raw).method != null) raw else "#decryptor\t" + ov.method + "\n" + raw
+                    File(filesDir, "workspaces/p1/strings.overlay").writeText(saved)
+                    ov.resetStats()
+                    StringOverlay.current = ov
+                    "Imported ${ov.strings.size} strings for ${ov.method}. Run the Deep scan again: the string rules now read the plaintext."
+                }
+            } catch (t: Throwable) {
+                "Import failed: ${t.javaClass.simpleName}: ${t.message}"
+            }
+            runOnUiThread { Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+        }.start()
+    }
+
     private fun launchPicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -1015,6 +1055,10 @@ class MainActivity : Activity() {
                 }
                 attachCallback?.invoke(uris)
             }
+            return
+        }
+        if (requestCode == stringsRequest) {
+            if (resultCode == RESULT_OK && uri != null) importStringsDump(uri)
             return
         }
         if (requestCode == exportKeyRequest) {
@@ -1135,6 +1179,7 @@ class MainActivity : Activity() {
 
     private fun analyzeFile(apk: File): Result {
         scanDetail = ""; scanDetailOpen = false   // 0.101.0: another APK, another scan
+        StringOverlay.current = StringOverlay.load(File(apk.parentFile, "strings.overlay"))   // 0.102.0: the decoded-strings dump of THIS workspace (null for a freshly picked APK)
         // 0.99.0: the split archives kept next to the base (empty for any other APK)
         NativeScanner.extraArchives = File(apk.parentFile, "splits").listFiles()?.filter { it.name.endsWith(".apk", true) }?.sortedBy { it.name } ?: emptyList()
         val all = ArrayList<Pair<String, Long>>()
@@ -1422,7 +1467,7 @@ class MainActivity : Activity() {
                     }
                     try {
                         val have = smaliFile("smali", def.type).exists() || idxFile(def).exists()
-                        if (!have) agentIndexedText(def)
+                        if (!have) agentIndexedTextRaw(def)
                     } catch (_: Throwable) { errors++ }
                     done++
                     val now = System.currentTimeMillis()
@@ -1973,10 +2018,7 @@ class MainActivity : Activity() {
                 for (f in cands) {
                     if (triageCancel) break
                     val def = defs.getOrNull(f.clsIndex) ?: continue
-                    val text = try {
-                        val ef = smaliFile("smali", def.type)
-                        if (ef.exists()) ef.readText() else disassemble(def)
-                    } catch (_: Throwable) { continue }
+                    val text = try { agentIndexedText(def) } catch (_: Throwable) { continue }   // 0.102.0: the text the scan produced f.at from (decoded strings included)
                     var ex = SecurityScanner.excerpt(text, f.at, 3500)
                     // 0.82.0: a taint flow is judged from the SINK method only; show the AI where the untrusted value is read and the path
                     if (f.sourceMethod.isNotEmpty()) {
@@ -2145,7 +2187,7 @@ class MainActivity : Activity() {
         val idx = callIdx ?: return
         try {
             val def = classDefs.getOrNull(f.clsIndex) ?: return
-            val key = SecurityScanner.methodKeyAt(def.type, smaliTextOf(def), f.at) ?: return
+            val key = SecurityScanner.methodKeyAt(def.type, agentIndexedText(def), f.at) ?: return
             val tr = SecurityScanner.trace(idx, key, f.clsIndex, { ci -> entryOfClass(ci) }, typeOf = { ci -> classDefs.getOrNull(ci)?.type }, actionsOf = { ci -> actionsOfClass(ci) })
             if (tr.entry != null) {
                 f.reach = "YES"
@@ -2309,9 +2351,7 @@ class MainActivity : Activity() {
             traceFinding(f)
             val code = try {
                 if (def != null) {
-                    val ef = smaliFile("smali", def.type)
-                    val text = if (ef.exists()) ef.readText() else disassemble(def)
-                    SecurityScanner.excerpt(text, f.at, 3500)
+                    SecurityScanner.excerpt(agentIndexedText(def), f.at, 3500)
                 } else manifestFull.take(6000)
             } catch (_: Throwable) { "" }
             val prompt = "You are a mobile application security instructor writing a DEFENSIVE, educational explanation for the developer of an Android app that they own (package: $pkg). " +
@@ -4696,7 +4736,10 @@ class MainActivity : Activity() {
         return File(idxRoot(), fname)
     }
 
-    private fun agentIndexedText(def: ClassDef): String {
+    /** The class text every scan reads: edited smali, else the cached index, else a fresh disassembly; with the decoded-strings overlay applied when one is loaded (0.102.0). */
+    private fun agentIndexedText(def: ClassDef): String = StringOverlay.view(agentIndexedTextRaw(def), def.type)
+
+    private fun agentIndexedTextRaw(def: ClassDef): String {
         if (smaliFile("smali", def.type).exists()) return smaliTextOf(def)
         val f = idxFile(def)
         if (f.exists()) {
