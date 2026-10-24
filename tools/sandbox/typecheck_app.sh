@@ -9,5 +9,6 @@
 export PATH=$HOME/tc/kotlinc/bin:$PATH
 TC=$HOME/tc; R=${1:-/home/user/APKReLab}
 CP=$TC/android-all.jar:$TC/deb/x/usr/share/java/json-android.jar:$TC/irk:$(ls $TC/libs/*.jar | tr '\n' ':')
+rm -rf $TC/irk && mkdir -p $TC/irk && javac -nowarn -d $TC/irk $(find $R/app/src/main/java/dev/apkrelab/ir -name '*.java') 2>&1 | grep -v "Picked up\|^Note"   # 0.104.0: always the CURRENT ir classes (a stale copy gave false errors)
 rm -rf $TC/pc/outT; mkdir -p $TC/pc/outT
 kotlinc -nowarn -J-Xmx3g -cp "$CP" -d $TC/pc/outT $(find $R/app/src/main -name '*.kt') $R/app/src/main/java/dev/apkrelab/ManifestPatcher.java 2>&1 | grep "error:" | sed "s#$R/##"

@@ -46,6 +46,16 @@ public final class SsaGroups {
         default Collection<String> guardedEntries() {
             return java.util.Collections.emptyList();
         }
+
+        /** 0.104.0: where finished groups are kept between scans of the same app; null = no cache (the default: nothing changes for a host that does not ask). */
+        default GroupCache groupCache() {
+            return null;
+        }
+
+        /** 0.104.0: names the engine in the cache key (the app's version code). It MUST change whenever a result could change. */
+        default String engineId() {
+            return "";
+        }
     }
 
     public static final class Picked {
@@ -61,6 +71,8 @@ public final class SsaGroups {
     public static final class Result {
         public final List<Picked> picked = new ArrayList<>();
         public int groupsTotal, groupsDone, groupsRetried, threads;
+        /** 0.104.0: groups whose result came from the cache (no parsing, no analysis). */
+        public int groupsCached;
         /** 0.66.2: time summed over all worker threads: reading + parsing classes, and building the call graph + SSA + taint. */
         public long parseMs, analyseMs;
         public boolean stopped;
@@ -88,11 +100,14 @@ public final class SsaGroups {
         final AtomicInteger done = new AtomicInteger(0);
         final Throwable[] fatal = new Throwable[1];
         final AtomicLong parseNs = new AtomicLong(), analyseNs = new AtomicLong();
+        final AtomicInteger cached = new AtomicInteger(0);
+        final GroupCache gc = host.groupCache();
+        final String[] keys = gc == null ? null : groupKeys(groups, entries, old, host);
 
         if (nt == 1) {
             for (int gi = 0; gi < n; gi++) {
                 if (host.cancelled()) break;
-                items[gi] = runOne(groups.get(gi), entries, old, host, cache, n == 1, oom, gi, parseNs, analyseNs, res.stats);
+                items[gi] = runOne(groups.get(gi), entries, old, host, cache, n == 1, oom, gi, parseNs, analyseNs, res.stats, gc, keys == null ? null : keys[gi], cached);
                 if (items[gi] != null) host.progress(done.incrementAndGet(), n);
             }
         } else {
@@ -106,7 +121,7 @@ public final class SsaGroups {
                             int gi = next.getAndIncrement();
                             if (gi >= n) return;
                             try {
-                                items[gi] = runOne(groups.get(gi), entries, old, host, cache, false, oom, gi, parseNs, analyseNs, res.stats);
+                                items[gi] = runOne(groups.get(gi), entries, old, host, cache, false, oom, gi, parseNs, analyseNs, res.stats, gc, keys == null ? null : keys[gi], cached);
                             } catch (Throwable t) {
                                 synchronized (fatal) {
                                     if (fatal[0] == null) fatal[0] = t;
@@ -140,7 +155,7 @@ public final class SsaGroups {
                 cache.clear();
                 res.groupsRetried++;
                 oom[gi] = false;
-                items[gi] = runOne(groups.get(gi), entries, old, host, cache, n == 1, oom, gi, parseNs, analyseNs, res.stats);
+                items[gi] = runOne(groups.get(gi), entries, old, host, cache, n == 1, oom, gi, parseNs, analyseNs, res.stats, gc, keys == null ? null : keys[gi], cached);
                 if (items[gi] != null) host.progress(done.incrementAndGet(), n);
             }
         }
@@ -159,10 +174,72 @@ public final class SsaGroups {
                 }
             }
         }
+        res.groupsCached = cached.get();
         res.parseMs = parseNs.get() / 1000000L;
         res.analyseMs = analyseNs.get() / 1000000L;
         res.stopped = host.cancelled() && res.groupsDone < n;
         return res;
+    }
+
+    private static long fnv(String t) {
+        long h = 0xcbf29ce484222325L;
+        for (int i = 0, n = t.length(); i < n; i++) {
+            h ^= t.charAt(i);
+            h *= 0x100000001b3L;
+        }
+        return h ^ t.length();
+    }
+
+    /**
+     * 0.104.0: the cache key of every group (null = this group is not cacheable: a class text could not be read). One pass over the unique classes of all groups hashes each text once
+     * (64-bit FNV-1a); a group's key is the SHA-1 of: the engine id, the tunable limits that change results, the sorted entry / guarded lists, the earlier findings the flows are
+     * de-duplicated against, and every member's type and text hash in group order.
+     */
+    static String[] groupKeys(List<List<Integer>> groups, Collection<String> entries, Collection<TaintIr.Old> old, Host host) {
+        java.util.HashMap<Integer, Long> hash = new java.util.HashMap<>();
+        for (List<Integer> g : groups) {
+            for (int i : g) {
+                if (hash.containsKey(i)) continue;
+                if (host.cancelled()) return new String[groups.size()];
+                long h;
+                try {
+                    h = fnv(host.text(i));
+                } catch (Throwable t) {
+                    h = Long.MIN_VALUE;                  // unreadable: marks the groups that contain it as not cacheable
+                }
+                hash.put(i, h);
+            }
+        }
+        StringBuilder common = new StringBuilder("sgc1|").append(host.engineId()).append("|hub=").append(ScopePlanner.HUB_CALLEES).append("|depth=").append(TaintIr.MAX_DEPTH)
+            .append("|rounds=").append(TaintIr.MAX_ROUNDS).append("|refs=").append(TaintIr.MAX_REFS).append("|requeue=").append(TaintIr.MAX_REQUEUE).append("|approx=").append(TaintIr.MAX_APPROX_TARGETS).append("|E");
+        for (String e : new java.util.TreeSet<>(entries)) common.append(e).append(';');
+        common.append("|G");
+        for (String e : new java.util.TreeSet<>(host.guardedEntries())) common.append(e).append(';');
+        java.util.TreeSet<String> olds = new java.util.TreeSet<>();
+        if (old != null) for (TaintIr.Old o : old) olds.add(o.method + "\u0001" + o.title);
+        common.append("|O");
+        for (String o : olds) common.append(o).append(';');
+        String[] keys = new String[groups.size()];
+        for (int gi = 0; gi < keys.length; gi++) {
+            StringBuilder sb = new StringBuilder(common).append("|C");
+            boolean ok = true;
+            for (int i : groups.get(gi)) {
+                Long h = hash.get(i);
+                if (h == null || h == Long.MIN_VALUE) { ok = false; break; }
+                sb.append(host.type(i)).append(':').append(Long.toHexString(h)).append(';');
+            }
+            if (!ok) continue;
+            try {
+                java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
+                byte[] d = md.digest(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                StringBuilder hex = new StringBuilder();
+                for (byte b : d) hex.append(Character.forDigit((b >> 4) & 15, 16)).append(Character.forDigit(b & 15, 16));
+                keys[gi] = hex.toString();
+            } catch (Throwable t) {
+                keys[gi] = null;
+            }
+        }
+        return keys;
     }
 
     // class type -> scanner index inside one group (the old code kept this map per group)
@@ -174,8 +251,17 @@ public final class SsaGroups {
     /** One group. Returns null when it did not produce a result (cancelled, out of memory, failed). */
     private static List<SsaBridge.Item> runOne(List<Integer> idxs, Collection<String> entries, Collection<TaintIr.Old> old, Host host,
                                                ConcurrentHashMap<Integer, SoftReference<ClassIr>> cache, boolean single,
-                                               boolean[] oom, int gi, AtomicLong parseNs, AtomicLong analyseNs, TaintIr.Stats total) {
+                                               boolean[] oom, int gi, AtomicLong parseNs, AtomicLong analyseNs, TaintIr.Stats total,
+                                               GroupCache gc, String key, AtomicInteger cached) {
         try {
+            if (gc != null && key != null) {
+                GroupCache.Entry hit = gc.load(key);
+                if (hit != null) {                       // the same classes, entries, earlier findings and engine: the same result
+                    total.merge(hit.stats);
+                    cached.incrementAndGet();
+                    return hit.items;
+                }
+            }
             long t0 = System.nanoTime();
             List<ClassIr> app = new ArrayList<>(idxs.size());
             for (int i : idxs) {
@@ -201,6 +287,7 @@ public final class SsaGroups {
             List<SsaBridge.Item> r = SsaBridge.newFlows(app, entries, old, gs, host.guardedEntries());
             analyseNs.addAndGet(System.nanoTime() - t1);
             total.merge(gs);
+            if (gc != null && key != null && !host.cancelled()) gc.store(key, r, gs);     // only a group that finished normally (a failure returns below, never reaches here)
             return r;
         } catch (OutOfMemoryError e) {
             if (single && oom[gi]) throw e;      // a lone group that fails again alone: report it like before

@@ -35,7 +35,7 @@ two device runs.
 **A0. Device baseline (first, everything else depends on it).** Two Deep-scan runs of Axis Pay on 0.102.0; the status line already prints plan time,
 group time, threads, heap, cores, parse vs analysis CPU and "groups re-run for memory". Without this, no A item can claim a gain.
 
-**A1. Incremental re-scan: a group-result cache across scans (new idea, not the rejected one).** The owner re-scans the SAME app after every scanner or app
+**A1. Incremental re-scan: a group-result cache across scans (new idea, not the rejected one). DONE in 0.104.0 (see HANDOFF; unchanged rescan: 19 of 19 groups reused on the sandbox corpus; device cost unmeasured).** The owner re-scans the SAME app after every scanner or app
 release, and after importing a strings dump. A group's result depends only on its class texts, the entry set and the engine version. Key =
 hash(engine version, entry types, sorted hashes of the group's class texts); value = the group's picked items + stats (a few KB). Stored on disk, not in RAM.
 Expected effect: an identical re-scan skips every group (plan only); a strings overlay re-runs only groups that contain an affected class. Cost: one hash per
@@ -106,7 +106,7 @@ many config files live there.
 206 formats), cleartext URLs, Firebase / Google config keys. A plain JS bundle is text. Negative twins: minified library code, documentation hosts (the
 deny list `native-flutter` already uses).
 
-**D2. Hermes bytecode (`index.android.bundle` with the HBC magic).** Parse the header and the string table only (string kinds, offsets, the small /
+**D2. Hermes bytecode (`index.android.bundle` with the HBC magic). DONE for version 96 in 0.104.0 (string table only, validated on 3 real bundles; other versions are reported, not guessed).** Parse the header and the string table only (string kinds, offsets, the small /
 overflow tables), feed the strings to D1's rules. The format is versioned (the bytecode version is in the header): support the versions found in real
 APKs, validate against a reference disassembler on those files, and print "unsupported HBC version N" otherwise. No function decoding in the first step.
 

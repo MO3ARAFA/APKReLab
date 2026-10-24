@@ -59,6 +59,9 @@ public class MeasureBig {
       public String text(int i) throws Exception { return new String(Files.readAllBytes(app.get(i)), StandardCharsets.UTF_8); }
       public String type(int i) { return types.get(i); }
       public boolean cancelled() { return false; }
+      // -Dcache=<dir>: finished groups are kept there (0.104.0); -Dengine=<id> names the engine in the key
+      public GroupCache groupCache() { return System.getProperty("cache") == null ? null : new GroupCache.Disk(new java.io.File(System.getProperty("cache")), 1000); }
+      public String engineId() { return System.getProperty("engine", "sandbox"); }
       public void progress(int d, int t) { if (t > 1 && (d % 5 == 0 || d == t)) System.err.println("group " + d + "/" + t + " " + (System.currentTimeMillis() - t1) / 1000 + "s"); }
       public void groupFailed() { System.out.println("GROUP FAILED"); }
       public Collection<String> guardedEntries() { return guarded; }
@@ -67,7 +70,7 @@ public class MeasureBig {
     long t2 = System.currentTimeMillis();
     System.out.println("PLAN " + planNote + " (" + (t1 - t0) / 1000 + "s)");
     System.out.println("RETRIED " + res.groupsRetried + " of " + res.groupsTotal + " stopped=" + res.stopped);
-    System.out.println("TIME groups=" + (t2 - t1) / 1000 + "s threads=" + res.threads + " cpu: parse " + res.parseMs / 1000 + "s + analysis " + res.analyseMs / 1000 + "s");
+    System.out.println("TIME groups=" + (t2 - t1) / 1000 + "s threads=" + res.threads + " cpu: parse " + res.parseMs / 1000 + "s + analysis " + res.analyseMs / 1000 + "s, groups from cache " + res.groupsCached + " of " + res.groupsTotal);
     TreeSet<String> lines = new TreeSet<>();
     for (SsaGroups.Picked p : res.picked) {
       SsaBridge.Item it = p.item;
