@@ -3476,6 +3476,7 @@ class MainActivity : Activity() {
                     guardedEntryTypes().toSet())
                 FindingPolish.lowerNonExportedReceivers(secFindings, FindingPolish.nonExportedReceiversAndServices(mc))   // 0.80.0
                 FindingPolish.lowerSeparateProcessDialogs(secFindings, FindingPolish.separateProcessActivities(mc))       // 0.81.0
+                FindingPolish.lowerConstantFedActivities(secFindings, FindingPolish.nonExportedActivities(mc))            // 0.108.0
                 FindingPolish.applyProviderCodeChecks(secFindings)                                                      // 0.81.0
                 FindingPolish.applyNetworkEvidence(secFindings)                                                         // 0.81.0
                 FindingPolish.restoreInstalledTls(secFindings)                                                          // 0.85.0

@@ -191,4 +191,21 @@ class PostureScannerTest {
         PostureScanner.clearApk(); assertTrue(row("root-paths").app.isEmpty())                                                   // the next APK forgets the names
         fresh()
     }
+
+    // 0.108.0: root checks whose paths / package names are decrypted at run time (Axis Pay MainActivity)
+    @Test fun encryptedRootChecksAreFoundByTheirProbes() {
+        fresh()
+        val probes = m("    invoke-interface {v0}, Ljava/util/Iterator;->next()Ljava/lang/Object;\n    invoke-virtual {v1}, Ljava/io/File;->exists()Z\n" +
+            "    invoke-virtual {v2, v3, v4}, Landroid/content/pm/PackageManager;->getPackageInfo(Ljava/lang/String;I)Landroid/content/pm/PackageInfo;\n" +
+            "    invoke-virtual {v5, v6}, Ljava/lang/Runtime;->exec([Ljava/lang/String;)Ljava/lang/Process;\n")
+        observe("Lcom/myapp/MainActivity;", cls("Lcom/myapp/MainActivity;", probes))
+        assertEquals(listOf("Lcom/myapp/MainActivity;"), row("root-structure").app)
+        assertTrue(row("root-paths").app.isEmpty())                                                   // no plain su path: the string row stays empty
+        // twins: a class with only two of the three probes
+        fresh()
+        observe("Lcom/myapp/Files;", cls("Lcom/myapp/Files;", probes.replace("Ljava/lang/Runtime;->exec(", "Ljava/lang/Runtime;->gc(")))
+        observe("Lcom/myapp/Pkgs;", cls("Lcom/myapp/Pkgs;", probes.replace("Ljava/io/File;->exists()Z", "Ljava/io/File;->length()J")))
+        assertTrue(row("root-structure").app.isEmpty())
+        fresh()
+    }
 }

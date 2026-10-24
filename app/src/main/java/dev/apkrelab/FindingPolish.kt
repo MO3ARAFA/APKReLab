@@ -408,6 +408,42 @@ object FindingPolish {
     }
 
     /** 0.80.0: smali types of the receivers and services the manifest does NOT export. */
+    /**
+     * 0.108.0 (WE Wallet SignUpWebViewActivity, exported="false": "Untrusted input is loaded into a WebView" HIGH, its URL read with getStringExtra): a non-exported activity is often
+     * reached through an exported one that FORWARDS the caller's data (OVAA, Infinity), so it keeps its severity by default. When every extra the activity reads has writers in the
+     * app and EVERY writer puts a constant or a string resource (IntentExtras), no caller's data can arrive that way: the HIGH / CRITICAL Intent-extra taint card drops one level,
+     * naming the writers. One forwarding, user-input, stored, remote or unknown writer keeps it as it is; an activity whose reads were not seen (encrypted names) is left alone.
+     */
+    fun lowerConstantFedActivities(list: List<SecurityScanner.Finding>, internalActivities: Set<String>): Int {
+        var n = 0
+        val extraSource = Regex("^Data from Intent\\.get[A-Za-z]*Extra\\(")
+        for (f in list) {
+            try {
+                if (!f.ruleId.startsWith("taint") || f.severity.rank > 1 || !extraSource.containsMatchIn(f.detail)) continue
+                val t = f.classType ?: continue
+                val outer = if (t.contains('$')) t.substringBefore('$') + ";" else t
+                if (outer !in internalActivities) continue
+                val reads = IntentExtras.readsOf(outer.removePrefix("L").removeSuffix(";").replace('/', '.')).filter { it.kind != "query" }
+                if (reads.isEmpty()) continue
+                val writers = reads.map { IntentExtras.writesOf(it.key) }
+                if (writers.any { it.isEmpty() }) continue
+                val all = writers.flatten()
+                if (!all.all { it.origin == "CONSTANT" || it.origin == "RESOURCE" }) continue
+                f.severity = if (f.severity == SecurityScanner.Severity.CRITICAL) SecurityScanner.Severity.HIGH else SecurityScanner.Severity.MEDIUM
+                f.confidence = "LOW"
+                f.adjusted = (if (f.adjusted.isNotEmpty()) f.adjusted + " " else "") + "Lowered one level: this activity is not exported, and every place in the app that sets the extra(s) it reads (" +
+                    reads.joinToString(", ") { "\"" + it.key + "\"" } + ") puts a fixed value: " + all.take(4).joinToString("; ") { it.classType.removePrefix("L").removeSuffix(";").substringAfterLast('/') + "." + it.method + "() sets \"" + it.key + "\" from " + it.detail } +
+                    ". Another app cannot supply that value, unless it reaches this activity in a way the scanner does not see (a PendingIntent, reflection)."
+                n++
+            } catch (_: Throwable) { }
+        }
+        return n
+    }
+
+    /** 0.108.0: smali types of NOT exported activities. */
+    fun nonExportedActivities(mc: ManifestContext): Set<String> =
+        mc.components.filter { !it.exported && it.tag == "activity" }.map { mc.smaliTypeOf(it) }.filter { it.isNotEmpty() }.toSet()
+
     fun nonExportedReceiversAndServices(mc: ManifestContext): Set<String> =
         mc.components.filter { !it.exported && (it.tag == "receiver" || it.tag == "service") }.map { mc.smaliTypeOf(it) }.filter { it.isNotEmpty() }.toSet()
 

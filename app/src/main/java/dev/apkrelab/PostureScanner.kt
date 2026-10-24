@@ -52,6 +52,11 @@ object PostureScanner {
         Sig("pin-trustkit", "Certificate pinning: TrustKit", "MASVS-NETWORK-2") { has(it, "Lcom/datatheorem/android/trustkit/") },
         Sig("pin-custom", "Certificate pinning: a custom TrustManager comparing a key or digest", "MASVS-NETWORK-2") { customPinning(it) },
         Sig("root-paths", "Root detection: su binaries / root manager packages", "MASVS-RESILIENCE-1") { t -> strings(t).any { s -> suPaths.any { s.contains(it) } || rootPkgs.any { s == it } } },
+        // 0.108.0 (Axis Pay: MainActivity tests a list of files, a list of installed packages and runs a command, every path / package name decrypted at run time, so the
+        // string-based row above saw nothing): the probes themselves, in one class. Measured: 1 class in 16 decoded apps (that one)
+        Sig("root-structure", "Root detection: file + installed-package probes and a shell command in one class (found even when the names are encrypted)", "MASVS-RESILIENCE-1") {
+            it.contains("Ljava/lang/Runtime;->exec(") && it.contains("Ljava/io/File;->exists()Z") && it.contains("Landroid/content/pm/PackageManager;->getPackageInfo(") &&
+                (it.contains("Ljava/util/Iterator;->next()") || it.contains("aget-object")) },
         Sig("root-lib", "Root detection: RootBeer / JailMonkey call", "MASVS-RESILIENCE-1") { has(it, "Lcom/scottyab/rootbeer/RootBeer;->isRooted", "JailMonkey") && !it.contains(".class public Lcom/scottyab/rootbeer/") },
         Sig("debugger", "Anti-debugging: Debug.isDebuggerConnected / waitingForDebugger / TracerPid", "MASVS-RESILIENCE-4") {
             has(it, "Landroid/os/Debug;->isDebuggerConnected()Z", "Landroid/os/Debug;->waitingForDebugger()Z") || strings(it).any { s -> s.contains("TracerPid") } },
