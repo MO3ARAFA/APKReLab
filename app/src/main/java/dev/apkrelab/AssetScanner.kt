@@ -40,7 +40,7 @@ object AssetScanner {
     private fun ext(n: String): String = n.substringAfterLast('/').let { if (it.contains('.')) it.substringAfterLast('.').lowercase() else "" }
 
     /** Hermes bytecode: magic 0x1F1903C103BC1FC6 (little endian), then the bytecode version. */
-    internal fun hermesVersion(head: ByteArray): Int? {
+    internal fun hermesVersion(head: ByteArray): Int? {   // the magic and the version; HermesStrings reads the table
         if (head.size < 12) return null
         val magic = byteArrayOf(0xC6.toByte(), 0x1F, 0xBC.toByte(), 0x03, 0xC1.toByte(), 0x03, 0x19, 0x1F)
         for (i in 0 until 8) if (head[i] != magic[i]) return null
@@ -57,6 +57,14 @@ object AssetScanner {
         val seen = HashSet<String>()
         val clear = LinkedHashMap<String, String>()          // host -> first file
         val fire = LinkedHashMap<String, String>()           // url -> first file
+
+        fun fireCheck(path: String, text: String) {
+            for (m in firebase.findAll(text)) {
+                val pid = m.groupValues[1]
+                if (pid in fakeFirebase || pid.contains("your") || pid.contains("xxxx")) continue
+                fire.putIfAbsent(m.value, path)
+            }
+        }
 
         fun urlCheck(path: String, lit: String) {
             if (!lit.startsWith("http://")) return
@@ -92,10 +100,29 @@ object AssetScanner {
             total += bytes.size
             val hv = hermesVersion(bytes)
             if (hv != null) {
-                hybrid = true; hybridKinds.add("React Native (Hermes bytecode v$hv)")
-                out.add(f(Severity.INFO, "assets-hermes", "React Native bundle is Hermes bytecode: its strings are NOT scanned",
-                    "$name is compiled Hermes bytecode (version $hv). The app logic and its string constants live in this file and are not read by this scanner yet; only the Java / native layer and the other assets were. A \"0 findings\" about secrets, URLs or API endpoints in the JavaScript layer is therefore not a pass.",
-                    "Dump the strings with a Hermes disassembler (hbctool / hermes-dec) on your own build and review them; or scan the plain JS bundle of a debug build.", "", name, "HIGH"))
+                hybrid = true
+                // 0.104.0: the string table of a version-96 file is read (no function is decoded) and goes through the same checks as a text bundle
+                val hs = HermesStrings.read(bytes)
+                if (hs != null) {
+                    hybridKinds.add("React Native (Hermes bytecode v$hv, string table scanned)")
+                    for (str in hs.strings) {
+                        secrets(name, str)
+                        urlCheck(name, str)
+                        if (str.contains("firebaseio.com") || str.contains("firebasedatabase.app")) fireCheck(name, str)
+                        if (str.contains("-----BEGIN") && pem.containsMatchIn(str) && seen.add("$name#pem"))
+                            out.add(f(Severity.CRITICAL, "assets-private-key", "Private key in app assets",
+                                "The Hermes bundle $name contains a PEM private key block with its body in its string table.", "Remove the key from the app; use a server-side secret or the Android Keystore.", "CWE-321", name))
+                    }
+                    out.add(f(Severity.INFO, "assets-hermes", "React Native bundle is Hermes bytecode: its string table was scanned, its code was not",
+                        "$name is compiled Hermes bytecode (version $hv). Its ${hs.total} string constants were read and checked for credential formats, private keys, cleartext endpoints and Firebase URLs. The JavaScript logic itself (what the app does with them, injection, insecure storage) is NOT analysed: a string-level scan cannot show that.",
+                        "Review the JavaScript source with its own tools (eslint-plugin-security, npm audit) on your build.", "", name, "HIGH"))
+                } else {
+                    hybridKinds.add("React Native (Hermes bytecode v$hv)")
+                    out.add(f(Severity.INFO, "assets-hermes", "React Native bundle is Hermes bytecode: its strings are NOT scanned",
+                        "$name is compiled Hermes bytecode (version $hv)." + (if (hv != HermesStrings.SUPPORTED_VERSION) " Only bytecode version ${HermesStrings.SUPPORTED_VERSION} is read; this scanner does not know the layout of version $hv." else " The file is not self-consistent, so its string table was not read.") +
+                            " The app logic and its string constants live in this file; only the Java / native layer and the other assets were read. A \"0 findings\" about secrets, URLs or API endpoints in the JavaScript layer is therefore not a pass.",
+                        "Dump the strings with a Hermes disassembler (hbctool / hermes-dec) on your own build and review them; or scan the plain JS bundle of a debug build.", "", name, "HIGH"))
+                }
                 continue
             }
             if (bytes.take(1024).any { it.toInt() == 0 }) { binary++; continue }
@@ -112,11 +139,7 @@ object AssetScanner {
             if (text.contains("-----BEGIN") && pem.containsMatchIn(text) && seen.add("$name#pem"))
                 out.add(f(Severity.CRITICAL, "assets-private-key", "Private key in app assets",
                     "The asset $name contains a PEM private key block with its body. Anyone can unzip the APK and read it.", "Remove the key from the app; use a server-side secret or the Android Keystore.", "CWE-321", name))
-            if (text.contains("firebaseio.com") || text.contains("firebasedatabase.app")) for (m in firebase.findAll(text)) {
-                val pid = m.groupValues[1]
-                if (pid in fakeFirebase || pid.contains("your") || pid.contains("xxxx")) continue
-                fire.putIfAbsent(m.value, name)
-            }
+            if (text.contains("firebaseio.com") || text.contains("firebasedatabase.app")) fireCheck(name, text)
             if (name.endsWith("/config.xml") && name.contains("www")) out.addAll(cordovaConfig(name, text))
         }
         // Cordova's config.xml is a compiled resource in the APK
