@@ -56,4 +56,26 @@ object SplitApks {
         val base = rest.firstOrNull { it.name.equals("base.apk", true) } ?: rest.maxByOrNull { it.length() }
         return base to (files - listOfNotNull(base).toSet())
     }
+
+    /**
+     * 0.102.0: the "Installed apps" picker. Copies an installed app's base APK (ApplicationInfo.sourceDir) to `<workspace>/original.apk` and its splits
+     * (ApplicationInfo.splitSourceDirs) to `<workspace>/splits/`, the same layout the file picker produces. The workspace is emptied first. Split names are the
+     * file names Android gave them (flat, unique within one install); an unreadable split is skipped and reported in [Installed.skipped], never fatal.
+     */
+    class Installed(val original: File, val splits: List<File>, val skipped: List<String>)
+
+    fun copyInstalled(sourceDir: String, splitSourceDirs: List<String>?, workspace: File): Installed {
+        workspace.deleteRecursively(); workspace.mkdirs()
+        val original = File(workspace, "original.apk")
+        File(sourceDir).copyTo(original, true)
+        val splitDir = File(workspace, "splits"); splitDir.mkdirs()
+        val out = ArrayList<File>(); val skipped = ArrayList<String>(); val used = HashSet<String>()
+        for (p in splitSourceDirs.orEmpty()) {
+            val src = File(p)
+            var name = src.name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifEmpty { "split.apk" }
+            var n = 1; while (!used.add(name.lowercase())) name = "${n++}_" + src.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+            try { out.add(src.copyTo(File(splitDir, name), true)) } catch (_: Throwable) { skipped.add(src.name) }
+        }
+        return Installed(original, out, skipped)
+    }
 }

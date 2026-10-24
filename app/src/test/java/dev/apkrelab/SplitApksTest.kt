@@ -84,4 +84,39 @@ class SplitApksTest {
         assertFalse(SplitApks.isSplit(base))
         assertNotNull(SplitApks.partition(listOf(base)).first)
     }
+
+    // ---- 0.102.0: the "Installed apps" picker copies sourceDir + splitSourceDirs into workspaces/p1 ----
+    private fun tmp() = File.createTempFile("inst", "").also { it.delete(); it.mkdirs(); it.deleteOnExit() }
+
+    @Test fun anInstalledAppIsCopiedAsOriginalApkPlusSplits(): Unit = guarded {
+        val src = tmp()
+        val base = zip("base.apk", mapOf("classes.dex" to ByteArray(8), "AndroidManifest.xml" to ByteArray(8)))
+        val arm = zip("split_config.arm64_v8a.apk", mapOf("AndroidManifest.xml" to ByteArray(8), "lib/arm64-v8a/libapp.so" to ElfTestBuilder.build(stackExec = true)))
+        val ws = File(tmp(), "workspaces/p1"); ws.mkdirs(); File(ws, "stale.txt").writeText("old project")
+        val r = SplitApks.copyInstalled(base.path, listOf(arm.path), ws)
+        assertEquals("original.apk", r.original.name); assertTrue(r.original.readBytes().contentEquals(base.readBytes()))
+        assertEquals(listOf("split_config.arm64_v8a.apk"), r.splits.map { it.name }); assertEquals(File(ws, "splits"), r.splits[0].parentFile)
+        assertFalse(File(ws, "stale.txt").exists())                                                        // the previous project is gone
+        // the result is what analyzeFile reads: the native scanner finds the library of the split through the copied folder
+        NativeScanner.extraArchives = File(ws, "splits").listFiles()!!.filter { it.name.endsWith(".apk") }
+        val f = ZipFile(r.original).use { NativeScanner.scan(it, manifest) }
+        assertTrue(f.any { it.ruleId == "native-hardening" && it.detail.contains("libapp.so") })
+        assertTrue(src.exists())
+    }
+
+    @Test fun anInstalledAppWithoutSplitsOrWithAnUnreadableSplitStillWorks() {
+        val base = zip("base.apk", mapOf("classes.dex" to ByteArray(8), "AndroidManifest.xml" to ByteArray(8)))
+        val ws = File(tmp(), "p1")
+        val none = SplitApks.copyInstalled(base.path, null, ws)                                            // twin of the first test: a plain app, splitSourceDirs == null
+        assertTrue(none.splits.isEmpty()); assertTrue(none.skipped.isEmpty()); assertTrue(none.original.exists())
+        val bad = SplitApks.copyInstalled(base.path, listOf(File(tmp(), "gone.apk").path), ws)
+        assertTrue(bad.splits.isEmpty()); assertEquals(listOf("gone.apk"), bad.skipped); assertTrue(bad.original.exists())   // skipped and reported, not fatal
+    }
+
+    @Test fun twoSplitsWithTheSameFileNameKeepBothCopies() {
+        val a = zip("split_config.en.apk", mapOf("resources.arsc" to ByteArray(3))); val b = zip("split_config.en.apk", mapOf("resources.arsc" to ByteArray(5)))
+        val base = zip("base.apk", mapOf("classes.dex" to ByteArray(8)))
+        val r = SplitApks.copyInstalled(base.path, listOf(a.path, b.path), File(tmp(), "p1"))
+        assertEquals(2, r.splits.size); assertEquals(2, r.splits.map { it.name.lowercase() }.toSet().size)
+    }
 }

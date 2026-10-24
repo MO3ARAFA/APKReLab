@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInstaller
 import android.os.Build
 import android.provider.Settings
@@ -32,6 +33,7 @@ import android.text.style.TypefaceSpan
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.InputMethodManager
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -396,6 +398,7 @@ class MainActivity : Activity() {
             return b
         }
         pickChip = chip("Select APK", true, 1.4f) { openPicker() }
+        chip("Installed", false, 1f) { openPicker { showInstalledApps() } }   // 0.102.0: pick an installed app (base + splits) instead of a file
         chip("Last APK", false, 1f) { guardEdit { openLast() } }
         aiHubChip = chip("AI Hub", false, 1f) { showAgentChat() }
         chip("⚙ AI", false, 0.8f) { showSettings() }
@@ -887,18 +890,89 @@ class MainActivity : Activity() {
         contentScroll.scrollTo(0, 0)
     }
 
-    private fun openPicker() {
+    private fun openPicker(go: () -> Unit = { launchPicker() }) {
         val edited = Rebuilder(wsDir) { }.editedFiles().values.sumOf { it.size }
         if (edited > 0) {
             AlertDialog.Builder(this)
                 .setTitle("Replace current project?")
                 .setMessage("You have $edited edited class(es). Picking a new APK deletes them and the built files. (Use 'Export' first if you want to keep the built APK.)")
-                .setPositiveButton("Pick new APK") { _, _ -> launchPicker() }
+                .setPositiveButton("Pick new APK") { _, _ -> go() }
                 .setNegativeButton("Cancel", null)
                 .show()
         } else {
-            launchPicker()
+            go()
         }
+    }
+
+    private class InstalledApp(val pkg: String, val label: String, val sourceDir: String, val splits: List<String>, val system: Boolean)
+
+    /**
+     * 0.102.0: list the installed apps and scan the one the user taps: its base APK and its splits are read straight from ApplicationInfo (sourceDir, splitSourceDirs),
+     * so a Play Store app arrives with its native-code split and no PC or adb is needed. Seeing other apps needs QUERY_ALL_PACKAGES (declared in the manifest); on a
+     * device that still hides them the list is short and the dialog says so. Parse-checked only until the owner builds it.
+     */
+    private fun showInstalledApps() {
+        Toast.makeText(this, "Reading installed apps...", Toast.LENGTH_SHORT).show()
+        Thread {
+            val apps: List<InstalledApp> = try {
+                val pm = packageManager
+                pm.getInstalledApplications(0).filter { it.sourceDir != null }.map { ai ->
+                    val system = (ai.flags and ApplicationInfo.FLAG_SYSTEM) != 0 && (ai.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0
+                    InstalledApp(ai.packageName, ai.loadLabel(pm).toString(), ai.sourceDir, ai.splitSourceDirs?.toList() ?: emptyList(), system)
+                }.sortedWith(compareBy({ it.system }, { it.label.lowercase() }))
+            } catch (t: Throwable) { emptyList() }
+            runOnUiThread { showInstalledDialog(apps) }
+        }.start()
+    }
+
+    private fun showInstalledDialog(apps: List<InstalledApp>) {
+        if (apps.isEmpty()) { Toast.makeText(this, "Could not list installed apps", Toast.LENGTH_LONG).show(); return }
+        val pad = Ui.dp(12)
+        val filter = EditText(this).apply { hint = "Filter by name or package"; setSingleLine() }
+        val list = ListView(this)
+        var shown: List<InstalledApp> = apps
+        fun line(a: InstalledApp) = a.label + (if (a.splits.isNotEmpty()) "  [+${a.splits.size} splits]" else "") + (if (a.system) "  (system)" else "") + "\n" + a.pkg
+        fun refill() {
+            val q = filter.text.toString().trim().lowercase()
+            shown = if (q.isEmpty()) apps else apps.filter { it.label.lowercase().contains(q) || it.pkg.lowercase().contains(q) }
+            list.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, shown.map { line(it) })
+        }
+        filter.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) { refill() }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+        refill()
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, 0)
+            addView(filter, LinearLayout.LayoutParams(MATCH, WRAP))
+            addView(list, LinearLayout.LayoutParams(MATCH, Ui.dp(380)))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Installed apps (${apps.size})")
+            .setView(box)
+            .setNegativeButton("Cancel", null)
+            .create()
+        list.setOnItemClickListener { _, _, pos, _ ->
+            if (pos in shown.indices) { dialog.dismiss(); analyzeInstalledApp(shown[pos]) }
+        }
+        dialog.show()
+    }
+
+    private fun analyzeInstalledApp(app: InstalledApp) {
+        apkGen++
+        info.text = "Copying ${app.label} (${1 + app.splits.size} APK file(s))..."
+        Thread {
+            try {
+                val copied = SplitApks.copyInstalled(app.sourceDir, app.splits, File(filesDir, "workspaces/p1"))
+                if (copied.skipped.isNotEmpty()) blog("Installed app: could not read split(s): " + copied.skipped.joinToString(", "))
+                val r = analyzeFile(copied.original)
+                runOnUiThread { applyResult(r) }
+            } catch (t: Throwable) {
+                runOnUiThread { info.text = "Error: ${t.javaClass.simpleName}: ${t.message}" }
+            }
+        }.start()
     }
 
     /** 0.37.5: system file picker for the AI Hub chat (several files at once; images, PDF and text / code files are accepted, others are rejected by Attachments.load). */
