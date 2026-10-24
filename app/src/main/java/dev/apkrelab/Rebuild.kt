@@ -427,8 +427,8 @@ class Rebuilder(private val ws: File, private val log: (String) -> Unit) {
     }
 
     private fun fmt(bytes: Long): String = when {
-        bytes >= 1024 * 1024 -> String.format("%.1f MB", bytes / 1048576.0)
-        bytes >= 1024 -> String.format("%.1f KB", bytes / 1024.0)
+        bytes >= 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1048576.0)
+        bytes >= 1024 -> String.format(java.util.Locale.US, "%.1f KB", bytes / 1024.0)
         else -> "$bytes B"
     }
 }

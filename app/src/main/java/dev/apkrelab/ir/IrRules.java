@@ -602,7 +602,10 @@ public final class IrRules {
         List<Hit> out = new ArrayList<>();
         if (c == null) return out;
         boolean cryptoClass = classText != null && (classText.contains("Ljavax/crypto/") || classText.contains("Ljava/security/MessageDigest;"));
-        boolean classNamed = SECURITY_NAME.matcher(c.type.substring(c.type.lastIndexOf('/') + 1)).find();
+        // 0.108.0 (WE Wallet: DexGuard renames classes and methods with dictionary words, e.g. "getKeyTemplate$values", "isEnableSecuringAccountPin", "registerEncoder"):
+        // in a class renamed into the root package, class / method / field NAMES are not evidence; the code's own evidence (crypto use, key sinks, string keys) still is
+        boolean renamed = c.type.indexOf('/') < 0;
+        boolean classNamed = !renamed && SECURITY_NAME.matcher(c.type.substring(c.type.lastIndexOf('/') + 1)).find();
         for (MethodIr m : c.methods) {
             if (m.insns.isEmpty()) continue;
             boolean has = false;
@@ -653,12 +656,12 @@ public final class IrRules {
                                     break;
                                 case FIELD_PUT: {
                                     String f = in.ref.contains("->") ? in.ref.substring(in.ref.indexOf("->") + 2) : in.ref;
-                                    if (d.contains(us[0]) && SECURITY_NAME.matcher(f.substring(0, Math.max(0, f.indexOf(':')))).find())
+                                    if (!renamed && d.contains(us[0]) && SECURITY_NAME.matcher(f.substring(0, Math.max(0, f.indexOf(':')))).find())
                                         why = "is stored in the field " + f.substring(0, Math.max(0, f.indexOf(':')));
                                     break;
                                 }
                                 case RETURN:
-                                    if (SECURITY_NAME.matcher(m.name).find() || classNamed || cryptoClass)
+                                    if ((!renamed && SECURITY_NAME.matcher(m.name).find()) || classNamed || cryptoClass)
                                         why = "is returned by " + m.name + "() of " + c.type.substring(c.type.lastIndexOf('/') + 1, c.type.length() - 1)
                                               + (cryptoClass ? " (a class that uses javax.crypto / MessageDigest)" : "");
                                     break;
@@ -671,7 +674,7 @@ public final class IrRules {
                                     }
                                     if (DERIVE.contains(owner) && dd != null) for (SsaForm.Value x : dd) if (x != null) d.add(x);
                                     if ((owner.equals("Ljava/lang/StringBuilder;") || owner.equals("Ljava/lang/StringBuffer;")) && us.length > 0 && us[0] != null) d.add(us[0]);
-                                    if (!DERIVE.contains(owner) && owner.equals(c.type) && SECURITY_NAME.matcher(name).find())
+                                    if (!renamed && !DERIVE.contains(owner) && owner.equals(c.type) && SECURITY_NAME.matcher(name).find())
                                         why = "is passed to " + name + "()";
                                     break;
                                 }

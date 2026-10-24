@@ -121,12 +121,12 @@ class StringOverlay(val method: String, val strings: Map<Int, String>) {
          * `#decryptor<TAB>Lvs/C;->d(I)Ljava/lang/String;` names the method), or JSON: `{"method": "...", "strings": {"12": "x"}}`, `{"12": "x"}` or `[{"i": 12, "s": "x"}]`.
          */
         fun parse(raw: String): Parsed {
-            val text = raw.removePrefix("﻿").trim()
+            val text = raw.removePrefix("\uFEFF").trim()
             if (text.startsWith("{") || text.startsWith("[")) parseJson(text)?.let { return it }
             var method: String? = null
             val map = LinkedHashMap<Int, String>()
             var last: Int? = null; var skipped = 0
-            for (line in raw.removePrefix("﻿").split('\n')) {
+            for (line in raw.removePrefix("\uFEFF").split('\n')) {
                 val l = line.trimEnd('\r')
                 if (l.startsWith("#")) {
                     val m = headerRe.find(l)

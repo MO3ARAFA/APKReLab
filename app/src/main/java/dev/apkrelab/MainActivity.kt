@@ -84,6 +84,7 @@ class MainActivity : Activity() {
     private val reportItems = ArrayList<ReportItem>()
     private var pendingKeyPwd: CharArray? = null
     private val installAction = "dev.apkrelab.INSTALL_RESULT"
+    private val installPermission = "dev.apkrelab.permission.INSTALL_RESULT"    // signature-level, declared in the manifest
     @Volatile private var lastInstall = ""            // 0.30.0: result of the last install, read by the AI Hub tool
     private var selTabFn: (Int) -> Unit = { }          // 0.30.0: lets the AI Hub switch the bottom tab highlight
 
@@ -220,8 +221,11 @@ class MainActivity : Activity() {
             val msg = i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: ""
             when (status) {
                 PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                    // 0.108.0: the Intent comes from the broadcast. Before 0.108.0 any app could send that broadcast on Android 8-12 and have this app start an Intent of
+                    // its choice with this app's identity (intent redirection). The receiver is now permission-protected; as a second line, the installer's confirmation never
+                    // needs URI grants nor targets this app itself
                     val confirm = i.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-                    if (confirm != null) startActivity(confirm)
+                    if (confirm != null && safeInstallConfirm(confirm)) startActivity(confirm)
                 }
                 PackageInstaller.STATUS_SUCCESS -> { lastInstall = "SUCCESS"; blog("Install: SUCCESS - open the app from your launcher.") }
                 else -> {
@@ -233,6 +237,14 @@ class MainActivity : Activity() {
                 }
             }
         }
+    }
+
+    /** The installer's confirmation Intent, cleared of URI-grant flags; false when it would open a component of this app (never what the installer asks for). */
+    private fun safeInstallConfirm(confirm: Intent): Boolean {
+        confirm.flags = confirm.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION).inv()
+        val target = confirm.component?.packageName ?: confirm.`package` ?: try { confirm.resolveActivity(packageManager)?.packageName } catch (_: Throwable) { null }
+        return target != packageName
     }
 
     /**
@@ -807,8 +819,9 @@ class MainActivity : Activity() {
         outer.requestApplyInsets()
         if (savedInstanceState == null) playIntro()      // 0.60.1: opening animation (cold start only)
         val f = IntentFilter(installAction)
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(installReceiver, f, Context.RECEIVER_NOT_EXPORTED)
-        else registerReceiver(installReceiver, f)
+        // 0.108.0: a dynamic receiver is exported below API 33 (lint UnspecifiedRegisterReceiverFlag): the signature permission keeps other apps out on every version
+        // (the installer's PendingIntent is sent with this app's identity, which holds it); the flag is a constant that versions before 33 ignore
+        registerReceiver(installReceiver, f, installPermission, null, Context.RECEIVER_NOT_EXPORTED)
     }
 
     override fun onDestroy() {
@@ -6068,8 +6081,8 @@ class MainActivity : Activity() {
     }
 
     private fun fmt(bytes: Long): String = when {
-        bytes >= 1024 * 1024 -> String.format("%.1f MB", bytes / 1048576.0)
-        bytes >= 1024 -> String.format("%.1f KB", bytes / 1024.0)
+        bytes >= 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1048576.0)
+        bytes >= 1024 -> String.format(java.util.Locale.US, "%.1f KB", bytes / 1024.0)
         else -> "$bytes B"
     }
 }

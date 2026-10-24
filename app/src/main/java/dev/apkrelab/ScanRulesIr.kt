@@ -124,7 +124,7 @@ object TapjackingLayoutRule : ResourceRule {
     override val confidence = "MEDIUM"
 
     // layouts that belong to well-known libraries (AppCompat, Material, Google sign-in, Facebook ...)
-    private val libPrefix = Regex("^(abc_|mtrl_|design_|material_|m3_|com_facebook_|common_google|googleg_|notification_|select_dialog_|support_|exo_|leak_canary)")
+    private val libPrefix = AndroGoatChecks.libLayoutPrefix
 
     override fun appliesTo(ctx: ResourceContext): Boolean =
         ctx.path.startsWith("res/") && ctx.xml.contains("EditText") && !libPrefix.containsMatchIn(ctx.path.substringAfterLast('/'))

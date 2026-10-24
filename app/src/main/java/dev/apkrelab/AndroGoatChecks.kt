@@ -338,6 +338,9 @@ object AndroGoatChecks {
         return if (rp > lp) sl.substring(lp + 1, rp) else sl.substring(lp + 1)
     }
 
+    /** Layout file names of well-known libraries (AppCompat, Material, Google sign-in, Facebook, ExoPlayer ...): not the app's own screens. Shared with the tapjacking rule. */
+    internal val libLayoutPrefix = Regex("^(abc_|mtrl_|design_|material_|m3_|com_facebook_|common_google|googleg_|notification_|select_dialog_|support_|exo_|leak_canary)")
+
     fun scanResourceXml(path: String, xml: String): List<Finding> {
         val out = ArrayList<Finding>()
         fun add(sev: Severity, title: String, detail: String, rec: String, cwe: String, rule: String = "") {
@@ -347,7 +350,8 @@ object AndroGoatChecks {
         }
         // 0.43.0: the network_security_config.xml checks moved to ScanRulesResources.kt (res-nsc-* rules, same titles). ResourceScanner calls this function
         // for the two layout checks below only.
-        if (xml.contains("EditText")) {
+        // 0.108.0 (WE Wallet: material_time_input / mtrl_picker_text_input_date were reported): a layout of a well-known library is not the app's screen
+        if (xml.contains("EditText") && !libLayoutPrefix.containsMatchIn(path.substringAfterLast('/'))) {
             val fields = rx("<[A-Za-z0-9_.]*EditText\\b[^>]*>").findAll(xml).toList()
             for (m in fields) {
                 val tag = m.value

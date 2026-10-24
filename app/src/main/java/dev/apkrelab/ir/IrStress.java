@@ -101,7 +101,7 @@ public final class IrStress {
             sb.append("methods: ").append(methods).append(" | without body ").append(methodsNoBody).append(" | IR built ")
                     .append(methodsBuilt).append(" | FAILED ").append(methodsFailed).append('\n');
             int withBody = methods - methodsNoBody;
-            sb.append("success rate: ").append(withBody == 0 ? "n/a" : String.format("%.3f%%", 100.0 * methodsBuilt / withBody))
+            sb.append("success rate: ").append(withBody == 0 ? "n/a" : String.format(java.util.Locale.US, "%.3f%%", 100.0 * methodsBuilt / withBody))
                     .append('\n');
             sb.append("instructions ").append(insns).append(", blocks ").append(blocks).append(" (unreachable ")
                     .append(unreachableBlocks).append("), phi nodes ").append(phis).append('\n');

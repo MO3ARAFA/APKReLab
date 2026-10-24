@@ -31,5 +31,6 @@ class CrossClassLow0106Test {
     @Test fun brazesObfuscatedInternalsAreLibraryCode() {
         assertEquals(SecurityScanner.Scope.LIB, SecurityScanner.scopeOf("Lbo/app/f0;", "com.x"))
         assertTrue(SecurityScanner.scopeOf("Lbo/application/Main;", "com.x") != SecurityScanner.Scope.LIB)    // twin: only the bo/app/ package
+        assertEquals(SecurityScanner.Scope.LIB, SecurityScanner.scopeOf("Lantlr/JavaCodeGenerator;", "com.x"))   // 0.108.0: ANTLR 2, bundled by jadx
     }
 }
