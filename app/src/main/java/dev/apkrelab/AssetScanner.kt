@@ -141,7 +141,19 @@ object AssetScanner {
     }
 
     /** JS with its block comments and whole-line `//` comments removed (for the URL check only: a link in a doc comment is not a connection). */
-    internal fun stripComments(js: String): String = js.replace(Regex("/\\*[\\s\\S]*?\\*/"), " ").replace(Regex("(?m)^\\s*//.*$"), "")
+    internal fun stripComments(js: String): String {
+        val sb = StringBuilder(js.length)
+        var i = 0
+        while (i < js.length) {
+            val a = js.indexOf("/*", i)
+            if (a < 0) { sb.append(js, i, js.length); break }
+            val b = js.indexOf("*/", a + 2)
+            sb.append(js, i, a).append(' ')
+            if (b < 0) break                                   // an unterminated comment: the rest is not code
+            i = b + 2
+        }
+        return sb.toString().replace(Regex("(?m)^\\s*//.*$"), "")
+    }
 
     private fun cordovaConfig(path: String, xml: String): List<Finding> {
         val out = ArrayList<Finding>()
