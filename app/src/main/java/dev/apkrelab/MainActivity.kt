@@ -1731,7 +1731,11 @@ class MainActivity : Activity() {
             var scaFindings = sca.findings
             var scaStats = sca.stats
             try {
+                // 0.102.0: applyResult empties classDefs and starts this thread at once; the class index is built lazily, so a thread that got here first saw NO classes and silently
+                // skipped the package-path layer and the version probes (the SCA table then differed from run to run). buildIndex() is idempotent and locked: wait for it.
+                if (classDefs.isEmpty()) try { buildIndex() } catch (_: Throwable) { RuleRegistry.noteError("sca-index") }
                 val types = classDefs.map { it.type }
+                if (types.isEmpty()) scaStats = sca.stats + "; package-path SKIPPED (class index not available)"
                 if (types.isNotEmpty()) {
                     val pathLibs = ScaScanner.scanPackages(types, packageNameOrNull() ?: "")
                     // 0.88.0: a path-only library ("?") whose version is a CONSTANT in its own classes (Gson, Kotlin stdlib, a library's root BuildConfig) gets that version;
