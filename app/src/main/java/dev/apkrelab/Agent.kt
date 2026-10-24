@@ -17,6 +17,8 @@ interface AgentHost {
     fun manifest(): String
     fun findings(limit: Int, minSeverity: String): String
     fun entryPoints(): String
+    /** 0.104.1: text search in assets/ (JS bundles, web apps, configs, Hermes string table). */
+    fun searchAssets(query: String, max: Int): String
     /** 0.103.0: direct callers of a method from the Deep scan's call index (see GraphTools). */
     fun callers(name: String, method: String, limit: Int): String
     /** 0.103.0: the invokes inside a method, split into app / library / framework. */
@@ -220,6 +222,7 @@ object Agent {
             "app_capabilities" -> Capabilities.topic(a.optString("topic"))
             "get_findings" -> host.findings(a.optInt("limit", 15).coerceIn(1, 40), a.optString("min_severity", "LOW"))
             "entry_points" -> host.entryPoints()
+            "search_assets" -> host.searchAssets(a.optString("query"), a.optInt("max", 25).coerceIn(1, 60))
             "callers" -> host.callers(a.optString("name"), a.optString("method"), a.optInt("limit", 25).coerceIn(1, 80))
             "callees" -> host.callees(a.optString("name"), a.optString("method"), a.optInt("limit", 40).coerceIn(1, 120))
             "flow_path" -> host.flowPath(a.optString("finding"))

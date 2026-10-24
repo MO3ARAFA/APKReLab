@@ -2550,10 +2550,11 @@ class MainActivity : Activity() {
     /** 0.61.0: the path-bar status of the last Deep scan (stopped / failed classes / SSA taint result), written into the report so a report says whether the SSA step ran. */
     private var lastScanNote = ""
 
+    /** 0.104.1: the version code AND the install time: a rebuild of the same version with other code (the owner builds on the phone) must never be served another build's results. */
     private fun engineVersionCode(): String = try {
         val pi = packageManager.getPackageInfo(packageName, 0)
-        if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode.toString() else @Suppress("DEPRECATION") pi.versionCode.toString()
-    } catch (_: Throwable) { "unknown" }
+        (if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode.toString() else @Suppress("DEPRECATION") pi.versionCode.toString()) + "-" + pi.lastUpdateTime
+    } catch (_: Throwable) { "unknown-" + System.currentTimeMillis() }     // unknown engine: never reuse anything
 
     /** ART runtime counter ("art.gc.gc-time" in ms, "art.gc.gc-count" ...) or 0 when this device does not report it. */
     private fun runtimeStat(key: String): Long = try { android.os.Debug.getRuntimeStat(key)?.trim()?.toLongOrNull() ?: 0L } catch (_: Throwable) { 0L }
@@ -2620,9 +2621,9 @@ class MainActivity : Activity() {
         val guardedTypes = guardedEntryTypes()      // 0.69.1: computed once, the groups may run on several threads
         val host = object : dev.apkrelab.ir.SsaGroups.Host {
             override fun guardedEntries(): Collection<String> = guardedTypes
-            // 0.104.0: finished groups are kept in the workspace (deleted with it when another APK is loaded) and reused by the next scan of the same classes; the engine id is the app's
-            // version code, so a new build never reads results of another engine
-            override fun groupCache(): dev.apkrelab.ir.GroupCache? = if (prefs().getBoolean("ssa_cache", true)) dev.apkrelab.ir.GroupCache.Disk(File(filesDir, "workspaces/p1/groupcache"), 400) else null
+            // 0.104.0: finished groups are reused by the next scan of the same classes. 0.104.1: kept OUTSIDE the workspace (picking the same APK again deleted the workspace and the
+            // cache with it: the owner's second run reused nothing); the keys are content hashes, so results of different apps cannot mix; at most 400 files, oldest first
+            override fun groupCache(): dev.apkrelab.ir.GroupCache? = if (prefs().getBoolean("ssa_cache", true)) dev.apkrelab.ir.GroupCache.Disk(File(filesDir, "groupcache"), 400) else null
             override fun engineId(): String = engineVersionCode()
             override fun text(index: Int): String = agentIndexedText(defs[index])
             override fun type(index: Int): String = defs[index].type
@@ -2653,7 +2654,7 @@ class MainActivity : Activity() {
                 ssaIncomplete = (if (ssaIncomplete.isNotEmpty()) "$ssaIncomplete; " else "") + "stopped: only $cov% of the groups were analysed"
             }
         }
-        if (groupIdx.size > 1) ssaScopeNote += ", time: plan ${planMs / 1000}s + groups ${(System.currentTimeMillis() - tStart) / 1000}s on ${gres.threads} thread(s) (heap $heapMb MB, ${rt.availableProcessors()} cores${if (gres.groupsCached > 0) ", ${gres.groupsCached} of ${groupIdx.size} groups reused from the cache" else ""}, GC ${runtimeStat("art.gc.gc-time") - gcT0} ms in ${runtimeStat("art.gc.gc-count") - gcN0} collections, ${runtimeStat("art.gc.blocking-gc-time") - gcB0} ms blocking)" +
+        if (groupIdx.size > 1) ssaScopeNote += ", time: plan ${planMs / 1000}s + groups ${(System.currentTimeMillis() - tStart) / 1000}s on ${gres.threads} thread(s) (heap $heapMb MB, ${rt.availableProcessors()} cores${if (prefs().getBoolean("ssa_cache", true)) ", cache: ${gres.groupsCached} of ${groupIdx.size} groups reused" else ", cache off"}, GC ${runtimeStat("art.gc.gc-time") - gcT0} ms in ${runtimeStat("art.gc.gc-count") - gcN0} collections, ${runtimeStat("art.gc.blocking-gc-time") - gcB0} ms blocking)" +
             ", cpu: parse ${gres.parseMs / 1000}s + analysis ${gres.analyseMs / 1000}s (summed over threads)" +
             (if (gres.groupsRetried > 0) ", ${gres.groupsRetried} group(s) re-run for memory" else "")
         // 0.66.5: where taint is lost, which caps were hit, which methods are slowest (measurement only, no result changes)
@@ -3184,7 +3185,7 @@ class MainActivity : Activity() {
             setOnClickListener { prefs().edit().putBoolean("ssa_cache", !prefs().getBoolean("ssa_cache", true)).apply(); text = lbl() }
         })
         box.addView(TextView(this).apply {
-            text = "Big apps only. The result of every analysed group is kept, so a second Deep scan of the same app (or after editing one class) analyses only the groups whose classes, entry points or earlier findings changed. The cache belongs to the loaded APK and to this app version. Turn it off to force a full analysis."
+            text = "Big apps only. The result of every analysed group is kept, so a second Deep scan of the same app (or after editing one class) analyses only the groups whose classes, entry points or earlier findings changed. The cache is kept per class content and per installed build of this app (a new build starts empty); picking the same APK again keeps it. Turn it off to force a full analysis."
             textSize = 12f
         })
         box.addView(Button(this).apply {
@@ -4355,6 +4356,9 @@ class MainActivity : Activity() {
         override fun manifest() = agentManifest()
         override fun findings(limit: Int, minSeverity: String) = agentFindings(limit, minSeverity)
         override fun entryPoints() = agentEntryPoints()
+        override fun searchAssets(query: String, max: Int): String = try {
+            if (entries.isEmpty()) "error: no APK is loaded" else ZipFile(apkFile).use { AssetScanner.search(it, query, max) }
+        } catch (t: Throwable) { "error: " + (t.message ?: t.javaClass.simpleName) }
         override fun callers(name: String, method: String, limit: Int) = agentCallers(name, method, limit)
         override fun callees(name: String, method: String, limit: Int) = agentCallees(name, method, limit)
         override fun flowPath(finding: String) = agentFlowPath(finding)

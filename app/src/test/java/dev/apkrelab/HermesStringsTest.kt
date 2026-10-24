@@ -22,7 +22,7 @@ class HermesStringsTest {
     private val token = "sk_test_51OuEMLAlTWGaDypq4P5cuDHbuKeG4tAGPYHJpEXQ7zE8mKK3jkhTFPvCxnSSK5zB5EQZrJsYdsatNmAHGgb0vSKD00GTMSWRHs"
 
     /** (text, stored as UTF-16). Functions are not needed for the string table, so the function table is empty. */
-    private fun hbc(strings: List<Pair<String, Boolean>>, version: Int = 96, fileLengthDelta: Int = 0, storageExtra: Int = 0): ByteArray {
+    private fun hbc(strings: List<Pair<String, Boolean>>, version: Int = 96, fileLengthDelta: Int = 0, storageExtra: Int = 0, tail: Int = 0): ByteArray {
         val storage = java.io.ByteArrayOutputStream()
         class E(val utf16: Boolean, val off: Int, val len: Int)
         val es = strings.map { (s, u) -> val b = if (u) s.toByteArray(Charsets.UTF_16LE) else s.toByteArray(Charsets.ISO_8859_1); val e = E(u, storage.size(), s.length); storage.write(b); e }
@@ -31,7 +31,7 @@ class HermesStringsTest {
         var off = al(128); off = al(off + 4)                       // no functions; one string-kind entry
         val smallAt = off; off = al(off + 4 * es.size)
         val overflowAt = off; off = al(off + 8 * overflow.size)
-        val storageAt = off; val total = storageAt + storage.size() + storageExtra + 20
+        val storageAt = off; val total = storageAt + storage.size() + storageExtra + tail + 20     // tail = the function bytecode that follows the strings
         val bb = ByteBuffer.allocate(total).order(ByteOrder.LITTLE_ENDIAN)
         bb.put(byteArrayOf(0xC6.toByte(), 0x1F, 0xBC.toByte(), 0x03, 0xC1.toByte(), 0x03, 0x19, 0x1F)); bb.putInt(version)
         bb.position(32); bb.putInt(total + fileLengthDelta); bb.putInt(0); bb.putInt(0)          // fileLength, globalCodeIndex, functionCount
@@ -110,5 +110,20 @@ class HermesStringsTest {
         assertTrue(old.none { it.ruleId == "assets-secrets" }); assertTrue(old.first { it.ruleId == "assets-hermes" }.let { it.title.contains("NOT scanned") && it.detail.contains("version 94") })
         val broken = scan(hbc(listOf(token to false), fileLengthDelta = 8))
         assertTrue(broken.none { it.ruleId == "assets-secrets" }); assertTrue(broken.first { it.ruleId == "assets-hermes" }.detail.contains("not self-consistent"))
+    }
+
+    // 0.104.1: a production bundle is often over the 10 MB cap; its strings come before the function bytecode, so only that prefix is read
+    @Test fun aHermesBundleOverTheSizeCapIsReadUpToItsStringStorage() {
+        val big = hbc(listOf("createElement" to false, token to false), tail = 10_500_000)
+        val need = HermesStrings.prefixNeeded(big.copyOf(128), big.size.toLong())!!
+        assertTrue(need < 1000)                                                                             // the strings end a few hundred bytes into a 10.5 MB file
+        assertEquals(listOf("createElement", token), HermesStrings.read(big.copyOf(need.toInt()), big.size.toLong())!!.strings)
+        assertNull(HermesStrings.read(big.copyOf(need.toInt() - 1), big.size.toLong()))                    // one byte short of the storage: refused
+        assertNull(HermesStrings.prefixNeeded(big.copyOf(128), big.size.toLong() + 1))                      // the header's length must be the entry's
+        val f = scan(big)
+        assertEquals(1, f.count { it.ruleId == "assets-secrets" }); assertTrue(f.first { it.ruleId == "assets-hermes" }.title.contains("string table was scanned"))
+        // twin: a PLAIN text bundle over the cap is still skipped (it would have to be read whole)
+        val plain = ("var t=\"$token\";" + " ".repeat(10_500_000)).toByteArray()
+        assertTrue(scan(plain).none { it.ruleId == "assets-secrets" || it.ruleId == "assets-hermes" })
     }
 }

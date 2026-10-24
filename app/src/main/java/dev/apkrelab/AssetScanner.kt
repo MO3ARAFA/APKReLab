@@ -16,6 +16,7 @@ import java.util.zip.ZipFile
 object AssetScanner {
     private const val MAX_FILE = 3_000_000L
     private const val MAX_BUNDLE = 10_000_000L          // a React Native bundle is one big text file
+    private const val MAX_HERMES_PREFIX = 48_000_000L   // 0.104.1: a Hermes bundle is read only up to the end of its string storage, whatever the file size
     private const val MAX_TOTAL = 48_000_000L
     private const val MAX_FILES = 600
     private const val MAX_MILLIS = 20_000L
@@ -40,11 +41,23 @@ object AssetScanner {
     private fun ext(n: String): String = n.substringAfterLast('/').let { if (it.contains('.')) it.substringAfterLast('.').lowercase() else "" }
 
     /** Hermes bytecode: magic 0x1F1903C103BC1FC6 (little endian), then the bytecode version. */
-    internal fun hermesVersion(head: ByteArray): Int? {   // the magic and the version; HermesStrings reads the table
-        if (head.size < 12) return null
-        val magic = byteArrayOf(0xC6.toByte(), 0x1F, 0xBC.toByte(), 0x03, 0xC1.toByte(), 0x03, 0x19, 0x1F)
-        for (i in 0 until 8) if (head[i] != magic[i]) return null
-        return (head[8].toInt() and 255) or ((head[9].toInt() and 255) shl 8) or ((head[10].toInt() and 255) shl 16) or ((head[11].toInt() and 255) shl 24)
+    /** Hermes bytecode: the magic and the version (see HermesStrings). */
+    internal fun hermesVersion(head: ByteArray): Int? = HermesStrings.version(head)
+
+    private fun hasNul(b: ByteArray, n: Int): Boolean { for (i in 0 until minOf(n, b.size)) if (b[i].toInt() == 0) return true; return false }
+
+    /** [head] followed by the next bytes of [ins], in ONE array of [total] bytes (a big prefix must not exist twice in a 512 MB heap). */
+    private fun readRest(ins: java.io.InputStream, head: ByteArray, total: Int): ByteArray {
+        val out = ByteArray(total); System.arraycopy(head, 0, out, 0, minOf(head.size, total)); var got = minOf(head.size, total)
+        while (got < total) { val r = ins.read(out, got, total - got); if (r < 0) break; got += r }
+        return if (got == total) out else out.copyOf(got)
+    }
+
+    /** Up to [n] bytes from [ins] (fewer only at the end of the stream). */
+    private fun readUpTo(ins: java.io.InputStream, n: Int): ByteArray {
+        val out = ByteArray(maxOf(0, n)); var got = 0
+        while (got < out.size) { val r = ins.read(out, got, out.size - got); if (r < 0) break; got += r }
+        return if (got == out.size) out else out.copyOf(got)
     }
 
     class Result(val findings: List<Finding>, val stats: String)
@@ -95,14 +108,27 @@ object AssetScanner {
             if (skipName.containsMatchIn(name)) continue
             if (x !in textExt && !bundleLike) { binary++; continue }
             val cap = if (bundleLike) MAX_BUNDLE else MAX_FILE
-            if (e.size > cap) { skippedBig++; continue }
-            val bytes = try { zip.getInputStream(e).use { it.readBytes() } } catch (_: Throwable) { RuleRegistry.noteError("assets-read"); continue }
+            // 0.104.1: a bundle over the cap was skipped without a word (production React Native bundles are often 15-40 MB). If it is Hermes bytecode, only the header, the tables
+            // and the string storage are needed, and they come first: read that prefix. Anything else over the cap is still skipped (and counted).
+            val bytes = if (e.size <= cap) {
+                try { zip.getInputStream(e).use { it.readBytes() } } catch (_: Throwable) { RuleRegistry.noteError("assets-read"); continue }
+            } else if (bundleLike) {
+                val pre = try {
+                    zip.getInputStream(e).use { ins ->
+                        val head = readUpTo(ins, 128)
+                        val need = HermesStrings.prefixNeeded(head, e.size)
+                        if (need == null || need > MAX_HERMES_PREFIX) null else readRest(ins, head, need.toInt())
+                    }
+                } catch (_: Throwable) { RuleRegistry.noteError("assets-read"); null }
+                if (pre == null) { skippedBig++; continue }
+                pre
+            } else { skippedBig++; continue }
             total += bytes.size
-            val hv = hermesVersion(bytes)
+            val hv = HermesStrings.version(bytes)
             if (hv != null) {
                 hybrid = true
                 // 0.104.0: the string table of a version-96 file is read (no function is decoded) and goes through the same checks as a text bundle
-                val hs = HermesStrings.read(bytes)
+                val hs = HermesStrings.read(bytes, if (e.size >= 0) e.size else bytes.size.toLong())
                 if (hs != null) {
                     hybridKinds.add("React Native (Hermes bytecode v$hv, string table scanned)")
                     for (str in hs.strings) {
@@ -125,7 +151,7 @@ object AssetScanner {
                 }
                 continue
             }
-            if (bytes.take(1024).any { it.toInt() == 0 }) { binary++; continue }
+            if (hasNul(bytes, 1024)) { binary++; continue }
             read++
             val text = String(bytes, Charsets.UTF_8)
             if (bundleLike && x != "json") { hybrid = true; hybridKinds.add("React Native JS bundle (plain text)") }
@@ -176,6 +202,60 @@ object AssetScanner {
             i = b + 2
         }
         return sb.toString().replace(Regex("(?m)^\\s*//.*$"), "")
+    }
+
+    /**
+     * 0.104.1: the agent's `search_assets` tool. `search_code` reads smali only; the JavaScript / web / config layer under assets/ (and the string table of a Hermes bundle) was
+     * invisible to the agent. Same reading rules as [scan]: text files under the caps, licence files skipped, a Hermes bundle read up to its string storage. Case-insensitive,
+     * at most 5 hits per file and [max] in all, each with about 80 characters around it.
+     */
+    fun search(zip: ZipFile, query: String, max: Int): String {
+        val q = query.trim()
+        if (q.length < 3) return "error: the query must be at least 3 characters"
+        val out = ArrayList<String>(); var files = 0; var hermes = 0; var skipped = 0
+        loop@ for (e in zip.entries()) {
+            val name = e.name
+            if (e.isDirectory || !name.startsWith("assets/") || skipName.containsMatchIn(name)) continue
+            val x = ext(name)
+            val bundleLike = name.endsWith(".bundle") || name.endsWith(".jsbundle") || name.contains("index.android")
+            if (x !in textExt && !bundleLike) continue
+            val bytes = try {
+                zip.getInputStream(e).use { ins ->
+                    if (e.size in 0..(if (bundleLike) MAX_BUNDLE else MAX_FILE)) ins.readBytes()
+                    else if (bundleLike) { val head = readUpTo(ins, 128); val need = HermesStrings.prefixNeeded(head, e.size); if (need == null || need > MAX_HERMES_PREFIX) null else readRest(ins, head, need.toInt()) }
+                    else null
+                }
+            } catch (_: Throwable) { null }
+            if (bytes == null) { skipped++; continue }
+            files++
+            var inFile = 0
+            if (HermesStrings.version(bytes) != null) {
+                val hs = HermesStrings.read(bytes, if (e.size >= 0) e.size else bytes.size.toLong())
+                if (hs == null) { skipped++; continue }
+                hermes++
+                for ((i, str) in hs.strings.withIndex()) {
+                    if (!str.contains(q, ignoreCase = true)) continue
+                    out.add("$name [Hermes string #$i]: " + str.take(200).replace('\n', ' '))
+                    if (++inFile >= 5 || out.size >= max) break
+                }
+            } else {
+                if (hasNul(bytes, 1024)) { skipped++; continue }
+                val text = String(bytes, Charsets.UTF_8)
+                var at = text.indexOf(q, 0, ignoreCase = true)
+                var line = 1; var counted = 0                    // line number counted forward, no copy of the text
+                while (at >= 0 && inFile < 5 && out.size < max) {
+                    val a = maxOf(0, at - 80); val b = minOf(text.length, at + q.length + 80)
+                    while (counted < at) { if (text[counted] == '\n') line++; counted++ }
+                    out.add("$name:$line: " + (if (a > 0) "…" else "") + text.substring(a, b).replace('\n', ' ').replace('\r', ' ') + (if (b < text.length) "…" else ""))
+                    inFile++
+                    at = text.indexOf(q, at + q.length, ignoreCase = true)
+                }
+            }
+            if (out.size >= max) break@loop
+        }
+        val head = "search_assets \"$q\": ${out.size} hit(s) in $files asset file(s) read" + (if (hermes > 0) " ($hermes Hermes string table(s))" else "") + (if (skipped > 0) ", $skipped skipped (binary, over the size cap, or an unreadable Hermes version)" else "") +
+            (if (out.size >= max) ", stopped at $max" else "") + "."
+        return if (out.isEmpty()) head + " Nothing under assets/ contains it (the Java / Kotlin code is searched with search_code)." else head + "\n" + out.joinToString("\n")
     }
 
     private fun cordovaConfig(path: String, xml: String): List<Finding> {

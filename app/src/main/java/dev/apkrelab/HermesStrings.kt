@@ -32,12 +32,35 @@ object HermesStrings {
         return u32(b, 8).toInt()
     }
 
+    /**
+     * 0.104.1: how many bytes from the start of the file hold the header, the tables and the whole string storage (the function bytecode comes after them), from the 128-byte header
+     * alone; null when [head] is not a version-96 header or the sections do not fit in [fileSize]. A big bundle is read only up to there instead of being skipped.
+     */
+    fun prefixNeeded(head: ByteArray, fileSize: Long): Long? {
+        val v = version(head) ?: return null
+        if (v != SUPPORTED_VERSION || head.size < HEADER) return null
+        if (u32(head, 32) != fileSize) return null
+        val functionCount = u32(head, 40); val stringKindCount = u32(head, 44); val identifierCount = u32(head, 48)
+        val stringCount = u32(head, 52); val overflowCount = u32(head, 56); val storageSize = u32(head, 60)
+        var off = align4(HEADER.toLong())
+        off = align4(off + functionCount * FUNC_HEADER)
+        off = align4(off + stringKindCount * 4)
+        off = align4(off + identifierCount * 4)
+        off = align4(off + stringCount * 4)
+        off = align4(off + overflowCount * 8)
+        val end = off + storageSize
+        return if (end <= fileSize) end else null
+    }
+
     /** Up to [max] strings of at most [maxLen] characters (longer ones are cut), in table order; null when the file is not a consistent version-96 file. */
-    fun read(b: ByteArray, max: Int = 400_000, maxLen: Int = 2000): Result? {
+    fun read(b: ByteArray, max: Int = 400_000, maxLen: Int = 2000): Result? = read(b, b.size.toLong(), max, maxLen)
+
+    /** The same for the first bytes [b] of a file of [fileSize] bytes: [b] must reach the end of the string storage (see [prefixNeeded]). */
+    fun read(b: ByteArray, fileSize: Long, max: Int = 400_000, maxLen: Int = 2000): Result? {
         val v = version(b) ?: return null
-        if (v != SUPPORTED_VERSION || b.size < HEADER + 20) return null
+        if (v != SUPPORTED_VERSION || b.size < HEADER || fileSize < HEADER + 20) return null
         val fileLength = u32(b, 32)
-        if (fileLength != b.size.toLong()) return null                         // the header's own length must be the file's
+        if (fileLength != fileSize) return null                                  // the header's own length must be the file's
         val functionCount = u32(b, 40); val stringKindCount = u32(b, 44); val identifierCount = u32(b, 48)
         val stringCount = u32(b, 52); val overflowCount = u32(b, 56); val storageSize = u32(b, 60)
         if (functionCount > fileLength / FUNC_HEADER || stringCount > fileLength || overflowCount > stringCount || stringKindCount > fileLength || identifierCount > fileLength) return null
@@ -50,7 +73,7 @@ object HermesStrings {
         val overflowAt = off
         off = align4(off + overflowCount * 8)
         val storageAt = off
-        if (storageAt + storageSize > fileLength) return null
+        if (storageAt + storageSize > fileLength || storageAt + storageSize > b.size) return null
         val out = ArrayList<String>(minOf(stringCount, max.toLong()).toInt())
         for (i in 0 until minOf(stringCount, max.toLong()).toInt()) {
             val e = u32(b, (smallAt + 4L * i).toInt())
