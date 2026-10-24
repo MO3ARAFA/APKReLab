@@ -80,6 +80,26 @@ class SplitApksTest {
         assertTrue(none, none.contains("No certificate pinning material"))
     }
 
+    // 0.107.0: root / instrumentation / debugger checks in a native library reach the posture table
+    @Test fun nativeRootAndHookChecksAreInThePostureTable(): Unit = guarded { try { nativeChecks() } finally { PostureScanner.clearApk(); PostureScanner.clear() } }
+
+    private fun nativeChecks() {
+        PostureScanner.clear(); PostureScanner.clearApk()
+        val base = zip("base.apk", mapOf("classes.dex" to ByteArray(8)))
+        NativeScanner.extraArchives = listOf(zip("split_config.arm64_v8a.apk", mapOf(
+            "lib/arm64-v8a/libguard.so" to ElfTestBuilder.build(rodata = listOf("/system/xbin/su", "frida-server", "/proc/self/status TracerPid")),
+            "lib/arm64-v8a/libflutter.so" to ElfTestBuilder.build(rodata = listOf("/sbin/su")),
+            "lib/arm64-v8a/libdays.so" to ElfTestBuilder.build(rodata = listOf("FRIDAY", "Friday night", "superuser mode")))))
+        scan(base)
+        fun row(id: String) = PostureScanner.rows().first { it.sig.id == id }
+        assertEquals(listOf("lib/arm64-v8a/libguard.so (native)"), row("root-paths").obf)
+        assertEquals(listOf("lib/arm64-v8a/libflutter.so (native)"), row("root-paths").lib)             // a known third-party library counts as library
+        assertEquals(listOf("lib/arm64-v8a/libguard.so (native)"), row("hooking").obf)                  // twin: libdays' FRIDAY is not frida
+        assertEquals(listOf("lib/arm64-v8a/libguard.so (native)"), row("debugger").obf)
+        PostureScanner.clear(); assertEquals(1, row("hooking").obf.size)                                 // the deep scan's clear() keeps the APK's native hits
+        PostureScanner.clearApk(); assertTrue(row("hooking").obf.isEmpty())                              // the next APK does not
+    }
+
     @Test fun aBundleIsRecognisedAndItsApksExtractedWithSafeNames() {
         val apk = zip("a.apk", mapOf("classes.dex" to ByteArray(4), "AndroidManifest.xml" to ByteArray(4)))
         val bundle = zip("app.apks", mapOf("base-master.apk" to apk.readBytes(), "splits/split_config.arm64_v8a.apk" to ByteArray(10), "../../evil.apk" to ByteArray(3), "toc.pb" to ByteArray(2)))

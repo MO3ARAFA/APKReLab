@@ -43,3 +43,6 @@ decoded/
 # ---- OS
 .DS_Store
 Thumbs.db
+
+# local toolchain (R8 jar and other downloads), never tracked
+/tools/bin/

@@ -95,7 +95,7 @@ object PostureScanner {
     fun clear() { StringOverlay.current?.resetStats(); hits.clear(); scopes.clear(); withSource.set(0); withLines.set(0); appClasses.set(0); strEnc.set(0); reflMarshal.set(0); decryptCalls.clear() }
 
     /** 0.103.1: the network security config facts belong to the LOADED APK (the resource scan sets them once, in the background): reset them when an APK is loaded, NOT at the start of every Deep scan (that wiped them whenever the resource scan had finished first, and the report said "not checked" for the same APK). */
-    fun clearApk() { nscPins = null; nscDeclared = null; declaredNames = emptySet(); sdkTypes = emptySet() }
+    fun clearApk() { nscPins = null; nscDeclared = null; declaredNames = emptySet(); sdkTypes = emptySet(); nativeHits.clear() }
 
     /** Called with the text of every class the FULL deep scan reads (not by a single-class review: that would count a class twice). */
     fun observe(classType: String, text: String, appPkg: String) {
@@ -131,8 +131,27 @@ object PostureScanner {
 
     class Row(val sig: Sig, val app: List<String>, val obf: List<String>, val lib: List<String>)
 
+    /**
+     * 0.107.0: root / instrumentation / debugger checks done in a NATIVE library (the strings of its data sections; NativeScanner calls this for every .so it reads). A protected app
+     * can do these checks in C, and the table said "not detected" when the Java side had none. Kept per APK (the deep scan's clear() does not drop them: the resource scan that reads
+     * the libraries may finish first). A recognised third-party library counts as library, any other .so as origin unknown (an SDK or the app). Measured: 0 hits in the 27 corpus
+     * apps with native libraries (39 APKs).
+     */
+    fun observeNative(libPath: String, str: String, thirdParty: Boolean) {
+        val ids = ArrayList<String>(2)
+        if (suPaths.any { str.contains(it) } || rootPkgs.any { str.contains(it) }) ids.add("root-paths")
+        if (hookRegex.containsMatchIn(str.lowercase())) ids.add("hooking")
+        if (str.contains("TracerPid")) ids.add("debugger")
+        for (id in ids) {
+            val list = nativeHits.getOrPut(id) { java.util.Collections.synchronizedList(ArrayList()) }
+            val name = "$libPath (native)"
+            if (list.none { it.type == name } && list.size < 50) list.add(Hit(name, if (thirdParty) Origin.LIB else Origin.OBF))
+        }
+    }
+    private val nativeHits = ConcurrentHashMap<String, MutableList<Hit>>()
+
     fun rows(): List<Row> = signals.map { s ->
-        val h = (hits[s.id]?.toList() ?: emptyList()).map { if (it.origin == Origin.OBF && it.type in sdkTypes) Hit(it.type, Origin.LIB) else if (it.origin == Origin.OBF && boundByName(it.type)) Hit(it.type, Origin.APP) else it }
+        val h = ((hits[s.id]?.toList() ?: emptyList()) + (nativeHits[s.id]?.toList() ?: emptyList())).map { if (it.origin == Origin.OBF && it.type in sdkTypes) Hit(it.type, Origin.LIB) else if (it.origin == Origin.OBF && boundByName(it.type)) Hit(it.type, Origin.APP) else it }
         Row(s, h.filter { it.origin == Origin.APP }.map { it.type }, h.filter { it.origin == Origin.OBF }.map { it.type }, h.filter { it.origin == Origin.LIB }.map { it.type })
     }
 

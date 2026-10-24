@@ -138,11 +138,15 @@ object NativeScanner {
 
         // ---- credentials in the data sections
         val seen = HashSet<String>()
-        if (SecretFormats.loaded()) for (l in libs) {
+        val secrets = SecretFormats.loaded()
+        for (l in libs) {
             val src = l.source ?: zip
             val bytes = try { src.getInputStream(src.getEntry(l.path)).use { it.readBytes() } } catch (_: Throwable) { continue }
-            ElfAnalyzer.forEachString(bytes, 12) { s ->
+            val third = isThirdParty(l.name)
+            ElfAnalyzer.forEachString(bytes, 8) { s ->
                 if (s.length > 2000) return@forEachString
+                try { PostureScanner.observeNative(l.path, s, third) } catch (_: Throwable) { }       // 0.107.0: native root / hooking / debugger checks
+                if (s.length < 12 || !secrets) return@forEachString
                 for (h in SecretFormats.scan(s)) {
                     if (SecretFormats.looksLikePlaceholder(h.secret) || !seen.add(l.name + h.ruleId + h.secret)) continue
                     out.add(f(Severity.HIGH, "native-secrets", "Hardcoded credential in a native library: " + h.desc.take(60).trimEnd('.', ' '),
