@@ -261,7 +261,7 @@ public final class IrStress {
                     break;
                 case SWITCH:
                     if (in.labels.length == 0 || !m.payloads.containsKey(in.labels[0])) {
-                        r.warn("switch without payload", cls, name, in.text);
+                        r.warn("switch without payload", cls, name, in.text());
                     }
                     break;
                 default:
@@ -292,18 +292,18 @@ public final class IrStress {
             for (int i = b.first; i <= b.last; i++) {
                 Insn in = m.insns.get(i);
                 SsaForm.Value[] us = s.usesOf(in), ds = s.defsOf(in);
-                if (us.length != in.uses.length) throw new IllegalStateException("uses length " + in.text);
+                if (us.length != in.uses.length) throw new IllegalStateException("uses length " + in.text());
                 if (!(b.defersLast && i == b.last) && ds.length != in.defs.length) {
-                    throw new IllegalStateException("defs length " + in.text);
+                    throw new IllegalStateException("defs length " + in.text());
                 }
                 for (SsaForm.Value v : us) {
-                    if (v == null) throw new IllegalStateException("null use in " + in.text);
+                    if (v == null) throw new IllegalStateException("null use in " + in.text());
                     if (v.entry && !v.param) {
                         r.undefinedReads++;
-                        r.warn("register read before any write", cls, name, in.text);
+                        r.warn("register read before any write", cls, name, in.text());
                     }
                 }
-                for (SsaForm.Value v : ds) if (v == null) throw new IllegalStateException("null def in " + in.text);
+                for (SsaForm.Value v : ds) if (v == null) throw new IllegalStateException("null def in " + in.text());
             }
         }
     }

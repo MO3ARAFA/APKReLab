@@ -52,8 +52,8 @@ public final class Cfg {
         public final boolean pseudo;
         public Insn deferredFrom;         // pseudo block: the instruction whose results are written here
         public boolean defersLast;        // real block: its last instruction's defs live in the pseudo successor
-        public final List<Edge> succs = new ArrayList<>();
-        public final List<Edge> preds = new ArrayList<>();
+        public List<Edge> succs = new ArrayList<>();      // read-only after build (0.104.3: compacted by releaseConstruction)
+        public List<Edge> preds = new ArrayList<>();
         public boolean reachable;
 
         BasicBlock(int id, int first, int last, boolean pseudo) {
@@ -102,10 +102,24 @@ public final class Cfg {
         domChildren = null;
         df = null;
         for (BasicBlock b : blocks) {
-            ((ArrayList<Edge>) b.succs).trimToSize();
-            ((ArrayList<Edge>) b.preds).trimToSize();
+            b.succs = compact(b.succs);
+            b.preds = compact(b.preds);
         }
         ((ArrayList<BasicBlock>) blocks).trimToSize();
+    }
+
+    /**
+     * 0.104.3: a read-only list of the same elements in the same order, as small as Java gets: no object for an empty list (the shared one), one 16-byte object and no array
+     * for one element (most blocks have one predecessor and one or two successors; a trimmed ArrayList of one is 48 bytes), a fixed-size view of a plain array otherwise
+     * (40 bytes for two instead of 48). Nobody writes these lists after construction.
+     */
+    @SuppressWarnings("unchecked")
+    static <T> List<T> compact(List<T> l) {
+        switch (l.size()) {
+            case 0: return java.util.Collections.emptyList();
+            case 1: return java.util.Collections.singletonList(l.get(0));
+            default: return (List<T>) java.util.Arrays.asList(l.toArray());
+        }
     }
 
     public BasicBlock blockOfInsn(int insnIndex) {

@@ -26,7 +26,7 @@ public class SmaliParserEquivalenceTest {
             sb.append("M ").append(m.owner).append('|').append(m.name).append('|').append(m.desc).append('|').append(m.flags).append('|').append(m.isStatic).append('|').append(m.ins).append('|')
                 .append(m.locals).append('|').append(m.startOffset).append('|').append(m.startLine).append('\n');
             for (Insn in : m.insns) {
-                sb.append(' ').append(in.index).append('|').append(in.op).append('|').append(in.kind).append('|').append(in.offset).append('|').append(in.line).append('|').append(in.text)
+                sb.append(' ').append(in.index).append('|').append(in.op).append('|').append(in.kind).append('|').append(in.offset).append('|').append(in.line).append('|').append(in.text())
                     .append('|').append(in.ref).append('|').append(java.util.Arrays.toString(in.defs)).append('|').append(java.util.Arrays.toString(in.uses)).append('|')
                     .append(java.util.Arrays.toString(in.labels)).append('|').append(in.hasResult).append('\n');
             }

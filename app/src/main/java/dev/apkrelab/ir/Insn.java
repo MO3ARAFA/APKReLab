@@ -21,7 +21,8 @@ public final class Insn {
     public final Kind kind;
     public final int offset;     // char offset of the line inside the class text (same coordinate as Finding.at)
     public final int line;       // 1-based line number inside the class text
-    public final String text;    // the trimmed source line
+    private String head;         // the trimmed source line; after compact(), only the part before ref when the line ends with it (see text())
+    private boolean refTail;     // text() = head + ref
     public int[] defs = NO_REGS;
     public int[] uses = NO_REGS;
     public String ref = "";      // method / field / type reference, or the literal of a const (strings keep their quotes)
@@ -34,7 +35,29 @@ public final class Insn {
         this.kind = kind;
         this.offset = offset;
         this.line = line;
-        this.text = text;
+        this.head = text;
+    }
+
+    /** The trimmed source line, exactly as written. */
+    public String text() {
+        return refTail ? head + ref : head;
+    }
+
+    /**
+     * 0.104.3: every instruction kept its whole source line plus a second copy of its reference, about 80 bytes per instruction, the biggest share of a group's live heap.
+     * The line always ends with the reference (measured on 1.06 M instructions of two real apps: no exception), and the parts repeat across a whole app (5 times for the
+     * line before the reference, 4.5 times for the reference): both go through the shared table of {@link Canon}, so equal parts are mostly one object.
+     * Called by {@link SmaliParser} once the instruction is complete; {@link #text()} still returns the line exactly.
+     */
+    void compact() {
+        if (!ref.isEmpty() && head.endsWith(ref)) {
+            head = Canon.of(head.substring(0, head.length() - ref.length()));
+            refTail = true;
+        } else {
+            head = Canon.of(head);
+        }
+        ref = Canon.of(ref);
+        for (int i = 0; i < labels.length; i++) labels[i] = Canon.of(labels[i]);
     }
 
     // ---------- invoke helpers ----------
@@ -99,7 +122,7 @@ public final class Insn {
 
     @Override
     public String toString() {
-        return index + ": " + text;
+        return index + ": " + text();
     }
 
     // ---------- opcode tables ----------

@@ -44,7 +44,7 @@ public class ParseBench {
             h = mix(h, m.owner); h = mix(h, m.name); h = mix(h, m.desc); h = mix(h, m.flags); h = mix(h, m.isStatic ? 1 : 0); h = mix(h, m.ins); h = mix(h, m.locals);
             h = mix(h, m.startOffset); h = mix(h, m.startLine);
             for (Insn in : m.insns) {
-                h = mix(h, in.index); h = mix(h, in.op); h = mix(h, in.kind.ordinal()); h = mix(h, in.offset); h = mix(h, in.line); h = mix(h, in.text);
+                h = mix(h, in.index); h = mix(h, in.op); h = mix(h, in.kind.ordinal()); h = mix(h, in.offset); h = mix(h, in.line); h = mix(h, in.text());
                 h = mix(h, in.ref); h = mix(h, in.defs); h = mix(h, in.uses); h = mix(h, in.hasResult ? 1 : 0);
                 if (in.labels != null) for (String l : in.labels) h = mix(h, l);
             }

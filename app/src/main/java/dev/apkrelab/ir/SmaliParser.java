@@ -99,7 +99,7 @@ public final class SmaliParser {
             char c0 = line.charAt(0);
             if (c0 == '#') continue;
             if (c0 == ':') {
-                lastLabel = line;
+                lastLabel = line = Canon.of(line);       // 0.104.3: the same label string as the instructions' targets (Insn.compact)
                 m.labels.put(line, m.insns.size());
                 continue;
             }
@@ -499,6 +499,7 @@ public final class SmaliParser {
             default:
                 break; // NOP, OTHER
         }
+        in.compact();
         return in;
     }
 

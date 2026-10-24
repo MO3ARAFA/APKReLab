@@ -257,7 +257,7 @@ public final class SsaBridge {
             if (m == null) continue;
             boolean lastIndex = false, substring = false, slash = false, replaceChar = false;
             for (Insn in : m.insns) {
-                String t = in.text;
+                String t = in.text();
                 if (t.contains("Ljava/lang/String;->lastIndexOf(")) lastIndex = true;
                 else if (t.contains("Ljava/lang/String;->substring(I)Ljava/lang/String;")) substring = true;
                 else if (t.contains("Ljava/lang/String;->replace(CC)Ljava/lang/String;")) replaceChar = true;
@@ -279,7 +279,7 @@ public final class SsaBridge {
             if (!seen.add(k)) continue;
             MethodIr m = g.methods.get(k);
             if (m == null) continue;
-            for (Insn in : m.insns) if (VALIDATION.matcher(in.text).find()) return true;
+            for (Insn in : m.insns) if (VALIDATION.matcher(in.text()).find()) return true;
         }
         return false;
     }

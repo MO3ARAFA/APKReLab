@@ -94,7 +94,7 @@ public final class SsaForm {
         if (s != null) return s;
         s = build(m);
         s.cfg.releaseConstruction();                 // 0.104.2: what only the construction needed (see Cfg.releaseConstruction)
-        for (List<Phi> l : s.phis) if (l instanceof ArrayList) ((ArrayList<Phi>) l).trimToSize();
+        for (int i = 0; i < s.phis.length; i++) s.phis[i] = Cfg.compact(s.phis[i]);     // 0.104.3: most blocks have no phi
         m.ssaRef = new java.lang.ref.SoftReference<>(s);
         return s;
     }

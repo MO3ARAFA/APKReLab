@@ -42,7 +42,7 @@ Expected effect: an identical re-scan skips every group (plan only); a strings o
 class text (already read by the planner). Risk: a stale key. Test: change one class -> only its groups re-run; flip the engine version -> nothing is reused;
 mutation: drop the entry set from the key -> a test that changes entries must fail.
 
-**A2. Less garbage in the parser.** 57% of allocation sits under regex in `SmaliParser` / `CallSkeleton`. A hand-written line scanner for the hot patterns
+**A2. Less garbage in the parser.** (0.103.0: hand-written scanner; 0.104.3: instruction strings shared, edge / phi lists compact: peak live -19..-27%, see PERF.md.) 57% of allocation sits under regex in `SmaliParser` / `CallSkeleton`. A hand-written line scanner for the hot patterns
 (invoke, const-string, field refs) plus interning of type / method descriptors. Measure first: JFR allocation profile at `-Xmx1000m` on Axis Pay; target
 metric = GC time and full GCs, then wall time. Same output required byte for byte: `ClassIr` dump of 1,000 classes before / after.
 
