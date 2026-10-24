@@ -121,7 +121,7 @@ class PostureScannerTest {
     }
 
     @Test fun stringEncryptionAndReflectionMarshallingAreReportedOnlyWhenWidespread() {                  // a wallet app obfuscated by a commercial tool: the decrypt method is in most classes
-        PostureScanner.clear()
+        PostureScanner.clear(); PostureScanner.clearApk()
         val enc = ".class public Lcom/x/A%d;\n.super Ljava/lang/Object;\n.method private static a([I[BZ[Ljava/lang/Object;)V\n    .locals 1\n    return-void\n.end method\n"
         val refl = ".class public Lcom/x/B%d;\n.super Ljava/lang/Object;\n.method public m()V\n    .locals 2\n    invoke-static/range {v1 .. v7}, LSpace;->ICustomTabsCallback(ICIIZLjava/lang/String;[Ljava/lang/Class;)Ljava/lang/Object;\n    return-void\n.end method\n"
         for (i in 1..25) { PostureScanner.observe("Lcom/x/A$i;", enc.format(i), "com.x"); PostureScanner.observe("Lcom/x/B$i;", refl.format(i), "com.x") }
@@ -130,7 +130,7 @@ class PostureScannerTest {
         PostureScanner.clear()
         for (i in 1..25) PostureScanner.observe("Lcom/x/C$i;", ".class public Lcom/x/C$i;\n.super Ljava/lang/Object;\n.method public m()V\n    .locals 1\n    return-void\n.end method\n", "com.x")
         assertFalse(PostureScanner.section().contains("String encryption"))                                  // twin: ordinary classes
-        PostureScanner.clear(); PostureScanner.nscDeclared = false
+        PostureScanner.clear(); PostureScanner.clearApk(); PostureScanner.nscDeclared = false
         assertTrue(PostureScanner.section().contains("no network security config declared"))
         PostureScanner.nscDeclared = true
         assertTrue(PostureScanner.section().contains("not checked: no network security config was read"))
@@ -155,5 +155,20 @@ class PostureScannerTest {
         PostureScanner.observe("Lcom/x/Big;", callsClass("Lvs/C;->d", 300), "com.x")                               // twin: an ordinary helper (the corpus maximum is 292)
         assertFalse(PostureScanner.section().contains("String decryption table"))
     }
-}
 
+    // 0.103.1 (two device reports of the same APK: "not checked" in one, "no network security config declared" in the other): a Deep scan must not wipe what the resource scan found
+    @Test fun aDeepScanStartDoesNotWipeTheNetworkSecurityConfigFacts() {
+        try {
+            PostureScanner.nscDeclared = false; PostureScanner.nscPins = null
+            PostureScanner.clear()                                                     // what every Deep scan does first
+            assertEquals(false, PostureScanner.nscDeclared)
+            assertTrue(PostureScanner.section().contains("no network security config declared"))
+            PostureScanner.nscDeclared = true; PostureScanner.nscPins = false
+            PostureScanner.clear()
+            assertEquals(false, PostureScanner.nscPins); assertEquals(true, PostureScanner.nscDeclared)
+            PostureScanner.clearApk()                                                   // loading another APK does reset them
+            assertEquals(null, PostureScanner.nscPins); assertEquals(null, PostureScanner.nscDeclared)
+            assertTrue(PostureScanner.section().contains("not checked"))
+        } finally { PostureScanner.clearApk() }
+    }
+}

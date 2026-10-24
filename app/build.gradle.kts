@@ -10,8 +10,8 @@ android {
         applicationId = "dev.apkrelab"
         minSdk = 26
         targetSdk = 36
-        versionCode = 211
-        versionName = "0.103.0"
+        versionCode = 212
+        versionName = "0.103.1"
     }
 
     compileOptions {

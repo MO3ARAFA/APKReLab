@@ -2542,6 +2542,9 @@ class MainActivity : Activity() {
     /** 0.61.0: the path-bar status of the last Deep scan (stopped / failed classes / SSA taint result), written into the report so a report says whether the SSA step ran. */
     private var lastScanNote = ""
 
+    /** ART runtime counter ("art.gc.gc-time" in ms, "art.gc.gc-count" ...) or 0 when this device does not report it. */
+    private fun runtimeStat(key: String): Long = try { android.os.Debug.getRuntimeStat(key)?.trim()?.toLongOrNull() ?: 0L } catch (_: Throwable) { 0L }
+
     private fun ssaFindings(defs: List<ClassDef>, appPkg: String, known: List<SecurityScanner.Finding>, progress: (String) -> Unit = {}): List<SecurityScanner.Finding> {
         val appIdx = ArrayList<Int>()
         for ((i, d) in defs.withIndex()) {
@@ -2586,6 +2589,7 @@ class MainActivity : Activity() {
             old.add(dev.apkrelab.ir.TaintIr.Old(d.type + "->", f.title))
         }
         val tStart = System.currentTimeMillis()
+        val gcT0 = runtimeStat("art.gc.gc-time"); val gcN0 = runtimeStat("art.gc.gc-count"); val gcB0 = runtimeStat("art.gc.blocking-gc-time")   // 0.103.1: GC share of the group loop (the phone is memory-bound)
         // 0.60.0: same groups, same engine, same merge as 0.59.3 - only faster (SsaGroups): a class is read and parsed once for all the groups that
         // contain it, the SSA form of a method is built once, and independent groups run on several threads (results merged in group order,
         // so the output is identical). A group that runs out of memory is run again alone, never dropped.
@@ -2630,7 +2634,7 @@ class MainActivity : Activity() {
                 ssaIncomplete = (if (ssaIncomplete.isNotEmpty()) "$ssaIncomplete; " else "") + "stopped: only $cov% of the groups were analysed"
             }
         }
-        if (groupIdx.size > 1) ssaScopeNote += ", time: plan ${planMs / 1000}s + groups ${(System.currentTimeMillis() - tStart) / 1000}s on ${gres.threads} thread(s) (heap $heapMb MB, ${rt.availableProcessors()} cores)" +
+        if (groupIdx.size > 1) ssaScopeNote += ", time: plan ${planMs / 1000}s + groups ${(System.currentTimeMillis() - tStart) / 1000}s on ${gres.threads} thread(s) (heap $heapMb MB, ${rt.availableProcessors()} cores, GC ${runtimeStat("art.gc.gc-time") - gcT0} ms in ${runtimeStat("art.gc.gc-count") - gcN0} collections, ${runtimeStat("art.gc.blocking-gc-time") - gcB0} ms blocking)" +
             ", cpu: parse ${gres.parseMs / 1000}s + analysis ${gres.analyseMs / 1000}s (summed over threads)" +
             (if (gres.groupsRetried > 0) ", ${gres.groupsRetried} group(s) re-run for memory" else "")
         // 0.66.5: where taint is lost, which caps were hit, which methods are slowest (measurement only, no result changes)
@@ -2796,6 +2800,7 @@ class MainActivity : Activity() {
         inClasses = false
         inSecurity = false
         secFindings = emptyList()
+        PostureScanner.clearApk()   // 0.103.1: before the resource scan of THIS apk starts (see PostureScanner.clearApk)
         scanResourcesAsync()
         callIdx = null
         entryMap = null

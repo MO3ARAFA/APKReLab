@@ -92,7 +92,10 @@ object PostureScanner {
         return if (dec.value.get() >= DECRYPTOR_MIN_CALLS) dec.key + "(I)Ljava/lang/String;" else null
     }
 
-    fun clear() { StringOverlay.current?.resetStats(); hits.clear(); scopes.clear(); withSource.set(0); withLines.set(0); appClasses.set(0); strEnc.set(0); reflMarshal.set(0); decryptCalls.clear(); nscPins = null; nscDeclared = null }
+    fun clear() { StringOverlay.current?.resetStats(); hits.clear(); scopes.clear(); withSource.set(0); withLines.set(0); appClasses.set(0); strEnc.set(0); reflMarshal.set(0); decryptCalls.clear() }
+
+    /** 0.103.1: the network security config facts belong to the LOADED APK (the resource scan sets them once, in the background): reset them when an APK is loaded, NOT at the start of every Deep scan (that wiped them whenever the resource scan had finished first, and the report said "not checked" for the same APK). */
+    fun clearApk() { nscPins = null; nscDeclared = null }
 
     /** Called with the text of every class the FULL deep scan reads (not by a single-class review: that would count a class twice). */
     fun observe(classType: String, text: String, appPkg: String) {
