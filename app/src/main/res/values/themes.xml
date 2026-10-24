@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 0.24.0: two looks, picked at start-up from prefs "theme" (see Ui.themeRes). -->
+    <style name="ReLabBase" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+
+    <!-- 0.60.1: theme of the launch window (manifest): black instead of white until the first frame of the app. MainActivity switches to the chosen look in onCreate. -->
+    <style name="ReLabLaunch" parent="ReLabBase">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorAccent">#10B981</item>
+        <item name="android:alertDialogTheme">@style/ReLabDialogCobra</item>
+    </style>
+
+    <style name="ReLabMidnight" parent="ReLabBase">
+        <item name="android:colorAccent">#4A3BC0</item>
+        <item name="android:alertDialogTheme">@style/ReLabDialogMidnight</item>
+    </style>
+    <style name="ReLabOcean" parent="ReLabBase">
+        <item name="android:colorAccent">#1E78DC</item>
+        <item name="android:alertDialogTheme">@style/ReLabDialogOcean</item>
+    </style>
+
+    <style name="ReLabDialogMidnight" parent="@android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">#4A3BC0</item>
+        <item name="android:windowBackground">@drawable/dialog_bg</item>
+    </style>
+    <style name="ReLabDialogOcean" parent="@android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">#1E78DC</item>
+        <item name="android:windowBackground">@drawable/dialog_bg</item>
+    </style>
+
+    <!-- 0.37.4: dark look (Theme.Material = dark text colours are light by default). -->
+    <style name="ReLabNight" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">#FF121129</item>
+        <item name="android:colorAccent">#8C7BFF</item>
+        <item name="android:alertDialogTheme">@style/ReLabDialogNight</item>
+    </style>
+    <!-- 0.96.0: "Cobra Cyber-Emerald Dark", the default look (see Ui.cobra). -->
+    <style name="ReLabCobra" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">#FF060A09</item>
+        <item name="android:colorAccent">#10B981</item>
+        <item name="android:alertDialogTheme">@style/ReLabDialogCobra</item>
+    </style>
+    <style name="ReLabDialogCobra" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#34D399</item>
+        <item name="android:windowBackground">@drawable/dialog_bg_cobra</item>
+    </style>
+    <style name="ReLabDialogNight" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#8C7BFF</item>
+        <item name="android:windowBackground">@drawable/dialog_bg_night</item>
+    </style>
+</resources>

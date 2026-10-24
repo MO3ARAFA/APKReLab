@@ -1,0 +1,58 @@
+{
+ "comment": "Baselines of the company apps. Counts and hashes only: no class names, no APK, no exploit detail (those live in the private review memos, outside the repository). Cards come from the Security scan section of a report; the sandbox report has no SCA cards and no AI triage, the device report has both: compare like with like (the `source` field).",
+ "apps": {
+  "wewallet": {
+   "package": "com.TE.WEWallet",
+   "versionName": "1.0.72.3",
+   "sha256": "5eb09c731cea473a3ab7615fe18bd78348806440b48eb2862ee4e612b940ceeb",
+   "apkBytes": 57772362,
+   "classes": 15471,
+   "dex": 3,
+   "split": "native libraries are in a separate config split (not scanned)",
+   "protection": "commercial obfuscator: 90% of classes renamed, string encryption in 65 classes, reflection marshalling in 1133 classes",
+   "hybrid": "no",
+   "source": "sandbox",
+   "baseline": {
+    "cards": {
+     "LOW": 43,
+     "MEDIUM": 22,
+     "HIGH": 1
+    },
+    "scope": {
+     "OTHER": 10,
+     "OBF": 42,
+     "APP": 14
+    },
+    "scenarios": 1,
+    "high_plus": [
+     "21f4a2d669"
+    ]
+   }
+  },
+  "axispay": {
+   "package": "com.axispay.consumer.wallet",
+   "versionName": "3.0.1",
+   "sha256": "cee951a89400ab360b5d73850fe53e4892056c058b32ee78452d2d912e2f4dac",
+   "apkBytes": 24303995,
+   "classes": 18093,
+   "dex": 2,
+   "split": "native libraries (Flutter engine, Dart snapshot, protector) are in a separate config split (not scanned)",
+   "protection": "99% of classes renamed and repackaged into the root package; one static native method decrypts the strings (about 63,000 call sites)",
+   "hybrid": "Flutter: the Dart code is not visible to this scanner",
+   "source": "sandbox",
+   "baseline": {
+    "cards": {
+     "LOW": 55,
+     "MEDIUM": 14
+    },
+    "scope": {
+     "OTHER": 10,
+     "OBF": 58,
+     "APP": 1
+    },
+    "scenarios": 0,
+    "high_plus": []
+   }
+  }
+ }
+}

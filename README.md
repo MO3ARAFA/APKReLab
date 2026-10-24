@@ -1,2 +1,0 @@
-# APKReLab
-Vulnerability hunter 

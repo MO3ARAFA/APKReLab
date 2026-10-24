@@ -1,0 +1,280 @@
+[
+ {
+  "id": "weak-iv",
+  "vuln": "Usage of weak Initialization Vector",
+  "rule": [
+   "crypto-static-iv"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "hostname-verify",
+  "vuln": "Missing hostname verification (MITM)",
+  "rule": [
+   "tls-hostname-verifier"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "webview-remote-url",
+  "vuln": "Remote URL load in WebView",
+  "rule": [
+   "cleartext-url",
+   "webview-mixed-content"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "deserialization",
+  "vuln": "Object deserialization on untrusted data",
+  "rule": [
+   "deserialization",
+   "serializable-dangerous"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "sql-input",
+  "vuln": "User-supplied input in SQL queries",
+  "rule": [
+   "sql-concat",
+   "provider-sql-injection",
+   "taint-flow"
+  ],
+  "title_any": [
+   "sql"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "tapjacking",
+  "vuln": "Missing tapjacking protection",
+  "title_any": [
+   "tapjack",
+   "filterTouches"
+  ],
+  "min_severity": "INFO",
+  "independent": true,
+  "rule": [
+   "tapjacking-sensitive-layout"
+  ],
+  "amended": "0.75.0: rule id of a rule added after the first held-out run (PIVAA is in the tuning set since 0.74.0)"
+ },
+ {
+  "id": "backup",
+  "vuln": "Enabled application backup",
+  "rule": [
+   "manifest-allow-backup"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "debug",
+  "vuln": "Enabled debug mode",
+  "rule": [
+   "manifest-debuggable"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "weak-crypto",
+  "vuln": "Weak encryption",
+  "rule": [
+   "crypto-cipher"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "hardcoded-key",
+  "vuln": "Hardcoded encryption keys",
+  "rule": [
+   "crypto-hardcoded-key"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "dyn-code",
+  "vuln": "Dynamic load of code",
+  "rule": [
+   "dynamic-code-loading",
+   "dex-load-writable-dir"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "world-files",
+  "vuln": "World readable/writable files",
+  "rule": [
+   "storage-file-mode"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "http",
+  "vuln": "Unencrypted HTTP",
+  "rule": [
+   "cleartext-url",
+   "manifest-cleartext-traffic"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "weak-hash",
+  "vuln": "Weak hashing algorithms",
+  "rule": [
+   "crypto-weak-hash"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "weak-rng",
+  "vuln": "Predictable random number generator",
+  "rule": [
+   "weak-random",
+   "crypto-sha1prng-seed"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "provider",
+  "vuln": "Exported content provider",
+  "rule": [
+   "manifest-exported-components"
+  ],
+  "title_any": [
+   "provider"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "receiver",
+  "vuln": "Exported broadcast receiver",
+  "rule": [
+   "manifest-exported-components"
+  ],
+  "title_any": [
+   "receiver"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "service",
+  "vuln": "Exported service",
+  "rule": [
+   "manifest-exported-components"
+  ],
+  "title_any": [
+   "service"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "js-enabled",
+  "vuln": "JavaScript enabled in WebView",
+  "title_any": [
+   "javascript"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "plugin-state",
+  "vuln": "Deprecated setPluginState in WebView",
+  "title_any": [
+   "setPluginState",
+   "plugin"
+  ],
+  "min_severity": "INFO",
+  "independent": true,
+  "rule": [
+   "webview-plugin-state"
+  ],
+  "amended": "0.75.0: rule id of a rule added after the first held-out run (PIVAA is in the tuning set since 0.74.0)"
+ },
+ {
+  "id": "temp-file",
+  "vuln": "Temporary file creation",
+  "title_any": [
+   "temp"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "hardcoded-data",
+  "vuln": "Hardcoded sensitive data",
+  "rule": [
+   "secrets-sensitive-fields",
+   "high-entropy-strings",
+   "secrets-known-formats",
+   "res-strings-secret-names"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "untrusted-ca",
+  "vuln": "Untrusted CA acceptance (TrustManager)",
+  "rule": [
+   "tls-trustmanager"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "banned-api",
+  "vuln": "Usage of banned API functions",
+  "min_severity": "INFO",
+  "independent": true,
+  "out_of_scope": "README does not say which APIs: cannot be checked"
+ },
+ {
+  "id": "webview-ssl",
+  "vuln": "Self-signed CA accepted in WebView",
+  "rule": [
+   "webview-ssl-error"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "path-traversal",
+  "vuln": "Path traversal (README text is about NSTemporaryDirectory = iOS API)",
+  "min_severity": "INFO",
+  "independent": true,
+  "out_of_scope": "README text copied from an iOS app, not an Android check"
+ },
+ {
+  "id": "sqlite-clear",
+  "vuln": "Cleartext SQLite database",
+  "rule": [
+   "fintech-unencrypted-storage",
+   "androgoat-checks",
+   "sqlite-unencrypted"
+  ],
+  "title_any": [
+   "sqlite",
+   "database"
+  ],
+  "min_severity": "INFO",
+  "independent": true,
+  "amended": "0.75.0: rule id of a rule added after the first held-out run (PIVAA is in the tuning set since 0.74.0)"
+ }
+]

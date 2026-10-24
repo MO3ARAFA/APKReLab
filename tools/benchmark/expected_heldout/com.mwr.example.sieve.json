@@ -1,0 +1,106 @@
+[
+ {
+  "id": "exported-activity-login-bypass",
+  "vuln": "Exported activity (PWList) opens the password list without the login screen",
+  "rule": [
+   "manifest-exported-components",
+   "fintech-exported-sensitive-action"
+  ],
+  "min_severity": "INFO",
+  "independent": true,
+  "source": "Written 2026-10-13 from the public drozer / Sieve walkthrough (WithSecure/MWR) BEFORE the first scan of Sieve by any APKReLab version."
+ },
+ {
+  "id": "exported-provider-passwords",
+  "vuln": "Exported DBContentProvider: /Passwords readable by any app (path-permission only on /Keys)",
+  "rule": [
+   "manifest-exported-components",
+   "manifest-provider-partial-permission",
+   "manifest-permission-protection"
+  ],
+  "min_severity": "INFO",
+  "independent": true,
+  "source": "Written 2026-10-13 from the public drozer / Sieve walkthrough (WithSecure/MWR) BEFORE the first scan of Sieve by any APKReLab version."
+ },
+ {
+  "id": "provider-sqli",
+  "vuln": "SQL injection in DBContentProvider.query (projection / selection)",
+  "rule": [
+   "provider-sql-injection",
+   "sql-concat",
+   "taint-flow"
+  ],
+  "title_any": [
+   "sql"
+  ],
+  "min_severity": "INFO",
+  "independent": true,
+  "source": "Written 2026-10-13 from the public drozer / Sieve walkthrough (WithSecure/MWR) BEFORE the first scan of Sieve by any APKReLab version."
+ },
+ {
+  "id": "provider-path-traversal",
+  "vuln": "FileBackupProvider.openFile reads any file the app can read (path traversal)",
+  "rule": [
+   "provider-openfile-segment",
+   "taint-flow"
+  ],
+  "title_any": [
+   "file",
+   "path",
+   "openFile"
+  ],
+  "min_severity": "INFO",
+  "independent": true,
+  "source": "Written 2026-10-13 from the public drozer / Sieve walkthrough (WithSecure/MWR) BEFORE the first scan of Sieve by any APKReLab version."
+ },
+ {
+  "id": "exported-services",
+  "vuln": "Exported AuthService / CryptoService (Messenger) let any app drive PIN / password and crypto operations",
+  "rule": [
+   "manifest-exported-components"
+  ],
+  "min_severity": "INFO",
+  "independent": true,
+  "source": "Written 2026-10-13 from the public drozer / Sieve walkthrough (WithSecure/MWR) BEFORE the first scan of Sieve by any APKReLab version."
+ },
+ {
+  "id": "debuggable",
+  "vuln": "android:debuggable=true",
+  "rule": [
+   "manifest-debuggable"
+  ],
+  "min_severity": "INFO",
+  "independent": true,
+  "source": "Written 2026-10-13 from the public drozer / Sieve walkthrough (WithSecure/MWR) BEFORE the first scan of Sieve by any APKReLab version."
+ },
+ {
+  "id": "allow-backup",
+  "vuln": "android:allowBackup=true (database with the master password can be backed up)",
+  "rule": [
+   "manifest-allow-backup"
+  ],
+  "min_severity": "INFO",
+  "independent": true,
+  "source": "Written 2026-10-13 from the public drozer / Sieve walkthrough (WithSecure/MWR) BEFORE the first scan of Sieve by any APKReLab version."
+ },
+ {
+  "id": "sqlite-plaintext-key",
+  "vuln": "Master password and PIN stored in plaintext in the Key table of the SQLite database",
+  "rule": [
+   "sqlite-unencrypted",
+   "fintech-unencrypted-storage",
+   "androgoat-checks"
+  ],
+  "min_severity": "INFO",
+  "independent": true,
+  "source": "Written 2026-10-13 from the public drozer / Sieve walkthrough (WithSecure/MWR) BEFORE the first scan of Sieve by any APKReLab version."
+ },
+ {
+  "id": "native-crypto",
+  "vuln": "Password encryption done in a native library with a key derived from the PIN",
+  "min_severity": "INFO",
+  "independent": true,
+  "out_of_scope": "native code (.so) is not analysed",
+  "source": "Written 2026-10-13 from the public drozer / Sieve walkthrough (WithSecure/MWR) BEFORE the first scan of Sieve by any APKReLab version."
+ }
+]

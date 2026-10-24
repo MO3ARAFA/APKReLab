@@ -1,0 +1,45 @@
+# ---- Gradle / Android Studio / Code on the Go build output
+/build/
+/app/build/
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.hprof
+*.keystore
+*.jks
+google-services.json
+# ---- secrets (never commit)
+.env
+*.pem
+*.p12
+*.key
+secrets.properties
+# ---- Python / JVM tooling caches and profiler output
+__pycache__/
+*.pyc
+*.class
+*.jfr
+*.log
+# ---- APKs, decoded apps and scan output: these are the owner's / the company's data, they stay on the phone, not in git
+*.apk
+*.apks
+*.xapk
+*.apkm
+*.aab
+dec_*/
+decoded/
+*.sarif
+*.sarif.json
+*-report*.md
+*.report.md
+# private reports of company apps: put them here, this folder is never tracked
+/private/
+/tools/benchmark/runs/private/
+# ---- OS
+.DS_Store
+Thumbs.db
