@@ -108,6 +108,21 @@ public final class MethodIr {
         return c == 'v' ? n : locals + n;
     }
 
+    /** The same as {@link #reg(String)} for the operand tok[from, to) (no substring). */
+    public int reg(String tok, int from, int to) {
+        if (to - from < 2) return -1;
+        char c = tok.charAt(from);
+        if (c != 'v' && c != 'p') return -1;
+        int n = 0;
+        for (int i = from + 1; i < to; i++) {
+            char d = tok.charAt(i);
+            if (d < '0' || d > '9') return -1;
+            n = n * 10 + (d - '0');
+            if (n > 65535) return -1;
+        }
+        return c == 'v' ? n : locals + n;
+    }
+
     /** Instruction index a label points to, or -1. A label at the very end of the method returns insns.size(). */
     public int labelIndex(String label) {
         Integer i = labels.get(label);
