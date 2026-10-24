@@ -93,6 +93,8 @@ public final class SsaForm {
         SsaForm s = r == null ? null : r.get();
         if (s != null) return s;
         s = build(m);
+        s.cfg.releaseConstruction();                 // 0.104.2: what only the construction needed (see Cfg.releaseConstruction)
+        for (List<Phi> l : s.phis) if (l instanceof ArrayList) ((ArrayList<Phi>) l).trimToSize();
         m.ssaRef = new java.lang.ref.SoftReference<>(s);
         return s;
     }

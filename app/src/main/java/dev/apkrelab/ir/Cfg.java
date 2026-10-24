@@ -93,6 +93,21 @@ public final class Cfg {
         this.method = m;
     }
 
+    /**
+     * 0.104.2: once the SSA form is built, the dominator-tree children and the dominance frontiers (lists of boxed ids, two per block) are read by nobody, and an edge list keeps a
+     * 10-slot array for one or two edges. A group holds the forms of thousands of methods, and the phone spends most of a scan in GC near its heap limit: release and trim them.
+     * Called by SsaForm.buildCached only (the engine's path); a Cfg built directly keeps everything.
+     */
+    void releaseConstruction() {
+        domChildren = null;
+        df = null;
+        for (BasicBlock b : blocks) {
+            ((ArrayList<Edge>) b.succs).trimToSize();
+            ((ArrayList<Edge>) b.preds).trimToSize();
+        }
+        ((ArrayList<BasicBlock>) blocks).trimToSize();
+    }
+
     public BasicBlock blockOfInsn(int insnIndex) {
         return insnIndex >= 0 && insnIndex < blockOf.length ? blocks.get(blockOf[insnIndex]) : null;
     }
