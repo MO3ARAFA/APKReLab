@@ -91,3 +91,8 @@ Device evidence (report 9, Axis Pay 3.0.4, warm group cache): `plan 21s + groups
 - T2 (constant evaluation): argument origins at Cipher.getInstance / SecretKeySpec / IvParameterSpec / Class.forName / Uri.parse in 11 decoded apps: 0 from Base64.decode; 27 in-place arrays at IvParameterSpec / SecretKeySpec, 0 of them filled with constants (runtime buffers); Axis Pay's "helper" arguments are its native decryptor. A constant IV from a literal or a constant array was already detected (ScanRulesLegacy). Evaluator not built: nothing in the corpus to evaluate.
 - T3 (native): root / hooking / TracerPid strings in .so data sections -> posture table. 0 hits in 39 APKs (27 with native libraries). JNI_OnLoad with no Java_ export is the normal binding style (22 libraries: Flutter, React Native, Conscrypt, ffmpeg, MapLibre): not used as a signal.
 - T4: QR/barcode rule 10 -> 0 cards on K-9 / Thunderbird (R8 name reuse); other HIGH / MEDIUM cards of the 5 new apps judged (see HANDOFF).
+
+## 0.108.0: verification numbers
+- Gradle (AGP 9.3.1, Gradle 9.8.2, JDK 21): assembleDebug about 2.5 min cold; testDebugUnitTest 648 tests / 0 failures; lintDebug 0 errors, 198 warnings.
+- Corrupted-APK fuzz (6 F-Droid APKs x 40 variants, 6 components, 30 s limit per call): 1,440 calls, 0 exceptions, 0 timeouts. Mangled-smali fuzz (600 classes from Axis Pay, K-9, AntennaPod, gh4a, 3 variants each): scanSmali + SSA + planner digest, 5,400 calls, 0 exceptions.
+- Device (owner, Axis Pay, 0.107.0 warm re-scan): plan 3 s + groups 0 s, 25 / 25 groups and 9,725 / 9,725 digests reused. WE Wallet cold: plan 16 s + groups 192 s, GC 175 s (160 s blocking) on 512 MB: the next memory target.

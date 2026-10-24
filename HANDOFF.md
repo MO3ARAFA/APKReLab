@@ -11,8 +11,16 @@ Owner speaks Egyptian Arabic, wants concise, actionable answers.
 - (Edge-to-edge insets: handled since 0.24.0 as part of the redesign - see below; still unverified on device.)
 - (AI cache eviction: LRU since 0.69.2, a cache hit refreshes the file time; MAX_FILES = 300.)
 
-## Current version: 0.107.0
+## Current version: 0.108.0
 - **0.104.1 VERIFIED ON THE PHONE (report 9, Axis Pay, second Deep scan without re-picking the app)**: "cache: 25 of 25 groups reused", **groups 8 s instead of 743-752 s** (plan 21 s still runs; the 8 s include the hash pass over the unique classes and reading 25 cache files), GC 0.9 s in 32 collections instead of 447-620 s. The report is identical to the full run's (report 8) except the status line: 80 cards, +16 flows, same loss counters. So the 0.104.0 miss was the workspace wipe, as suspected. Note: the "slowest methods" of a cached run are the CACHED measurements of the run that produced them (their times are not this run's). Still unmeasured: the cold-run overhead of writing the 25 files.
+- 0.108.0 (the owner's "final version" request with the 0.107.0 reports of Axis Pay and WE Wallet). Version 0.108.0 / code 221. Kotlin 340, ir 308; Gradle 648 / 0 failures.
+  - FIRST REAL BUILD: AGP 9.3.1 + Gradle 9.8.2 + JDK 21 (tools/sandbox/gradle_build.sh, GRADLE_BUILD.md). assembleDebug OK, testDebugUnitTest 648 / 0, lintDebug 4 errors -> 0.
+  - Security fix in APKReLab itself (found by lint): the install-result receiver was exported below API 33 and started the Intent taken from the broadcast (intent redirection on Android 8-12). Now a signature-level permission + RECEIVER_NOT_EXPORTED, and the forwarded Intent is stripped of URI grants and refused when it targets APKReLab. APKReLab's own rules flag the old pattern (checked on a reproduction).
+  - Self-scan of APKReLab's own APK: 0 findings in dev.apkrelab; antlr/ (bundled by jadx) added to the library prefixes.
+  - From the owner's reports: posture `root-structure` (Axis Pay's encrypted root checks in MainActivity; 1 class in 16 decoded apps); weak-random ignores names of root-package classes (DexGuard dictionary names in WE Wallet); keyboard-cache skips library layouts (Material pickers in WE Wallet); a HIGH Intent-extra flow in a non-exported activity drops one level only when every writer of its extras is a constant (WE Wallet SignUpWebViewActivity; not run on WE Wallet: no APK here).
+  - Robustness: 240 corrupted APKs x 6 components and 1,800 mangled classes x 3 engines: no exception, no timeout.
+  - Lint fixes: BOM characters, QUERY_ALL_PACKAGES documented (tools:ignore), size formats in Locale.US.
+  - Device checks: Axis Pay posture should list MainActivity under "Root detection: file + installed-package probes"; installing an APK from the Build tab must still show the system install prompt (the receiver now requires the app's own permission: the PendingIntent is the app's, so it holds it; NOT run on a device).
 - 0.107.0 (the owner's 0.107.0 charter; premises checked first). Version 0.107.0 / code 220. Kotlin 333 -> 336, ir 306, typecheck: only the 6 `R` references. Numbers in `tools/sandbox/PERF.md` "0.107.0".
   - Provenance: `tools/bin/r8.jar` and the `/tools/bin/` line in `.gitignore` were already in the working tree when this round started (not written in this round's visible steps); the jar was verified (R8 8.13.25, SHA-1 = Google Maven's).
   - Corpus: 5 more open-source APKs from F-Droid (hash-checked), decoded under ~/r8b (not in the repo).

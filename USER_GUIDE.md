@@ -1,4 +1,4 @@
-# APKReLab: how to use it as a security scanner (0.94.0)
+# APKReLab: how to use it as a security scanner (0.108.0)
 
 ## What it is good at today (measured, see "Evidence")
 - Static analysis of an APK ON THE PHONE: manifest, resources, Java/Kotlin code (Dalvik IR, SSA, call graph, inter-procedural taint from exported components / deep links / Intents to WebView, SQL,
@@ -36,4 +36,19 @@ A Play Store install is several files: `base.apk` (code, manifest) and `split_co
 The base alone says "native code not analysed". On a test phone with the app installed:
 `adb shell pm path <package>` lists the files, `adb pull <path> .` for each. In the app, tap **Select APK** and pick the base AND the splits together (multi-select), or pick one `.apks` / `.xapk` / `.apkm` bundle.
 The report then says "Splits: N" in the header, reads the libraries of the splits (hardening, 16 KB pages, secrets in the data strings), and for a Flutter app lists the hosts named in the Dart snapshot.
-Checked on a real Flutter app: base + ABI split gave the same native cards as the universal APK. The picker and the bundle import are NOT yet built on a device.
+Checked on a real Flutter app: base + ABI split gave the same native cards as the universal APK. On the owner's phone the split import works (Axis Pay reports say "Splits: 4").
+Alternatively tap **Installed apps** and pick the installed app: its base and splits are copied together.
+
+## Reading a report since 0.102-0.108 (what changed)
+- **A re-scan is fast**: group results and the planner's per-class digests are kept between scans of the same APK (Settings: cache). The status line says `cache: N of M groups reused, plan digests: N of M reused`. The first scan after installing a new APKReLab version re-runs everything (results depend on the engine).
+- **Renamed SDK code**: a renamed class that only one bundled library names (Firebase, MoEngage, BouncyCastle ...) is shown with the libraries, with the reason in the card. A class R8 MERGED from several origins is never given to a library (it may hold app code).
+- **LOW cards of renamed / library code are merged** per rule: one card lists every class (nothing is dropped). App-code cards stay one per class.
+- **Defense posture** also reads the native libraries (root / Frida / TracerPid strings in `.so` files) and finds root checks whose paths are encrypted (`Root detection: file + installed-package probes and a shell command`).
+- **Hybrid apps** (Flutter, React Native, Expo): the app's own package is taken from the launcher activity, so the app's few Java classes are `in app code`.
+- **Agent tools**: `classify_class` (what an obfuscated class probably is, R8 merge signs) and `verify_class_edit` (does a smali patch assemble, which findings it removes or adds) next to callers / callees / flow_path / search_assets.
+- **Strings decrypted at run time** (a protector): the report prints a Frida snippet to dump them on YOUR test device; import the dump with the Strings button and scan again.
+
+## How this version was verified (0.108.0)
+- Built with the real Android toolchain for the first time (AGP 9.3.1, Gradle 9.8.2, JDK 21, compileSdk 36): `assembleDebug` OK, `testDebugUnitTest` 648 tests / 0 failures, `lintDebug` 0 errors. Steps: `tools/sandbox/GRADLE_BUILD.md`.
+- The engine was run on 46 real apps (34 + 5 F-Droid apps, Axis Pay 3.0.1 in the sandbox; the owner's device reports of Axis Pay and WE Wallet). Malformed input: 240 corrupted APKs and 1,800 mangled classes went through every static component without an exception.
+- NOT verified here: the UI on a device or an emulator (no emulator in the sandbox); every Android-only change is built and linted, but only the owner's phone runs it.
