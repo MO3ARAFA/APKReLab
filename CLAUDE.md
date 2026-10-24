@@ -26,6 +26,7 @@ On-device Android SAST app (Kotlin + a Java `ir` package: Dalvik -> IR -> SSA ->
 ## Build and test (what exists, what does not)
 - `app/build.gradle.kts`: AGP 9.3.1, Kotlin 2.3.21 (+ Compose compiler plugin), compileSdk/targetSdk 36, minSdk 26, JDK 17 target. Dependencies: ARSCLib, smali / baksmali 3.0.9, apksig, jadx-core 1.5.0 (optional), JUnit 4.13.2 and org.json for unit tests.
 - **There is NO Gradle wrapper in the repo** (the owner builds in Code On the Go, which brings its own Gradle). On a PC you must create one and pick a Gradle version that AGP 9.3.1 supports (look it up in the AGP release notes; the previous assistant did not verify this). Needs an Android SDK with platform 36.
+- Type check of the whole app without Gradle (0.102.0): `tools/sandbox/typecheck_app.sh` (kotlinc + android-all 16 + the real jars; only the generated `R` is unresolved). It catches type errors in `MainActivity.kt` / `Ui.kt`; it is NOT a build.
 - JVM unit tests: `./gradlew testDebugUnitTest` (tests live in app/src/test; the `ir` ones are plain Java).
 - The previous assistant ran the tests WITHOUT Gradle: a JUnit stub + kotlinc 2.3.21 + android stubs (tools/sandbox/README.md and tools/sandbox/SETUP_FROM_SCRATCH.md). Last results (0.82.0): `ir` 268/268, Kotlin (non-Android classes only) 126/126. With a real SDK you can compile everything: do that FIRST and fix whatever the Android-only files break.
 

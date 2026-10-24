@@ -298,6 +298,11 @@ object CryptoCipherRule : ScanRule {
             val algo = argString(text, m.range.first, 0) ?: continue
             val up = algo.uppercase()
             when {
+                // 0.102.0: AES/ECB/NoPadding whose only use is doFinal on ONE fresh all-zero 16-byte array is the AES-CMAC / CBC-MAC subkey primitive E_K(0^128), not data encryption
+                up == "AES/ECB/NOPADDING" && ConstantArgGuards.isZeroBlockOnly(text, m.range.first) ->
+                    add(Severity.LOW, "AES/ECB/NoPadding on a constant all-zero block (CMAC-style primitive)",
+                        "Cipher.getInstance(\"$algo\") is used only to encrypt one fresh, never-written 16-byte array (the all-zero block) and nothing else in this method: that is how AES-CMAC / CBC-MAC derive their subkeys (L = AES_K(0^128)). ECB's weakness is repeated plaintext blocks and a single constant block has none, so this is not data encryption in ECB mode. Check that the same transformation is not used for data elsewhere.",
+                        "No change if this is a CMAC / subkey step. For data use AES/GCM/NoPadding with a fresh random 12-byte IV per message.", m.range.first, "CWE-327")
                 // 0.76.0 (andOTP): "RSA/ECB/PKCS1Padding" is the standard JCA name of RSA; ECB means nothing for an asymmetric cipher
                 (up.contains("/ECB") && !up.startsWith("RSA") && !up.startsWith("EC") && !up.startsWith("ELGAMAL")) ||
                     up == "AES" || up == "DES" || up == "DESEDE" || up == "BLOWFISH" ->
@@ -1149,6 +1154,15 @@ object ShellExecRule : ScanRule {
         }
 
         rx("Ljava/lang/Runtime;->exec\\(|Ljava/lang/ProcessBuilder;-><init>").find(text)?.let {
+            // 0.102.0: every call site of the class has only constant arguments (literals, or a constant-indexed string-table lookup): nothing to inject into
+            val (sites, fixed) = ConstantArgGuards.shellSites(text)
+            if (sites > 0 && fixed == sites) {
+                add(Severity.LOW, "Shell command execution with fixed arguments",
+                    "Every Runtime.exec / ProcessBuilder call in this class ($sites) takes only constant arguments: string literals, or the result of a constant-indexed static string lookup (the string-table decryptor of a protector). There is no input to inject into. Such calls are typical of root / emulator checks (su, which su, getprop); with the decoded-strings overlay the command is visible. Read the command to see what it does.",
+                    "Nothing to fix for injection. If the command is a root / emulator check, note that it is easy to bypass; if it is something else, check that it needs to run a shell at all.",
+                    it.range.first, "CWE-78")
+                return out
+            }
             add(Severity.MEDIUM, "Shell command execution",
                 "The app runs an OS command via Runtime.exec/ProcessBuilder. If any part of that command comes from user input, an Intent extra, or a server response, this is a command-injection surface.",
                 "Trace where the command string comes from; avoid building it from untrusted input, or use a fixed allow-list of arguments instead of a shell string.",

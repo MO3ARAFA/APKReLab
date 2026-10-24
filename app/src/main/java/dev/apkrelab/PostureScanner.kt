@@ -63,6 +63,7 @@ object PostureScanner {
         Sig("installer", "Installer verification: getInstallerPackageName / getInstallSourceInfo", "MASVS-RESILIENCE-2") { has(it, "->getInstallerPackageName(", "->getInstallSourceInfo(") },
         Sig("play-integrity", "Device / app attestation: Play Integrity API", "MASVS-RESILIENCE-1") { has(it, "Lcom/google/android/play/core/integrity/", "Lcom/google/android/play/integrity/") },
         Sig("safetynet", "Device attestation: SafetyNet (retired by Google)", "MASVS-RESILIENCE-1") { has(it, "Lcom/google/android/gms/safetynet/SafetyNet") },
+        Sig("shell-const", "Shell commands with fixed arguments (usually root / emulator checks: su, which su, getprop; read the command)", "MASVS-RESILIENCE-1") { ConstantArgGuards.hasConstantShell(it) },
         Sig("flag-secure", "Screen capture protection: FLAG_SECURE / SurfaceView.setSecure", "MASVS-PLATFORM-3") { flagSecure(it) }
     )
 
