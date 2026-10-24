@@ -281,7 +281,11 @@ object AndroGoatChecks {
             }
 
             // --- QR / barcode input ---
-            val qr = rx("Lcom/google/zxing/|Lcom/journeyapps/barcodescanner/|Lcom/google/mlkit/vision/barcode/|Lcom/google/android/gms/vision/barcode/").find(text)
+            // 0.107.0 (K-9 Mail / Thunderbird, 10 classes): R8 merges app classes into a class that keeps a LIBRARY's name (MessagingController.archiveOperations is typed
+            // Lcom/google/zxing/BinaryBitmap; with a method archiveMessages): a mention of the package is not scanning. A real scanner API call is required.
+            val qr = rx("Lcom/google/zxing/[A-Za-z0-9/$]+;->(?:decode|decodeWithState)\\(|Lcom/google/zxing/Result;->getText\\(|Lcom/google/zxing/integration/android/IntentIntegrator;|" +
+                "Lcom/journeyapps/barcodescanner/(?:ScanContract|ScanOptions|ScanIntentResult|CaptureManager|DecoratedBarcodeView|BarcodeView|BarcodeResult|CaptureActivity);|" +
+                "Lcom/google/mlkit/vision/barcode/(?:BarcodeScanning;->getClient|common/Barcode;->get(?:RawValue|DisplayValue|Url))|Lcom/google/android/gms/vision/barcode/Barcode;->(?:rawValue|displayValue)").find(text)
             if (qr != null) {
                 val sink = rx("Landroid/webkit/WebView;->loadUrl\\(|->rawQuery\\(|->execSQL\\(|Ljava/lang/Runtime;->exec\\(|Landroid/content/Intent;->parseUri\\(|Landroid/content/Context;->startActivity\\(").find(text)
                 if (sink != null) {

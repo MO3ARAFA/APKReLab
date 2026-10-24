@@ -18,7 +18,7 @@ fun main(args: Array<String>) {
     }
     // 0.86.2: like the device (MainActivity: SecurityScanner.codePackage(...)): the code package, not the manifest package. Quillpad's code is in
     // org.qosp.notes while the manifest says io.github.quillpad; with the manifest package an app-bound renamed class looked like a library.
-    val pkg = SecurityScanner.codePackage(texts.map { it.first }, manifestPkg)
+    val pkg = SecurityScanner.codePackage(texts.map { it.first }, manifestPkg, mc.componentTypes(manifestPkg), mc.launcherTypes(manifestPkg))   // 0.106.0: like the app
     for ((i, p) in texts.withIndex()) all.addAll(SecurityScanner.scanSmali(p.first, i, p.second, pkg))
     all.addAll(ResourceScanner.scanApk(apk).findings)
     // SSA taint flows
