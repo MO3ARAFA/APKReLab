@@ -1,4 +1,4 @@
-# APKReLab: how to use it as a security scanner (1.1.0)
+# APKReLab: how to use it as a security scanner (1.2.0)
 
 ## What it is good at today (measured, see "Evidence")
 - Static analysis of an APK ON THE PHONE: manifest, resources, Java/Kotlin code (Dalvik IR, SSA, call graph, inter-procedural taint from exported components / deep links / Intents to WebView, SQL,
@@ -47,6 +47,19 @@ Alternatively tap **Installed apps** and pick the installed app: its base and sp
 - **Hybrid apps** (Flutter, React Native, Expo): the app's own package is taken from the launcher activity, so the app's few Java classes are `in app code`.
 - **Agent tools**: `classify_class` (what an obfuscated class probably is, R8 merge signs) and `verify_class_edit` (does a smali patch assemble, which findings it removes or adds) next to callers / callees / flow_path / search_assets.
 - **Strings decrypted at run time** (a protector): the report prints a Frida snippet to dump them on YOUR test device; import the dump with the Strings button and scan again.
+
+## What changed in 1.2.0 ("The Verdict": how the report reads, not what it finds)
+Every finding of 1.2.0 existed in 1.1.0; no severity, card or data flow changed. What changed is the reading:
+- **Verdict at the top of every report** (Markdown, HTML, and SARIF `run.properties.verdict`), five lines, no AI:
+  - **VERDICT**: critical / high-priority / informational counts of the reported cards ("no HIGH or CRITICAL finding" is said outright);
+  - **CRITICAL PATH**: the attack scenario that holds the highest-priority card: entry -> path (card numbers) -> sink -> impact;
+  - **MUST FIX**: at most 3 cards, HIGH or CRITICAL and reachable from an exported component, highest priority first, each with its one-line fix;
+  - **CONFIDENCE**: the share of HIGH+ cards whose confidence is HIGH (strong >= 80%, moderate 50-80%, weak below);
+  - **NOT SEEN**: native methods (and whether their libraries were read), reflection, encrypted strings (decrypted / total call sites), splits, capped groups.
+  A Deep scan that read 0 classes prints **SCAN FAILED** instead of a verdict.
+- **Confidence per card**: "Confidence: 87/100 - severity 90 x reach 1.0 x source 1.0 x evidence 0.95" and a "Why" line (entry, source, sink, whether a validation call was seen on the path). Evidence is 1.0 for a traced data flow, 0.8 for a flow inside one class, 0.6 for a rule's pattern match, 0.3 when the engine saw validation-like calls on the path.
+- **Related findings**: cards that share an entry method, a tainted field or a class get one line naming the others and one fix for all of them ("validate the Intent at MainActivity.onCreate").
+- **Suggested fix**: one sentence for the known shapes (WebView URL from outside, file write from outside, SQL built by concatenation, trust-all TrustManager, JavaScript bridge, exported component without a permission). A sentence, not a patch.
 
 ## What changed in 1.1.0
 - **Attack surface: who can call each exported component.** A "Protection" column gives the permission a caller needs and how strong it is (signature = only apps signed with the same key or the system; normal / dangerous = any app can get it; NONE = open). A component that needs a signature permission is not "open" just because it is exported.

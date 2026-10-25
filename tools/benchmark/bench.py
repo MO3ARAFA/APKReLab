@@ -5,6 +5,7 @@
   python3 bench.py report.md --save run.json      # remember the result of this run
   python3 bench.py report.md --expected expected_heldout/<pkg>.json --measure   # held-out apps: recall line, never fails on a MISS
   python3 bench.py report.md --baseline run.json  # also print regressions against an earlier run (exit code 1 on any)
+  python3 bench.py report.md --evidence           # 1.2.0: also print the card(s) that matched each expected entry
 
 Per expected entry: FOUND, FOUND (not traced as reachable) when "reach" is required, FOUND (AI says false positive),
 MISS, or KNOWN GAP (a MISS the owner already accepted). Also lists HIGH/CRITICAL code findings that match NO expected entry
@@ -30,6 +31,7 @@ def parse(text):
         rule = re.search(r"Rule: ([a-z0-9-]+)", b)
         ai = re.search(r"- AI triage: (TRUE POSITIVE|FALSE POSITIVE|NEEDS REVIEW)", b)
         out.append({
+            "n": (re.match(r"(\d+)\.", head) or [None, ""])[1],                 # 1.2.0: the card number, for --evidence
             "sev": m.group(1), "title": m.group(2), "loc": loc.group(1) if loc else "",
             "rule": rule.group(1) if rule else "",
             # 0.75.2: a finding that absorbed another rule's finding of the same class (SecurityScanner.dedupe) counts for both rule ids
@@ -69,6 +71,9 @@ def main():
     measure = "--measure" in args
     if measure:
         args.remove("--measure")
+    evidence = "--evidence" in args          # 1.2.0 (self_check): print the card(s) that matched each entry
+    if evidence:
+        args.remove("--evidence")
     opt = {}
     for k in ("--save", "--baseline", "--expected"):
         if k in args:
@@ -95,6 +100,9 @@ def main():
         status[e["id"]] = s
         bad += s in ("MISS", "FOUND-NOREACH")
         print("%-14s %s" % (s, e["vuln"]) + ("" if s.startswith("FOUND") and s == "FOUND" else "   <- %s" % e.get("hint", "")))
+        if evidence:
+            for f in found[:3]:
+                print("    card #%s [%s] %s | %s" % (f["n"], f["sev"], f["title"][:70], f["loc"]))
     ok = sum(1 for s in status.values() if s == "FOUND")
     inscope = sum(1 for s in status.values() if s != "OUT OF SCOPE")
     print("\n%d/%d found, %d known gap(s), %d need attention, %d out of scope" % (ok, inscope, sum(1 for s in status.values() if s == "KNOWN GAP"), bad, len(status) - inscope))
