@@ -45,7 +45,11 @@ fun main(args: Array<String>) {
     DynamicReceivers.lower(final, DynamicReceivers.protectedReceivers(minSdk) { p -> mc.declaredPerms[p]?.let { PermissionGuard.isSignatureLevel(it) } ?: ((ReportBuilder.defaultLevel(p) ?: 0) >= 2) })
     FindingPolish.applyProviderCodeChecks(final)
     FindingPolish.applyNetworkEvidence(final)
-    outMd.writeText("# APK ReLab report: $pkg\n\n(sandbox scan, no AI triage)\n\n## Security scan\n\n" + ReportBuilder.securitySection(final) + "\n")
+    // 1.2.0: the verdict as the app builds it (no device: no native scan, no overlay, no splits; the whole app in one SSA run)
+    val cards = ReportBuilder.reportable(final).take(400)
+    val verdict = Verdict.build(cards, try { AttackScenarios.build(final, mc, pkg) } catch (_: Throwable) { emptyList() },
+        Verdict.Coverage(deepScan = true, classesScanned = texts.size, decryptorCalls = 0), pkg)
+    outMd.writeText("# APK ReLab report: $pkg\n\n(sandbox scan, no AI triage)\n\n" + Verdict.markdown(verdict) + "## Security scan\n\n" + ReportBuilder.securitySection(final, 400, pkg) + "\n")
     println("pkg=$pkg exported=${entries.size} findings=${final.size} ssaItems=${items.size}")
     final.filter { it.severity != SecurityScanner.Severity.INFO }.sortedBy { it.severity.rank }.forEach {
         println("  [${it.severity}] ${it.ruleId} | ${it.title} | ${it.classType ?: it.file}")

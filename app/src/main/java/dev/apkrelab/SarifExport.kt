@@ -40,7 +40,7 @@ object SarifExport {
         return java.security.MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
     }
 
-    fun build(appPkg: String, toolVersion: String, findings: List<SecurityScanner.Finding>): String {
+    fun build(appPkg: String, toolVersion: String, findings: List<SecurityScanner.Finding>, verdict: Verdict.Lines? = null): String {
         val rules = JSONArray()
         val ruleIndex = HashMap<String, Int>()
         val results = JSONArray()
@@ -82,6 +82,8 @@ object SarifExport {
             props.put("confidence", FindingPolish.confidenceOf(f))
             props.put("priorityBand", score.band)
             props.put("priorityWhy", score.why)
+            FindingScore.confidence(f).let { c -> props.put("confidenceScore", c.value); props.put("confidenceFactors", c.factors); props.put("confidenceWhy", c.why) }   // 1.2.0
+            FixTemplates.match(f, appPkg)?.let { props.put("suggestedFix", it.sentence) }   // 1.2.0
             props.put("scope", f.scope.tag)
             if (f.cwe.isNotEmpty()) props.put("cwe", f.cwe)
             Masvs.controlsFor(f).takeIf { it.isNotEmpty() }?.let { props.put("masvs", JSONArray(it)) }
@@ -103,7 +105,9 @@ object SarifExport {
         val run = JSONObject()
         run.put("tool", JSONObject().put("driver", driver))
         run.put("results", results)
-        run.put("properties", JSONObject().put("package", appPkg))
+        val runProps = JSONObject().put("package", appPkg)
+        if (verdict != null) { val v = JSONObject(); for ((k, x) in Verdict.properties(verdict)) v.put(k, x); runProps.put("verdict", v) }   // 1.2.0
+        run.put("properties", runProps)
         run.put("automationDetails", JSONObject().put("id", "apkrelab/" + appPkg + "/"))
         run.put("invocations", JSONArray().put(JSONObject().put("executionSuccessful", true)))
         val root = JSONObject()

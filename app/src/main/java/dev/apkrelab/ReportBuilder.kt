@@ -301,9 +301,10 @@ object ReportBuilder {
 
     // ---------- Markdown ----------
 
-    fun securitySection(all: List<SecurityScanner.Finding>, maxItems: Int = 400): String {
+    fun securitySection(all: List<SecurityScanner.Finding>, maxItems: Int = 400, pkg: String = ""): String {
         val sb = StringBuilder()
         val list = reportable(all).take(maxItems)
+        val related = try { Correlation.byCard(Correlation.groups(list)) } catch (_: Throwable) { emptyMap() }   // 1.2.0
         sb.append("Heuristic static scan - ").append(all.size).append(" finding(s) in total; ").append(list.size)
             .append(" listed below (app/unknown code; INFO and known-library findings left out). Findings are leads: verify manually before relying on any of this.\n\n")
         // 0.82.0: what a static scan of the APK cannot see, said once at the top
@@ -326,6 +327,8 @@ object ReportBuilder {
             sb.append("- Location: `").append(f.location).append("`\n")
             sb.append("- ").append(meta(f)).append("\n")
             sb.append("- Priority: ").append(FindingScore.of(f).short).append("\n")      // 0.69.3
+            FindingScore.confidence(f).let { c -> sb.append("- Confidence: ").append(c.value).append("/100 - ").append(c.factors).append("\n- Why: ").append(c.why).append("\n") }   // 1.2.0
+            related[n - 1]?.let { g -> sb.append("- ").append(g.line { "#" + (it + 1) }).append("\n") }   // 1.2.0
             if (f.adjusted.isNotEmpty()) sb.append("- Note: ").append(f.adjusted).append("\n")
             // 0.51.1: the call-graph path itself, so an approximate (YES~) result can be checked by hand
             if (f.reach.startsWith("YES") && f.chain.isNotEmpty()) sb.append("- Call path: ").append(f.chain.replace("\n", " | ")).append("\n")
@@ -334,7 +337,9 @@ object ReportBuilder {
             }
             sb.append("- Why flagged: ").append(f.detail).append("\n")
             if (e != null) sb.append("- Risk scenario: ").append(e.scenario).append("\n")
-            sb.append("- Fix: ").append(f.recommendation).append("\n\n")
+            sb.append("- Fix: ").append(f.recommendation).append("\n")
+            FixTemplates.match(f, pkg)?.let { t -> sb.append("- Suggested fix: ").append(t.sentence).append(" (API: ").append(t.api).append(")\n") }   // 1.2.0
+            sb.append("\n")
         }
 
         // remediation guide: one block per weakness that appears in the list
@@ -391,8 +396,10 @@ object ReportBuilder {
         else -> "#6b7280"
     }
 
-    fun html(pkg: String, appInfo: String, all: List<SecurityScanner.Finding>, notes: List<Pair<String, String>>, maxItems: Int = 400, manifestXml: String = "", scaLibs: List<DetectedLib> = emptyList()): String {
+    fun html(pkg: String, appInfo: String, all: List<SecurityScanner.Finding>, notes: List<Pair<String, String>>, maxItems: Int = 400, manifestXml: String = "", scaLibs: List<DetectedLib> = emptyList(),
+             verdict: Verdict.Lines? = null): String {
         val list = reportable(all).take(maxItems)
+        val related = try { Correlation.byCard(Correlation.groups(list)) } catch (_: Throwable) { emptyMap() }   // 1.2.0
         val sb = StringBuilder()
         sb.append("<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
         sb.append("<title>APK ReLab report: ").append(esc(pkg)).append("</title><style>")
@@ -407,6 +414,7 @@ object ReportBuilder {
         sb.append("</style></head><body>")
         sb.append("<h1>APK ReLab report: ").append(esc(pkg)).append("</h1>")
         sb.append("<p class=\"mut\">Educational static analysis. Use only on apps you own or are allowed to analyze. Findings are heuristic leads: verify manually.</p>")
+        if (verdict != null) sb.append(Verdict.html(verdict))   // 1.2.0: first thing after the title
         if (appInfo.isNotBlank()) sb.append("<h2>App info</h2><pre>").append(esc(appInfo.take(4000))).append("</pre>")
         if (manifestXml.isNotBlank()) sb.append(attackSurfaceHtml(manifestXml, pkg))
         if (scaLibs.isNotEmpty()) sb.append(scaSectionHtml(scaLibs))   // 0.47.0: third-party libraries & SCA
@@ -429,11 +437,15 @@ object ReportBuilder {
                     .append(f.severity.label).append("</span>").append(n).append(". ").append(esc(f.title))
                 if (f.count > 1) sb.append(" (x").append(f.count).append(")")
                 sb.append("</h3><p class=\"mut\">").append(esc(f.location)).append("<br>").append(esc(meta(f))).append("<br>Priority: ").append(FindingScore.of(f).short).append("</p>")
+                FindingScore.confidence(f).let { c -> sb.append("<p class=\"mut\">Confidence: ").append(c.value).append("/100 - ").append(esc(c.factors)).append("<br>Why: ").append(esc(c.why)).append("</p>") }   // 1.2.0
+                related[n - 1]?.let { g -> sb.append("<p><b>").append(esc(g.line { "#" + (it + 1) })).append("</b></p>") }   // 1.2.0
                 if (f.adjusted.isNotEmpty()) sb.append("<p class=\"mut\">").append(esc(f.adjusted)).append("</p>")
                 if (f.verdict.isNotEmpty()) sb.append("<p><b>AI triage: ").append(verdictText(f)).append("</b> - ").append(esc(f.verdictNote.replace("\n", " "))).append("</p>")
                 sb.append("<p><b>Why flagged:</b> ").append(esc(f.detail)).append("</p>")
                 if (e != null) sb.append("<p><b>Risk scenario:</b> ").append(esc(e.scenario)).append("</p>")
-                sb.append("<p><b>Fix:</b> ").append(esc(f.recommendation)).append("</p></div>")
+                sb.append("<p><b>Fix:</b> ").append(esc(f.recommendation)).append("</p>")
+                FixTemplates.match(f, pkg)?.let { t -> sb.append("<p><b>Suggested fix:</b> ").append(esc(t.sentence)).append(" <span class=\"mut\">(API: ").append(esc(t.api)).append(")</span></p>") }   // 1.2.0
+                sb.append("</div>")
             }
             val seen = LinkedHashSet<String>()
             for (f in list) if (f.cwe.isNotEmpty()) seen.add(f.cwe.uppercase())

@@ -3518,6 +3518,7 @@ class MainActivity : Activity() {
         val pkg = packageNameOrNull() ?: "unknown"
         sb.append("# APK ReLab report: ").append(pkg).append("\n\n")
         sb.append("> Educational static analysis. Use only on apps you own or are allowed to analyze.\n\n")
+        if (secFindings.isNotEmpty()) verdictLines()?.let { sb.append(Verdict.markdown(it)) }   // 1.2.0: the verdict comes first
         sb.append("## App info\n\n```\n").append(info.text.toString().replace(rx("\\n(⏳|✅|⚠) Index[^\\n]*"), "").trim()).append("\n```\n\n")
         if (manifestFull.isNotBlank()) {
             val xi = manifestFull.indexOf("<?xml")
@@ -3537,7 +3538,7 @@ class MainActivity : Activity() {
             sb.append("Not run yet. Open the Security tab (manifest checks run automatically) and tap 'Deep scan (code)' for code-level checks.\n\n")
         } else {
             if (lastScanNote.isNotEmpty()) sb.append("Deep scan status: ").append(lastScanNote).append("\n\n")
-            sb.append(ReportBuilder.securitySection(secFindings, 400))
+            sb.append(ReportBuilder.securitySection(secFindings, 400, packageNameOrNull() ?: ""))
             sb.append(try { ReportBuilder.scaSection(LibraryScanner.inventory) } catch (_: Throwable) { LibraryScanner.sbomMarkdown() })
             try { sb.append(PostureScanner.section()) } catch (_: Throwable) { RuleRegistry.noteError("posture") }   // 0.91.0
             try { sb.append(AttackScenarios.section(secFindings, ManifestContext(manifestFull), packageNameOrNull() ?: "")) } catch (_: Throwable) { RuleRegistry.noteError("scenarios") }   // 0.93.0
@@ -3575,8 +3576,22 @@ class MainActivity : Activity() {
         val infoText = info.text.toString().replace(rx("\\n(⏳|✅|⚠) Index[^\\n]*"), "").trim()
         val notes = reportItems.map { (if (it.subject.isNotEmpty()) it.title + " - " + it.subject else it.title) to it.text }
         return ReportBuilder.html(pkg, infoText, secFindings, notes, manifestXml = manifestFull,
-            scaLibs = LibraryScanner.inventory)   // 0.47.0: SCA table in the HTML report
+            scaLibs = LibraryScanner.inventory,   // 0.47.0: SCA table in the HTML report
+            verdict = if (secFindings.isNotEmpty()) verdictLines() else null)   // 1.2.0
     }
+
+    /** 1.2.0: the report's verdict, from the cards, the attack scenarios and the coverage values this scan already holds (status line, native scan, strings overlay, splits). */
+    private fun verdictLines(): Verdict.Lines? = try {
+        val pkg = packageNameOrNull() ?: ""
+        val cards = ReportBuilder.reportable(secFindings).take(400)
+        val sc = try { AttackScenarios.build(secFindings, ManifestContext(manifestFull), pkg) } catch (_: Throwable) { emptyList() }
+        val (read, groups) = Verdict.parseStatus(lastScanNote)
+        val capped = Regex("(\\d+) of \\d+ groups capped").find(ssaIncomplete)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val natives = try { NativeBridge.bindings().size } catch (_: Throwable) { 0 }
+        Verdict.build(cards, sc, Verdict.Coverage(deepScan = lastScanNote.isNotEmpty(), classesScanned = read, groups = groups, groupsCapped = capped, timeUp = ssaTimeUp,
+            nativeMethods = natives, nativeLibs = NativeBridge.libs.size, decryptorCalls = PostureScanner.decryptorCallCount(), decrypted = StringOverlay.current?.replaced,
+            splits = NativeScanner.extraArchives.size), pkg)
+    } catch (_: Throwable) { null }
 
     /** 0.40.0: [format] "md" or "html"; empty = ask the user (the Report chip). The AI Hub tool passes "md". */
     private fun exportReport(format: String = "") {
@@ -3651,7 +3666,7 @@ class MainActivity : Activity() {
                 } else if (asSarif) {
                     reachPass()
                     val ver = try { packageManager.getPackageInfo(packageName, 0).versionName ?: "" } catch (_: Throwable) { "" }
-                    SarifExport.build(packageNameOrNull() ?: "unknown", ver, secFindings)
+                    SarifExport.build(packageNameOrNull() ?: "unknown", ver, secFindings, if (secFindings.isNotEmpty()) verdictLines() else null)   // 1.2.0: verdict in run.properties
                 } else if (asHtml) buildReportHtml() else buildReport()
                 runOnUiThread {
                     pendingReport = md
