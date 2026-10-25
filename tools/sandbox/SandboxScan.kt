@@ -5,6 +5,7 @@ import java.util.zip.ZipFile
 /** Sandbox approximation of the device Smart scan: code rules per class, manifest rules, resource rules, SSA taint flows -> Markdown report. No AI triage, no reach labels. */
 fun main(args: Array<String>) {
     val decDir = File(args[0]); val apk = File(args[1]); val outMd = File(args[2])
+    val t0 = System.nanoTime()
     val manifest = ZipFile(apk).use { z -> Axml.decode(z.getInputStream(z.getEntry("AndroidManifest.xml")).readBytes()) } ?: error("manifest")
     val mc = ManifestContext(manifest)
     val manifestPkg = Regex("package=\"([^\"]+)\"").find(manifest)?.groupValues?.get(1) ?: ""
@@ -53,11 +54,13 @@ fun main(args: Array<String>) {
     FindingPolish.applyNetworkEvidence(final)
     // 1.2.0: the verdict as the app builds it (no device: no strings overlay, no splits, no reach pass so MUST FIX stays empty here; the whole app in one SSA run)
     val cards = ReportBuilder.reportable(final).take(400)
+    val vt0 = System.nanoTime()
     val verdict = Verdict.build(cards, try { AttackScenarios.build(final, mc, pkg) } catch (_: Throwable) { emptyList() },
         Verdict.Coverage(deepScan = true, classesScanned = texts.size, nativeMethods = NativeBridge.bindings().size, nativeLibs = NativeBridge.libs.size,
             decryptorCalls = PostureScanner.decryptorCallCount()), pkg)
+    val vtEnd = System.nanoTime()
     outMd.writeText("# APK ReLab report: $pkg\n\n(sandbox scan, no AI triage)\n\n" + Verdict.markdown(verdict) + "## Security scan\n\n" + ReportBuilder.securitySection(final, 400, pkg) + "\n")
-    println("pkg=$pkg exported=${entries.size} findings=${final.size} ssaItems=${items.size}")
+    println("pkg=$pkg exported=${entries.size} findings=${final.size} ssaItems=${items.size} classes=${texts.size} scanMs=${(System.nanoTime() - t0) / 1_000_000} verdictMs=${(vtEnd - vt0) / 1_000_000.0}")
     final.filter { it.severity != SecurityScanner.Severity.INFO }.sortedBy { it.severity.rank }.forEach {
         println("  [${it.severity}] ${it.ruleId} | ${it.title} | ${it.classType ?: it.file}")
     }
