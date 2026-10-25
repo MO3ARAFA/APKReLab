@@ -68,6 +68,16 @@ class Verdict120Test {
         assertTrue(clean, clean.contains("groups: 26/26 groups") && clean.contains("splits: base + 2 split(s)") && clean.contains("strings: no string decryptor seen"))
     }
 
+    @Test fun notSeenNamesTheHybridCodeTheScanCouldNotRead() {                       // QA 1.2.0: fluffy_board (Flutter), Paperless (React Native)
+        fun info(rule: String, title: String) = Finding(Severity.INFO, title, "d", "r").also { it.ruleId = rule }
+        val all = listOf(info("native-flutter", "Flutter app: the Dart code is compiled into libapp.so and is NOT analysed"),
+            info("assets-coverage", "Hybrid app layer scanned as text: React Native (Hermes bytecode v96, string table scanned)"))
+        val ns = Verdict.build(emptyList(), emptyList(), full, "", all).notSeen
+        assertTrue(ns, ns.startsWith("Dart code (libapp.so): strings scanned, the code itself not analysed; React Native (Hermes bytecode v96, string table scanned): scanned as text only"))
+        // twin: a plain Java app has neither card and gets no hybrid line
+        assertFalse(Verdict.build(emptyList(), emptyList(), full, "", listOf(info("other", "x"))).notSeen.contains("not analysed"))
+    }
+
     @Test fun theStatusLineGivesClassesAndGroups() {
         assertEquals(18093 to 25, Verdict.parseStatus("finished, 18093 / 18093 classes; SSA taint: +17 flow(s) (25 groups of up to 3000 classes, 346 classes"))
         assertEquals(500 to 0, Verdict.parseStatus("stopped at 500 / 9000; SSA taint: no extra flow"))

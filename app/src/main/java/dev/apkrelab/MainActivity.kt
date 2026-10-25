@@ -3590,7 +3590,7 @@ class MainActivity : Activity() {
         val natives = try { NativeBridge.bindings().size } catch (_: Throwable) { 0 }
         Verdict.build(cards, sc, Verdict.Coverage(deepScan = lastScanNote.isNotEmpty(), classesScanned = read, groups = groups, groupsCapped = capped, timeUp = ssaTimeUp,
             nativeMethods = natives, nativeLibs = NativeBridge.libs.size, decryptorCalls = PostureScanner.decryptorCallCount(), decrypted = StringOverlay.current?.replaced,
-            splits = NativeScanner.extraArchives.size), pkg)
+            splits = NativeScanner.extraArchives.size), pkg, secFindings)
     } catch (_: Throwable) { null }
 
     /** 0.40.0: [format] "md" or "html"; empty = ask the user (the Report chip). The AI Hub tool passes "md". */

@@ -37,10 +37,11 @@ object Verdict {
     private fun label(i: Int) = "#" + (i + 1)
     private fun where(f: Finding) = f.location.substringAfterLast('/').substringAfterLast('.').ifEmpty { f.location }
 
-    fun build(cards: List<Finding>, scenarios: List<AttackScenarios.Scenario>, cov: Coverage, pkg: String = ""): Lines {
+    /** [all] = every finding of the scan, INFO included (the native and asset scans say there what they could not read); the cards are the reported subset. */
+    fun build(cards: List<Finding>, scenarios: List<AttackScenarios.Scenario>, cov: Coverage, pkg: String = "", all: List<Finding> = cards): Lines {
         if (cov.deepScan && cov.classesScanned == 0)
             return Lines(true, "SCAN FAILED: the deep scan read 0 classes, so nothing in this report is a verdict on the code (re-import the APK and run the Deep scan again).",
-                emptyList(), emptyList(), "not rated (no classes read)", notSeen(cards, cov))
+                emptyList(), emptyList(), "not rated (no classes read)", notSeen(cards, cov, all))
         val crit = cards.count { it.severity == Severity.CRITICAL }
         val high = cards.count { it.severity == Severity.HIGH }
         val rest = cards.size - crit - high
@@ -74,11 +75,14 @@ object Verdict {
             val pct = 100 * sure / highPlus.size
             (if (pct >= 80) "strong" else if (pct >= 50) "moderate" else "weak") + " ($pct% of HIGH+ cards have HIGH confidence: $sure of ${highPlus.size})"
         }
-        return Lines(false, verdict, path, must, confidence, notSeen(cards, cov))
+        return Lines(false, verdict, path, must, confidence, notSeen(cards, cov, all))
     }
 
-    private fun notSeen(cards: List<Finding>, cov: Coverage): String {
+    private fun notSeen(cards: List<Finding>, cov: Coverage, all: List<Finding>): String {
         val parts = ArrayList<String>()
+        // QA 1.2.0 (a Flutter and a React Native app): the app's own code in Dart / JavaScript was not named, although the native and asset scans say so in INFO cards
+        if (all.any { it.ruleId == "native-flutter" }) parts.add("Dart code (libapp.so): strings scanned, the code itself not analysed")
+        all.firstOrNull { it.ruleId == "assets-coverage" }?.let { f -> parts.add(f.title.substringAfter("scanned as text: ").ifEmpty { "hybrid layer" } + ": scanned as text only, the code itself not analysed") }
         parts.add(if (!cov.deepScan) "code: not scanned (no Deep scan)" else "native: " + (if (cov.nativeMethods == 0) "no native method declared" else
             "${cov.nativeMethods} native methods, flows into .so not followed, " + (if (cov.nativeLibs > 0) "${cov.nativeLibs} libraries read" else "libraries not available (import the ABI split)")))
         val refl = cards.count { it.title.contains("class or method by name") }
