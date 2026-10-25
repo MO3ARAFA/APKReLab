@@ -98,7 +98,8 @@ object Masvs {
     /** The rule ids the table maps (for the coverage statement and the tests). */
     internal fun mappedRules(): Set<String> = byRule.keys
 
-    class Cover(val control: String, val statement: String, val rules: Int, val findings: Int, val worst: Severity?, val libFindings: Int = 0)
+    /** [signalsOnly] (1.0.0): every "rule" of the control is a posture signal: the table says what the code uses, not whether a weakness was looked for. */
+    class Cover(val control: String, val statement: String, val rules: Int, val findings: Int, val worst: Severity?, val libFindings: Int = 0, val signalsOnly: Boolean = false)
 
     /** Per control: how many mapped rules assess it (the posture signals count for RESILIENCE / NETWORK-2 / PLATFORM-3) and what the scan found. */
     fun coverage(findings: List<Finding>): List<Cover> {
@@ -112,7 +113,10 @@ object Masvs {
             if (f.severity.rank > 3) continue
             for (c in controlsFor(f)) { if (f.scope == SecurityScanner.Scope.LIB) inLib[c] = (inLib[c] ?: 0) + 1 else found.getOrPut(c) { ArrayList() }.add(f) }
         }
-        return controls.map { (id, st) -> Cover(id, st, rulesPer[id]?.size ?: 0, found[id]?.size ?: 0, found[id]?.minByOrNull { it.severity.rank }?.severity, inLib[id] ?: 0) }
+        return controls.map { (id, st) ->
+            val rs = rulesPer[id]
+            Cover(id, st, rs?.size ?: 0, found[id]?.size ?: 0, found[id]?.minByOrNull { it.severity.rank }?.severity, inLib[id] ?: 0, rs != null && rs.isNotEmpty() && rs.all { it.startsWith("posture:") })
+        }
     }
 
     /** Markdown section: which of the 24 controls were assessed, what was found, which cannot be assessed by this tool. */
@@ -124,12 +128,13 @@ object Masvs {
             .append("The mapping of rules to controls is APKReLab's own.\n\n")
         sb.append("| Control | What it requires | Assessed by | Findings in app code | Worst | In libraries |\n|---|---|---|---|---|---|\n")
         for (c in cov) {
-            val by = if (c.rules == 0) "not assessed by this tool" else c.rules.toString() + " rule(s) / signal(s)"
+            val by = if (c.rules == 0) "not assessed by this tool" else if (c.signalsOnly) c.rules.toString() + " posture signal(s) only: what the code uses, see Defense posture" else c.rules.toString() + " rule(s) / signal(s)"
             sb.append("| ").append(c.control).append(" | ").append(c.statement).append(" | ").append(by).append(" | ").append(if (c.rules == 0) "-" else c.findings.toString()).append(" | ")
                 .append(c.worst?.label ?: "-").append(" | ").append(if (c.rules == 0) "-" else c.libFindings.toString()).append(" |\n")
         }
         val assessed = cov.count { it.rules > 0 }
-        sb.append("\n").append(assessed).append(" of ").append(cov.size).append(" controls are assessed; ").append(cov.count { it.findings > 0 }).append(" have findings in the app's code. ")
+        sb.append("\n").append(assessed).append(" of ").append(cov.size).append(" controls are assessed (").append(cov.count { it.signalsOnly }).append(" of them only by posture signals: they tell what the code uses, not whether it uses it correctly); ")
+            .append(cov.count { it.findings > 0 }).append(" have findings in the app's code. ")
             .append("Controls with no rule: ").append(cov.filter { it.rules == 0 }.joinToString(", ") { it.control.removePrefix("MASVS-") }.ifEmpty { "none" }).append(".\n")
         return sb.toString()
     }

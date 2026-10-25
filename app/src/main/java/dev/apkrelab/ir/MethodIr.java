@@ -31,6 +31,7 @@ public final class MethodIr {
     public final List<Insn> insns = new ArrayList<>();
     public final Map<String, Integer> labels = new HashMap<>();          // label -> index of the next instruction
     public final Map<String, List<String>> payloads = new HashMap<>();   // switch payload label -> case labels (in order)
+    public Map<String, long[]> switchKeys;                                 // 1.0.0: switch payload label -> case keys, aligned with payloads (null = no switch)
     public final List<String[]> rawCatches = new ArrayList<>();          // type|null, startLabel, endLabel, handlerLabel (resolved at .end method)
     public final List<Catch> catches = new ArrayList<>();
     /** 0.60.0: SSA form built once per method and reused by every re-analysis and every group (soft, so the GC may drop it under memory pressure). */

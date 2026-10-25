@@ -42,11 +42,14 @@ class MasvsTest {
         val cov = Masvs.coverage(listOf(f("tls-trustmanager", sev = SecurityScanner.Severity.CRITICAL), f("tls-protocol-version")))
         val net1 = cov.first { it.control == "MASVS-NETWORK-1" }
         assertTrue(net1.rules >= 5); assertEquals(2, net1.findings); assertEquals(SecurityScanner.Severity.CRITICAL, net1.worst)
-        assertEquals(0, cov.first { it.control == "MASVS-AUTH-1" }.rules)                                              // nothing in this tool assesses it
+        val auth1 = cov.first { it.control == "MASVS-AUTH-1" }                                                          // 1.0.0: posture signals only (AppAuth, Credential Manager, AccountManager)
+        assertTrue(auth1.rules >= 3); assertTrue(auth1.signalsOnly)
+        assertFalse(net1.signalsOnly)
+        assertTrue(cov.first { it.control == "MASVS-CODE-2" }.signalsOnly)
         assertTrue(cov.first { it.control == "MASVS-RESILIENCE-3" }.rules > 0)                                         // the obfuscation share of the posture
         assertEquals(0, cov.first { it.control == "MASVS-STORAGE-1" }.findings)                                        // assessed, nothing found
         val md = Masvs.section(emptyList())
-        assertTrue(md.contains("not assessed by this tool")); assertTrue(md.contains("is NOT a pass"))
+        assertTrue(md.contains("posture signal(s) only")); assertTrue(md.contains("is NOT a pass"))
     }
 
     @Test fun sarifCarriesSecuritySeverityMasvsFingerprintAndRegion() {

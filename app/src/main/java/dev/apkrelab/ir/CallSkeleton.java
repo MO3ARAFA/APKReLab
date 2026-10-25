@@ -36,6 +36,10 @@ public final class CallSkeleton {
     private static final Pattern INVOKE = Pattern.compile("invoke-[\\w/-]+\\s+\\{[^}]*\\},\\s*(L[^;\\s]+;)->([^(\\s]+)\\(");
     private static final Pattern CONST_CLASS = Pattern.compile("const-class\\s+[vp]\\d+,\\s*(L[^;\\s]+;)");
     private static final Pattern SUPER = Pattern.compile("^\\.super (L[^;\\s]+;)", Pattern.MULTILINE);
+    private static final Pattern CLASS_LINE = Pattern.compile("^\\.class[^\\n]*?(L[^;\\s]+;)", Pattern.MULTILINE);
+    private static final Pattern INSTANCE_FIELD = Pattern.compile("[ \\t]iput[\\w-]*\\s+[vp]\\d+,\\s*[vp]\\d+,\\s*(L[^;\\s]+;)->");
+    /** R8's class-id field: a non-static synthetic int / short / byte field (the same test as SmaliParser's ClassIr.discriminator). */
+    private static final Pattern MERGED_FIELD = Pattern.compile("^[ \\t]*\\.field (?![^\\n]*\\bstatic\\b)[^\\n]*\\bsynthetic\\b[^\\n]*:[BSI]\\s*$", Pattern.MULTILINE);
     private static final Pattern IFACE = Pattern.compile("^\\.implements (L[^;\\s]+;)", Pattern.MULTILINE);
 
     public final int n;
@@ -191,7 +195,7 @@ public final class CallSkeleton {
         return new CallSkeleton(n, types, flags, entry, callees, callers, parents, edges);
     }
 
-    static final int D_SRC = 1, D_SRC_WEAK = 2, D_SINK = 4;
+    static final int D_SRC = 1, D_SRC_WEAK = 2, D_SINK = 4, D_MERGED = 8;     // D_MERGED (1.0.0): the class has R8's synthetic class-id field (MergeFacts)
 
     /**
      * 0.105.0: everything the planner takes from ONE class text, as a value that depends on that text and the engine only: source / sink marks, the super type and interfaces,
@@ -203,12 +207,14 @@ public final class CallSkeleton {
         public final String[] parents;   // super type first (when there is one), then the interfaces, in text order
         public final String[] refs;      // distinct invoke owners and const-class types, in first-seen order
         public final long textHash;
+        public final String[] fieldOwners;   // 1.0.0: distinct OTHER classes whose instance fields this class writes (iput), for MergeFacts; not used by the planner
 
-        Digest(int bits, String[] parents, String[] refs, long textHash) {
+        Digest(int bits, String[] parents, String[] refs, long textHash, String[] fieldOwners) {
             this.bits = bits;
             this.parents = parents;
             this.refs = refs;
             this.textHash = textHash;
+            this.fieldOwners = fieldOwners;
         }
     }
 
@@ -235,12 +241,20 @@ public final class CallSkeleton {
         }
         Matcher cm = CONST_CLASS.matcher(text);
         while (cm.find()) refs.add(cm.group(1));
-        String[] p = new String[par.size()], r = new String[refs.size()];
+        Matcher tm = CLASS_LINE.matcher(text);
+        String self = tm.find() ? tm.group(1) : "";
+        java.util.LinkedHashSet<String> fo = new java.util.LinkedHashSet<>();
+        Matcher fm = INSTANCE_FIELD.matcher(text);
+        while (fm.find()) if (!fm.group(1).equals(self)) fo.add(fm.group(1));
+        if (text.contains(" synthetic ") && MERGED_FIELD.matcher(text).find()) f |= D_MERGED;
+        String[] p = new String[par.size()], r = new String[refs.size()], o = new String[fo.size()];
         int k = 0;
         for (String x : par) p[k++] = Canon.of(x);
         k = 0;
         for (String x : refs) r[k++] = Canon.of(x);
-        return new Digest(f, p, r, SsaGroups.fnv(text));
+        k = 0;
+        for (String x : fo) o[k++] = Canon.of(x);
+        return new Digest(f, p, r, SsaGroups.fnv(text), o);
     }
 
     private static void addAncestors(int j, int[][] parents, Set<Integer> out) {

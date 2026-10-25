@@ -110,6 +110,8 @@ public final class CallGraph {
 
     public final Mode mode;
     public final Map<String, MethodIr> methods = new LinkedHashMap<>();       // key -> method (app code only)
+    /** 1.0.0: R8 class-merge facts over the whole app (set for one group of a big app, see SsaGroups); null = this graph's classes are the program. */
+    MergeFacts mergeFacts;
     public final Set<String> entries = new LinkedHashSet<>();
     public final Set<String> reachable = new LinkedHashSet<>();
     public final Set<String> instantiated = new LinkedHashSet<>();
@@ -806,6 +808,16 @@ public final class CallGraph {
     }
 
     // ---------- hierarchy ----------
+
+    /** 1.0.0: the parsed class of an app type of this graph, or null. */
+    ClassIr classIr(String type) {
+        return classes.get(type);
+    }
+
+    /** 1.0.0: every app class of this graph. */
+    Collection<ClassIr> classList() {
+        return classes.values();
+    }
 
     /** The type, its superclasses and all interfaces, as far as the app classes tell (framework supertypes are not expanded). */
     List<String> supers(String type) {

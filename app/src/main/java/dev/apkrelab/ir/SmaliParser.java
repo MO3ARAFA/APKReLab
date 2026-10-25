@@ -1,6 +1,7 @@
 package dev.apkrelab.ir;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -31,6 +32,8 @@ public final class SmaliParser {
         String payloadKind = null;       // "packed" | "sparse" | "array"
         String payloadLabel = null;
         List<String> payloadTargets = null;
+        long[] payloadKeys = null;       // 1.0.0: the case keys of a switch payload, in label order (MethodIr.switchKeys)
+        long payloadBase = 0;
         int[] sc = new int[2 * MAX_OPS];     // operand ranges of one instruction, reused
         int pos = 0, n = text.length(), lineNo = 0;
         while (pos < n) {
@@ -69,7 +72,11 @@ public final class SmaliParser {
                     int eq = d.indexOf(" = ");
                     if (eq >= 0) d = d.substring(0, eq);
                     int sp = d.lastIndexOf(' ');
-                    c.fields.add(sp < 0 ? d : d.substring(sp + 1));
+                    String nt = sp < 0 ? d : d.substring(sp + 1);
+                    c.fields.add(nt);
+                    // 1.0.0: R8's horizontal class merger adds one synthetic int / short / byte instance field that tells the merged classes apart (see MergeTags)
+                    if (c.discriminator == null && sp > 0 && (nt.endsWith(":I") || nt.endsWith(":S") || nt.endsWith(":B")) && (" " + d.substring(0, sp) + " ").contains(" synthetic ")
+                            && !(" " + d.substring(0, sp) + " ").contains(" static ")) c.discriminator = nt;
                 }
                 continue;
             }
@@ -84,12 +91,28 @@ public final class SmaliParser {
             if (!bodies) continue;
             if (payloadKind != null) {
                 if (line.startsWith(".end packed-switch") || line.startsWith(".end sparse-switch") || line.startsWith(".end array-data")) {
-                    if (!payloadKind.equals("array") && payloadLabel != null) m.payloads.put(payloadLabel, payloadTargets);
+                    if (!payloadKind.equals("array") && payloadLabel != null) {
+                        m.payloads.put(payloadLabel, payloadTargets);
+                        if (payloadKeys != null && payloadKeys.length >= payloadTargets.size()) {
+                            if (m.switchKeys == null) m.switchKeys = new HashMap<>(4);
+                            m.switchKeys.put(payloadLabel, java.util.Arrays.copyOf(payloadKeys, payloadTargets.size()));
+                        }
+                    }
                     payloadKind = null;
                 } else if (!payloadKind.equals("array")) {
                     int i = line.lastIndexOf(':');
-                    if (i >= 0) payloadTargets.add(line.substring(i).trim());
+                    if (i >= 0) {
+                        int k = payloadTargets.size();
+                        payloadTargets.add(line.substring(i).trim());
+                        if (payloadKeys != null) {
+                            if (k >= payloadKeys.length) payloadKeys = java.util.Arrays.copyOf(payloadKeys, Math.max(4, k * 2));
+                            Long key = payloadKind.equals("packed") ? Long.valueOf(payloadBase + k) : longOr(line.substring(0, Math.max(0, line.indexOf("->"))).trim());
+                            if (key == null) payloadKeys = null;
+                            else payloadKeys[k] = key;
+                        }
+                    }
                 }
+                if (payloadKind == null && payloadKeys != null) payloadKeys = null;
                 continue;
             }
             if (inAnnotation) {
@@ -116,15 +139,20 @@ public final class SmaliParser {
                     case ".annotation":
                         inAnnotation = true;
                         break;
-                    case ".packed-switch":
+                    case ".packed-switch": {
                         payloadKind = "packed";
                         payloadLabel = lastLabel;
                         payloadTargets = new ArrayList<>();
+                        Long base = longOr(line.substring(head.length()).trim());
+                        payloadBase = base == null ? 0 : base;
+                        payloadKeys = base == null ? null : new long[4];
                         break;
+                    }
                     case ".sparse-switch":
                         payloadKind = "sparse";
                         payloadLabel = lastLabel;
                         payloadTargets = new ArrayList<>();
+                        payloadKeys = new long[4];
                         break;
                     case ".array-data":
                         payloadKind = "array";
@@ -216,6 +244,17 @@ public final class SmaliParser {
         if (r.length != 2) return;
         String type = all ? null : line.substring(".catch".length(), ob).trim();
         m.rawCatches.add(new String[]{type, r[0].trim(), r[1].trim(), line.substring(cb + 1).trim()});
+    }
+
+    /** 1.0.0: a switch key as baksmali writes it ("0x10", "-0x1", "5"); null when it is not a number. */
+    private static Long longOr(String s) {
+        try {
+            String t = s.trim();
+            if (t.endsWith("t") || t.endsWith("s") || t.endsWith("L")) t = t.substring(0, t.length() - 1);
+            return Long.decode(t);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private static int intOr(String s, int d) {

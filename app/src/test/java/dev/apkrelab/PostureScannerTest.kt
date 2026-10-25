@@ -75,6 +75,27 @@ class PostureScannerTest {
         assertTrue(PostureScanner.findings().none { it.ruleId == "posture-safetynet-retired" })                        // twin
     }
 
+    @Test fun authenticationUpdateAndPrivacySignals() {                                                                      // 1.0.0: MASVS-AUTH, CODE-2, PRIVACY rows
+        fresh()
+        observe("Lcom/myapp/Bio;", cls("Lcom/myapp/Bio;", m("    invoke-virtual {v0, v1, v2}, Landroidx/biometric/BiometricPrompt;->authenticate(Landroidx/biometric/BiometricPrompt\$PromptInfo;Landroidx/biometric/BiometricPrompt\$CryptoObject;)V\n" +
+            "    invoke-virtual {v0, v1}, Landroid/security/keystore/KeyGenParameterSpec\$Builder;->setUserAuthenticationRequired(Z)Landroid/security/keystore/KeyGenParameterSpec\$Builder;\n")))
+        assertEquals(1, row("bio-crypto").app.size); assertEquals(1, row("key-userauth").app.size)
+        assertTrue(row("bio-event").app.isEmpty())                                                                      // twin: a prompt bound to a key is not the event-only one
+        observe("Lcom/myapp/Bio2;", cls("Lcom/myapp/Bio2;", m("    invoke-virtual {v0, v1}, Landroidx/biometric/BiometricPrompt;->authenticate(Landroidx/biometric/BiometricPrompt\$PromptInfo;)V\n")))
+        assertEquals(listOf("Lcom/myapp/Bio2;"), row("bio-event").app)
+        observe("Lcom/myapp/Up;", cls("Lcom/myapp/Up;", m("    invoke-static {v0}, Lcom/google/android/play/core/appupdate/AppUpdateManagerFactory;->create(Landroid/content/Context;)Lcom/google/android/play/core/appupdate/AppUpdateManager;\n")))
+        assertEquals(1, row("in-app-update").app.size)
+        observe("Lcom/myapp/Login;", cls("Lcom/myapp/Login;", m("    invoke-virtual {v0, v1, v2}, Lnet/openid/appauth/AuthorizationService;->performAuthorizationRequest(Lnet/openid/appauth/AuthorizationRequest;Landroid/app/PendingIntent;)V\n")))
+        assertEquals(1, row("auth-oauth").app.size)
+        observe("Lcom/myapp/Consent;", cls("Lcom/myapp/Consent;", m("    invoke-static {v0, v1}, Lcom/google/android/ump/UserMessagingPlatform;->loadAndShowConsentFormIfRequired(Landroid/app/Activity;Lcom/google/android/ump/ConsentForm\$OnConsentFormDismissedListener;)V\n" +
+            "    invoke-static {v0, v1}, Lcom/google/android/ump/UserMessagingPlatform;->showPrivacyOptionsForm(Landroid/app/Activity;Lcom/google/android/ump/ConsentForm\$OnConsentFormDismissedListener;)V\n")))
+        assertEquals(1, row("consent-ump").app.size); assertEquals(1, row("privacy-options").app.size)
+        // twins: naming a type is not using it (an import of the update manager, a consent-status getter)
+        fresh()
+        observe("Lcom/myapp/T;", cls("Lcom/myapp/T;", m("    check-cast v0, Lcom/google/android/play/core/appupdate/AppUpdateManager;\n    invoke-interface {v0}, Lcom/google/android/ump/ConsentInformation;->getConsentStatus()I\n")))
+        assertTrue(row("in-app-update").app.isEmpty() && row("consent-ump").app.isEmpty() && row("privacy-options").app.isEmpty())
+    }
+
     @Test fun obfuscationIsCountedOverTheAppClassesOnly() {
         fresh()
         val keep = ".class public Lcom/myapp/Main;\n.super Ljava/lang/Object;\n.source \"Main.kt\"\n.method public a()V\n    .locals 0\n    .line 1\n    return-void\n.end method\n"

@@ -109,8 +109,15 @@ public final class SsaBridge {
     /** 0.69.1: {@code guarded} = exported components protected by a signature-level permission (may be null), see CallGraph.setGuardedComponents. */
     public static List<Item> newFlows(Collection<ClassIr> app, Collection<String> entryTypes, Collection<TaintIr.Old> old, TaintIr.Stats statsOut,
                                       Collection<String> guarded) {
+        return newFlows(app, entryTypes, old, statsOut, guarded, null);
+    }
+
+    /** 1.0.0: {@code merge} = R8 class-merge facts over the whole app (one group of a big app), or null when these classes are the whole program. */
+    public static List<Item> newFlows(Collection<ClassIr> app, Collection<String> entryTypes, Collection<TaintIr.Old> old, TaintIr.Stats statsOut,
+                                      Collection<String> guarded, MergeFacts merge) {
         CallGraph g = CallGraph.build(app, entryTypes, CallGraph.Mode.RTA, null);
         if (guarded != null && !guarded.isEmpty()) g.setGuardedComponents(guarded);
+        g.mergeFacts = merge;
         return newFlows(g, old, statsOut);
     }
 

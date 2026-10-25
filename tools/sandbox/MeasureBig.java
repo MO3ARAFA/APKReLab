@@ -71,8 +71,11 @@ public class MeasureBig {
     { Map<Integer, Integer> mult = new HashMap<>(); long slots = 0; for (List<Integer> g : groupIdx) for (int x : g) { slots++; mult.merge(x, 1, Integer::sum); }
       int[] hist = new int[6]; for (int v : mult.values()) hist[Math.min(5, v - 1)]++;
       System.out.println("OVERLAP slots " + slots + " unique " + mult.size() + " (in 1/2/3/4/5/6+ groups: " + Arrays.toString(hist) + ")"); }
+    // 1.0.0: R8 class-merge facts over every class the planner offered (the app does the same for a big app); -Dnomf=true = each group alone
+    final MergeFacts mfacts = app.size() > 6000 && !Boolean.getBoolean("nomf") ? MergeFacts.of(src) : null;
     long t1 = System.currentTimeMillis();
     SsaGroups.Host host = new SsaGroups.Host() {
+      public MergeFacts mergeFacts() { return mfacts; }
       public String text(int i) throws Exception { return new String(Files.readAllBytes(app.get(i)), StandardCharsets.UTF_8); }
       public String type(int i) { return types.get(i); }
       public boolean cancelled() { return false; }
@@ -100,6 +103,7 @@ public class MeasureBig {
     System.out.println("FLOWS " + lines.size() + " (picked " + res.picked.size() + ")");
     for (String l : lines) System.out.println("  " + l);
     System.out.println("STATS " + res.stats.line());
+    if (mfacts != null) System.out.println("MERGE " + mfacts.note());
     int topN = Integer.getInteger("owners", 0);
     if (topN > 0) { List<Map.Entry<String, Long>> es = new ArrayList<>(res.stats.owners.entrySet()); es.sort((x, y) -> Long.compare(y.getValue(), x.getValue()));
       for (int i = 0; i < es.size() && i < topN; i++) System.out.println("OWNERS " + es.get(i).getValue() + " " + es.get(i).getKey()); }

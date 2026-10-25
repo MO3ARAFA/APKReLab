@@ -44,6 +44,31 @@ object ClassTools {
         return out
     }
 
+    const val OBF_HINT_MARK = "\n\nRenamed code:"
+
+    /**
+     * 1.0.0: a line of structural context on every card of renamed code of unknown origin (scope OBF), from the Deep scan's facts: R8 merged several original classes into this
+     * one (a class-id field), or R8's static merger put unrelated static helpers in it, or it is renamed code no single library names. The card says what to check, not a verdict.
+     * Cards already given to an SDK (scope LIB, see SdkAttribution) are left alone. Returns how many cards got a hint.
+     */
+    fun obfHint(list: List<SecurityScanner.Finding>, merged: Set<String>, holders: Set<String>): Int {
+        var n = 0
+        for (f in list) {
+            val t = f.classType ?: continue
+            if (f.scope != SecurityScanner.Scope.OBF || f.detail.contains(OBF_HINT_MARK)) continue
+            val src = f.sourceMethod.substringBefore("->", "")
+            val viaMerged = src.isNotEmpty() && src != t && src in merged
+            f.detail += OBF_HINT_MARK + " " + when {
+                t in merged -> "R8 merged several original classes into this one (it has the synthetic class-id field): its fields and its dispatch methods hold code of unrelated origins. Run classify_class ${t.removePrefix("L").removeSuffix(";")} and check that the code of this finding belongs to the origin the input comes from."
+                t in holders -> "R8's static merger put unrelated static helpers into this class (static methods only, no state): the method of this finding may come from any library or from the app."
+                viaMerged -> "the value comes from a class R8 merged from several origins (${src.removePrefix("L").removeSuffix(";")}); check the writer and the reader of the shared field."
+                else -> "R8 renamed this class and no single bundled library names it (it may be the app's own code, or a library named by several others). Run classify_class to see which packages its code names."
+            }
+            n++
+        }
+        return n
+    }
+
     /** [family] = the SDK the last Deep scan attributed this class to (null = none or not scanned); [scanned] = whether a Deep scan ran. */
     fun classify(type: String, text: String, appPkg: String, family: String?, scanned: Boolean): String {
         val sb = StringBuilder()

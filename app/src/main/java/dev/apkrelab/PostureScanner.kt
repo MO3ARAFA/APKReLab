@@ -69,7 +69,27 @@ object PostureScanner {
         Sig("play-integrity", "Device / app attestation: Play Integrity API", "MASVS-RESILIENCE-1") { has(it, "Lcom/google/android/play/core/integrity/", "Lcom/google/android/play/integrity/") },
         Sig("safetynet", "Device attestation: SafetyNet (retired by Google)", "MASVS-RESILIENCE-1") { has(it, "Lcom/google/android/gms/safetynet/SafetyNet") },
         Sig("shell-const", "Shell commands with fixed arguments (usually root / emulator checks: su, which su, getprop; read the command)", "MASVS-RESILIENCE-1") { ConstantArgGuards.hasConstantShell(it) },
-        Sig("flag-secure", "Screen capture protection: FLAG_SECURE / SurfaceView.setSecure", "MASVS-PLATFORM-3") { flagSecure(it) }
+        Sig("flag-secure", "Screen capture protection: FLAG_SECURE / SurfaceView.setSecure", "MASVS-PLATFORM-3") { flagSecure(it) },
+        // 1.0.0: the MASVS controls static analysis could not assess before (authentication, update enforcement, privacy). These rows say what the code USES, never that it is
+        // used correctly: a login done in a WebView or on the server, or a consent screen of the app's own design, is not seen.
+        Sig("auth-oauth", "Authentication: OAuth / OpenID Connect through AppAuth (a browser tab, not a WebView)", "MASVS-AUTH-1") { has(it, "Lnet/openid/appauth/AuthorizationService;->performAuthorizationRequest", "Lnet/openid/appauth/AuthorizationService;->getAuthorizationRequestIntent") },
+        Sig("auth-credman", "Authentication: Credential Manager (passkeys / saved passwords)", "MASVS-AUTH-1") { has(it, "Landroidx/credentials/CredentialManager;->getCredential", "Landroidx/credentials/CredentialManager\$Companion;->create", "Landroid/credentials/CredentialManager;->getCredential") },
+        Sig("auth-account", "Authentication: Android AccountManager tokens", "MASVS-AUTH-1") { has(it, "Landroid/accounts/AccountManager;->getAuthToken", "Landroid/accounts/AccountManager;->blockingGetAuthToken") },
+        Sig("bio-crypto", "Local authentication: biometric prompt bound to a Keystore key (CryptoObject)", "MASVS-AUTH-2") {
+            has(it, "Landroidx/biometric/BiometricPrompt;->authenticate(Landroidx/biometric/BiometricPrompt\$PromptInfo;Landroidx/biometric/BiometricPrompt\$CryptoObject;)V",
+                "Landroid/hardware/biometrics/BiometricPrompt;->authenticate(Landroid/hardware/biometrics/BiometricPrompt\$CryptoObject;") },
+        Sig("bio-event", "Local authentication: biometric prompt WITHOUT a key (the result is a callback a hooked app can fake; bind a CryptoObject for anything sensitive)", "MASVS-AUTH-2") {
+            has(it, "Landroidx/biometric/BiometricPrompt;->authenticate(Landroidx/biometric/BiometricPrompt\$PromptInfo;)V",
+                "Landroid/hardware/biometrics/BiometricPrompt;->authenticate(Landroid/os/CancellationSignal;") },
+        Sig("key-userauth", "Local authentication: a Keystore key that needs the user's authentication (setUserAuthenticationRequired)", "MASVS-AUTH-2") { has(it, "Landroid/security/keystore/KeyGenParameterSpec\$Builder;->setUserAuthenticationRequired(Z)") },
+        Sig("key-bio-invalidate", "Local authentication: the key is invalidated when a new fingerprint is enrolled (setInvalidatedByBiometricEnrollment)", "MASVS-AUTH-2") { has(it, "Landroid/security/keystore/KeyGenParameterSpec\$Builder;->setInvalidatedByBiometricEnrollment(Z)") },
+        Sig("step-up", "Sensitive operations: device-credential confirmation or Protected Confirmation before acting", "MASVS-AUTH-3") {
+            has(it, "Landroid/app/KeyguardManager;->createConfirmDeviceCredentialIntent", "Landroid/security/ConfirmationPrompt", "Landroid/security/keystore/KeyGenParameterSpec\$Builder;->setUserConfirmationRequired(Z)") },
+        Sig("in-app-update", "Update enforcement: Play In-App Updates", "MASVS-CODE-2") { has(it, "Lcom/google/android/play/core/appupdate/AppUpdateManager;->startUpdateFlow", "Lcom/google/android/play/core/appupdate/AppUpdateManagerFactory;->create") },
+        Sig("consent-ump", "Privacy transparency: a consent dialog (Google User Messaging Platform)", "MASVS-PRIVACY-3") { has(it, "Lcom/google/android/ump/UserMessagingPlatform;->loadAndShowConsentFormIfRequired", "Lcom/google/android/ump/ConsentInformation;->requestConsentInfoUpdate", "Lcom/google/android/ump/UserMessagingPlatform;->loadConsentForm") },
+        Sig("privacy-options", "Privacy control: the user can reopen the consent choices or turn analytics collection off", "MASVS-PRIVACY-4") {
+            has(it, "Lcom/google/android/ump/UserMessagingPlatform;->showPrivacyOptionsForm", "Lcom/google/firebase/analytics/FirebaseAnalytics;->setConsent(", "Lcom/google/firebase/analytics/FirebaseAnalytics;->setAnalyticsCollectionEnabled(") },
+        Sig("ad-privacy", "Privacy-preserving ads: Android Privacy Sandbox (AdServices Topics / Attribution)", "MASVS-PRIVACY-2") { has(it, "Landroid/adservices/topics/TopicsManager;->getTopics", "Landroid/adservices/measurement/MeasurementManager;->register", "Landroidx/privacysandbox/ads/adservices/") }
     )
 
     /** Where a hit is: the app's own code, renamed code whose origin cannot be told (an app or an SDK that R8 renamed), or a recognised library. */

@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Any problem with the file (missing, truncated, another format) means an empty store: every class is read as before. Thread-safe.
  */
 public final class DigestStore {
-    private static final int MAGIC = 0x53444731;     // "SDG1"
+    private static final int MAGIC = 0x53444732;     // "SDG2" (1.0.0: + fieldOwners; an SDG1 file is another format: an empty store)
     private static final int MAX_STRING = 60000;
     private final Map<String, CallSkeleton.Digest> map = new ConcurrentHashMap<>();
     private volatile boolean changed;
@@ -48,9 +48,9 @@ public final class DigestStore {
                 String type = in.readUTF();
                 int bits = in.readInt();
                 long hash = in.readLong();
-                String[] par = strings(in), refs = strings(in);
-                if (par == null || refs == null) return st;
-                tmp.put(type, new CallSkeleton.Digest(bits, par, refs, hash));
+                String[] par = strings(in), refs = strings(in), fo = strings(in);
+                if (par == null || refs == null || fo == null) return st;
+                tmp.put(type, new CallSkeleton.Digest(bits, par, refs, hash, fo));
             }
             if (in.readInt() != MAGIC || in.read() != -1) return st;          // truncated or trailing bytes: nothing is trusted
             st.map.putAll(tmp);
@@ -87,6 +87,8 @@ public final class DigestStore {
                     for (String s : d.parents) utf(out, s);
                     out.writeInt(d.refs.length);
                     for (String s : d.refs) utf(out, s);
+                    out.writeInt(d.fieldOwners.length);
+                    for (String s : d.fieldOwners) utf(out, s);
                 }
                 out.writeInt(MAGIC);
             }

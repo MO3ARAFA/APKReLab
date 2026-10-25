@@ -10,6 +10,7 @@ public final class ClassIr {
     public String flags = "";
     public final List<String> interfaces = new ArrayList<>();
     public final List<String> fields = new ArrayList<>();   // "name:Ltype;"
+    public String discriminator;                   // 1.0.0: "name:I" of R8's synthetic class-id field (int, short or byte instance field) of a horizontally merged class, else null
     public final List<MethodIr> methods = new ArrayList<>();
 
     /** 0.66.3: flags parsed once per flags value (immutable holder, safe between threads). */

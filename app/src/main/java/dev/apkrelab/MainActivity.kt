@@ -2524,6 +2524,8 @@ class MainActivity : Activity() {
                     }
                 }
             }
+            // 1.0.0: structural context on the cards of renamed code of unknown origin (merged class, static holder, unattributed)
+            try { ClassTools.obfHint(found, sdkAttr.mergedTypes, sdkAttr.holderTypes) } catch (_: Throwable) { }
             found.sortBy { it.clsIndex }                      // same order as the old single-thread scan (stable sort)
             // 0.46.0: merge repeats (same rule+class, and INFO across classes into one xN card) before they hit the list
             val aggregated = try { SecurityScanner.aggregate(found) } catch (_: Throwable) { found }
@@ -4443,6 +4445,7 @@ class MainActivity : Activity() {
         override fun flowPath(finding: String) = agentFlowPath(finding)
         override fun classifyClass(name: String) = agentClassify(name)
         override fun verifyClassEdit(name: String, modified: String) = agentVerifyEdit(name, modified)
+        override fun auditBrief() = AuditBrief.build(packageNameOrNull() ?: "", secSorted(secFindings).filter { it.verdict != "FP" }, PostureScanner.rows(), lastScanNote)
         override fun listEdits() = agentListEdits()
         override fun openClass(cls: String) = agentOpenClass(cls)
         override fun runScan(mode: String, ctx: AgentCtx) = agentRunScan(mode, ctx)

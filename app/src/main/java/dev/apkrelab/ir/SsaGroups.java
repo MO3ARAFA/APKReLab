@@ -57,6 +57,11 @@ public final class SsaGroups {
             return fnv(text(index));
         }
 
+        /** 1.0.0: R8 class-merge facts over every class of the app (MergeFacts.of the planner's source); null = each group's classes alone. Part of the group cache key. */
+        default MergeFacts mergeFacts() {
+            return null;
+        }
+
         /** 0.104.0: names the engine in the cache key (the app's version code). It MUST change whenever a result could change. */
         default String engineId() {
             return "";
@@ -223,6 +228,8 @@ public final class SsaGroups {
         StringBuilder common = new StringBuilder("sgc1|").append(host.engineId()).append("|hub=").append(ScopePlanner.HUB_CALLEES).append("|depth=").append(TaintIr.MAX_DEPTH)
             .append("|rounds=").append(TaintIr.MAX_ROUNDS).append("|refs=").append(TaintIr.MAX_REFS).append("|requeue=").append(TaintIr.MAX_REQUEUE).append("|approx=").append(TaintIr.MAX_APPROX_TARGETS).append("|E");
         for (String e : new java.util.TreeSet<>(entries)) common.append(e).append(';');
+        MergeFacts mf = host.mergeFacts();
+        if (mf != null) common.append("|M").append(Long.toHexString(mf.hash));
         common.append("|G");
         for (String e : new java.util.TreeSet<>(host.guardedEntries())) common.append(e).append(';');
         java.util.TreeSet<String> olds = new java.util.TreeSet<>();
@@ -294,7 +301,7 @@ public final class SsaGroups {
             long t1 = System.nanoTime();
             parseNs.addAndGet(t1 - t0);
             TaintIr.Stats gs = new TaintIr.Stats();      // 0.66.5: one group's measurement, added to the total only when the group finished
-            List<SsaBridge.Item> r = SsaBridge.newFlows(app, entries, old, gs, host.guardedEntries());
+            List<SsaBridge.Item> r = SsaBridge.newFlows(app, entries, old, gs, host.guardedEntries(), host.mergeFacts());
             analyseNs.addAndGet(System.nanoTime() - t1);
             total.merge(gs);
             if (gc != null && key != null && !host.cancelled()) gc.store(key, r, gs);     // only a group that finished normally (a failure returns below, never reaches here)

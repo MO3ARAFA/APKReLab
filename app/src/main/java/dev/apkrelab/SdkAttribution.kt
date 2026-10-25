@@ -45,6 +45,9 @@ class SdkAttribution(appPkg: String) {
     private val named = ConcurrentHashMap<String, Array<String>>()        // class -> the root-package types its text names
     private val blocked = ConcurrentHashMap.newKeySet<String>()             // root classes that may hold app code (merged, or naming the app's package)
     private val seen = ConcurrentHashMap.newKeySet<String>()                // every class of the scan
+    /** 1.0.0: renamed root classes with R8's class-id field (horizontally merged) and static-method holders (static merger), for the OBF card hint (ClassTools.obfHint). */
+    val mergedTypes: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    val holderTypes: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     /** Called with the text of every class of the scan (library classes included); thread-safe. */
     fun observe(type: String, text: String) {
@@ -52,7 +55,12 @@ class SdkAttribution(appPkg: String) {
         val out = LinkedHashSet<String>()
         for (m in rootType.findAll(text)) if (m.value != type) out.add(m.value)
         if (out.isNotEmpty()) named[type] = out.toTypedArray()
-        if (type.indexOf('/') < 0 && (text.contains(appPrefix) || merged.containsMatchIn(text) || staticHolder(text))) blocked.add(type)
+        if (type.indexOf('/') < 0) {
+            val isMerged = merged.containsMatchIn(text); val isHolder = !isMerged && staticHolder(text)
+            if (isMerged) mergedTypes.add(type)
+            if (isHolder) holderTypes.add(type)
+            if (text.contains(appPrefix) || isMerged || isHolder) blocked.add(type)
+        }
     }
 
     /** Root-package class -> SDK family, for the classes the evidence gives to exactly one family. [isLibrary] = the scanner's own known-library test. */

@@ -29,6 +29,8 @@ interface AgentHost {
     fun classifyClass(name: String): String
     /** 0.106.0: assembles a smali edit in memory and diffs the class's findings before / after (ClassTools.verifyEdit). Nothing is saved. */
     fun verifyClassEdit(name: String, modified: String): String
+    /** 1.0.0: the deterministic one-page summary of the last scan (AuditBrief.build). */
+    fun auditBrief(): String
     fun listEdits(): String
     fun openClass(cls: String): String
     /** Runs the security scan (mode: smart | manifest | deep) and waits for it. */
@@ -232,6 +234,7 @@ object Agent {
             "flow_path" -> host.flowPath(a.optString("finding"))
             "classify_class" -> host.classifyClass(a.optString("name"))
             "verify_class_edit" -> host.verifyClassEdit(a.optString("name"), a.optString("modified"))
+            "audit_brief" -> host.auditBrief()
             "list_edits" -> host.listEdits()
             "open_class" -> host.openClass(a.optString("class"))
             "scan_security" -> host.runScan(a.optString("mode", "smart").trim().lowercase(), ctx)

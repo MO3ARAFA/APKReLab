@@ -839,6 +839,11 @@ public final class TaintIr {
     /** 0.70.0: suffix of a source name that was read from the result Intent of onActivityResult (see Intra.invoke). */
     static final String ACTIVITY_RESULT_SUFFIX = " in onActivityResult";
 
+    /** 1.0.0: object space of the writes through R8-merged objects of one class id ("#" + id), see MergeTags. */
+    static final String TAG_SPACE = "#";
+    /** 1.0.0: switch for the mutation check of MergeTags (false = 0.108 behaviour). */
+    static boolean MERGE_TAGS = !Boolean.getBoolean("apkrelab.noMergeTags");
+
     static final class HeapKey {
         static final String GLOBAL = "";
         final String obj;      // abstract object (allocation site) or GLOBAL
@@ -874,6 +879,36 @@ public final class TaintIr {
         final Map<HeapKey, Tv> heap = new HashMap<>();                       // 0.69.0: keyed by HeapKey (object space + field); GLOBAL space = old per-field-ref behaviour
         final Map<HeapKey, Set<String>> heapReaders = new HashMap<>();
         final Map<HeapKey, Boolean> heapAllString = new HashMap<>();          // 0.105.0: true while every tainted write to the key stored a value statically known to be a String
+        final Map<String, Set<Integer>> tagsWritten = new HashMap<>();        // 1.0.0: field ref -> class ids of R8-merged objects it was written through (MergeTags)
+        private MergeTags tags;
+
+        MergeTags tags() {
+            if (tags == null) tags = g.mergeFacts != null ? g.mergeFacts.tags : new MergeTags(MergeTags.of(g));
+            return tags;
+        }
+
+        /** 1.0.0: what a read of [ref] sees when its object can only have one of the class ids [ids]: writes of unknown id, and writes of those ids. */
+        Tv readTagged(String ref, Set<Integer> ids, String reader) {
+            Tv t = readHeap(HeapKey.global(ref), reader);
+            for (int id : ids) {
+                Tv x = heap.get(new HeapKey(TAG_SPACE + id, ref));
+                if (x != null) t = t == null ? x : t.join(x);
+            }
+            return t;
+        }
+
+        /** 1.0.0: allStrings over the keys a tagged read sees ([ids] null = the plain key). */
+        boolean allStrings(String ref, Set<Integer> ids) {
+            if (ids == null) return allStrings(ref);
+            boolean any = false;
+            Boolean b = heapAllString.get(HeapKey.global(ref));
+            if (b != null) { if (!b) return false; any = true; }
+            for (int id : ids) {
+                b = heapAllString.get(new HeapKey(TAG_SPACE + id, ref));
+                if (b != null) { if (!b) return false; any = true; }
+            }
+            return any;
+        }
         final Set<String> dirtyReaders = new LinkedHashSet<>();
         // 0.66.5 (measurement only): per method, replaced by every analysis of that method except the time, which adds up
         final Map<String, long[]> timing = new HashMap<>();                  // key -> {nanos, runs, insns, most rounds}
@@ -929,13 +964,16 @@ public final class TaintIr {
         void raiseHeap(HeapKey k, Tv t, String writer, boolean isString) {
             Tv r = t.realOnly();
             if (r.isNone()) return;
+            // 1.0.0: a write through an object of known class id: its readers register on the plain key (see readTagged)
+            HeapKey rk = k.obj.startsWith(TAG_SPACE) ? HeapKey.global(k.field) : k;
+            if (rk != k) tagsWritten.computeIfAbsent(k.field, x -> new HashSet<>()).add(Integer.parseInt(k.obj.substring(TAG_SPACE.length())));
             Boolean was = heapAllString.get(k);
             boolean now = was == null ? isString : was && isString;
             if (was == null || was != now) {
                 heapAllString.put(k, now);
                 // a reader that dropped the value because every write was a String must look again
                 if (was != null) {
-                    Set<String> rd = heapReaders.get(k);
+                    Set<String> rd = heapReaders.get(rk);
                     if (rd != null) dirtyReaders.addAll(rd);
                 }
             }
@@ -943,7 +981,7 @@ public final class TaintIr {
             if (old != null && old.covers(r)) return;
             Tv withVia = Tv.real(r.level, r.src, "field " + shortRef(k.field) + " (written in " + shortKey(writer) + ")", r.weak, r.internal);
             heap.put(k, old == null ? withVia : old.join(withVia));
-            Set<String> rd = heapReaders.get(k);
+            Set<String> rd = heapReaders.get(rk);
             if (rd != null) dirtyReaders.addAll(rd);
         }
 
@@ -1194,10 +1232,11 @@ public final class TaintIr {
                     break;
                 }
                 case FIELD_GET: {
-                    Tv t = run.readHeap(HeapKey.global(in.ref), m.key());
+                    Set<Integer> tags = u.length > 0 && in.op.startsWith("iget") ? readTags(in, u[0]) : null;
+                    Tv t = tags == null ? run.readHeap(HeapKey.global(in.ref), m.key()) : run.readTagged(in.ref, tags, m.key());
                     // 0.105.0: every tainted write stored a String, and every use of this read casts it to a type no String has: the cast would throw for the tainted
                     // value, so what gets through is something else the field held (R8 merges unrelated classes into one Object field: Axis Pay m42.c)
-                    if (t != null && t.level > 0 && d.length == 1 && run.allStrings(in.ref) && castsAwayFromString(d[0])) t = null;
+                    if (t != null && t.level > 0 && d.length == 1 && run.allStrings(in.ref, tags) && castsAwayFromString(d[0])) t = null;
                     if (t != null && t.level > 0 && !t.weak && isMergedObjectField(in.ref)) t = t.asWeak();   // 0.68.5
                     if (t != null) for (SsaForm.Value y : d) raise(y, t);
                     break;
@@ -1205,7 +1244,12 @@ public final class TaintIr {
                 case FIELD_PUT: {
                     int vc = in.op.contains("-wide") ? 2 : 1;
                     Tv t = joinAll(u, 0, vc);
-                    if (t.level > 0) run.raiseField(in.ref, t, m.key(), vc == 1 && u.length > 0 && isString(u[0], 0));
+                    if (t.level > 0) {
+                        boolean str = vc == 1 && u.length > 0 && isString(u[0], 0);
+                        int tag = u.length > vc && in.op.startsWith("iput") ? putTag(in, u[vc]) : MergeTags.UNKNOWN;
+                        if (tag == MergeTags.UNKNOWN) run.raiseField(in.ref, t, m.key(), str);
+                        else run.raiseHeap(new HeapKey(TAG_SPACE + tag, in.ref), t, m.key(), str);
+                    }
                     break;
                 }
                 case ARRAY_GET:
@@ -1462,14 +1506,50 @@ public final class TaintIr {
         }
 
         private Map<SsaForm.Value, List<Insn>> users;
+        private Map<Insn, Integer> putTags;
+        private Map<Insn, Object[]> readTagCache;
+
+        /** 1.0.0: class id of the object an iput on a field of an R8-merged class writes to (MergeTags), or UNKNOWN. */
+        int putTag(Insn in, SsaForm.Value obj) {
+            if (!MERGE_TAGS) return MergeTags.UNKNOWN;
+            if (putTags == null) putTags = new IdentityHashMap<>();
+            Integer c = putTags.get(in);
+            if (c != null) return c;
+            String owner = in.ref.substring(0, Math.max(0, in.ref.indexOf("->")));
+            String disc = run.tags().discriminatorOf(owner);
+            int t = disc == null || disc.equals(in.ref) ? MergeTags.UNKNOWN : run.tags().tagOf(m, ssa, obj, owner, in);
+            putTags.put(in, t);
+            return t;
+        }
+
+        /** 1.0.0: the class ids whose writes this iget can see (null = no tagged write, the plain field key). */
+        Set<Integer> readTags(Insn in, SsaForm.Value obj) {
+            Set<Integer> written = run.tagsWritten.get(in.ref);
+            if (written == null) return null;
+            if (readTagCache == null) readTagCache = new IdentityHashMap<>();
+            Object[] c = readTagCache.get(in);
+            if (c != null && (Integer) c[0] == written.size()) return (Set<Integer>) c[1];
+            String owner = in.ref.substring(0, in.ref.indexOf("->"));
+            Set<Integer> ok = run.tags().compatible(m, ssa, obj, owner, written, users(), in);
+            Set<Integer> r = ok == null ? new HashSet<>(written) : ok;
+            readTagCache.put(in, new Object[]{written.size(), r});
+            return r;
+        }
+
 
         /** 0.105.0: every use of [v] (through plain moves) is a check-cast to a type that no String can have; false when [v] meets a phi, any other use, or no use. */
-        boolean castsAwayFromString(SsaForm.Value v) {
+        /** value -> the instructions that use it (null = a phi). */
+        Map<SsaForm.Value, List<Insn>> users() {
             if (users == null) {
                 users = new IdentityHashMap<>();
                 for (Insn in : m.insns) for (SsaForm.Value u : ssa.usesOf(in)) if (u != null) users.computeIfAbsent(u, x -> new ArrayList<>()).add(in);
                 for (List<SsaForm.Phi> ps : ssa.phis) for (SsaForm.Phi p : ps) for (SsaForm.Value o : p.operands) if (o != null) users.computeIfAbsent(o, x -> new ArrayList<>()).add(null);
             }
+            return users;
+        }
+
+        boolean castsAwayFromString(SsaForm.Value v) {
+            users();
             ArrayDeque<SsaForm.Value> q = new ArrayDeque<>();
             Set<SsaForm.Value> seen = Collections.newSetFromMap(new IdentityHashMap<>());
             q.add(v);
