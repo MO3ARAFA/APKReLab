@@ -62,6 +62,43 @@ object AndroGoatChecks {
 
     private val literalRe = rx("const-string(?:/jumbo)?\\s+[vp]\\d+,\\s*\"([^\"\\n]{8,400})\"")
 
+    /** 1.1.0: switch for the mutation check of [encryptedValue]. */
+    internal var ENCRYPTED_PUT = true
+    private val encryptName = Regex("(?i)encrypt|seal|wrap")
+
+    /**
+     * 1.1.0 (APKReLab's own self-scan: `putString("kp", SecureStore.encrypt(pw))`): is the value stored by the putString at [at] the direct result of an encrypting call?
+     * The value register's last write before the call (same block) must be the move-result of a method named encrypt / seal / wrap, or of Base64.encode* whose argument is the
+     * move-result of Cipher.doFinal. Anything else (a parameter, a field, a string built in place) stays "plaintext".
+     */
+    internal fun encryptedValue(text: String, at: Int): Boolean {
+        val lines = text.substring(0, text.indexOf('\n', at).let { if (it < 0) text.length else it }).split('\n')
+        val call = lines.last()
+        if (!call.contains("putString(")) return false
+        val regs = Regex("\\{([^}]*)\\}").find(call)?.groupValues?.get(1)?.split(',')?.map { it.trim() } ?: return false
+        fun resultOf(reg: String, from: Int): Pair<String, Int>? {            // the invoke whose move-result last wrote [reg] before line [from]
+            for (b in from - 1 downTo maxOf(0, from - 40)) {
+                val t = lines[b].trim()
+                if (t.startsWith(".method") || t.startsWith(":")) return null
+                if (!Regex("^[a-z][a-z0-9/-]*\\s+" + Regex.escape(reg) + "\\s*(,|$)").containsMatchIn(t)) continue
+                if (!t.startsWith("move-result")) return null
+                for (c in b - 1 downTo maxOf(0, b - 6)) { val u = lines[c].trim(); if (u.startsWith("invoke-")) return u to c; if (u.isNotEmpty() && !u.startsWith(".")) return null }
+                return null
+            }
+            return null
+        }
+        val (inv, at2) = resultOf(regs.getOrNull(2) ?: return false, lines.size - 1) ?: return false
+        val name = inv.substringAfter("->").substringBefore('(')
+        if (encryptName.containsMatchIn(name)) return true
+        if (inv.contains("Landroid/util/Base64;->encode") || inv.contains("Ljava/util/Base64\$Encoder;->encode")) {
+            val a = Regex("\\{([^}]*)\\}").find(inv)?.groupValues?.get(1)?.split(',')?.map { it.trim() } ?: return false
+            val arg = if (inv.contains("Landroid/util/Base64;")) a.getOrNull(0) else a.getOrNull(1)
+            val (inner, _) = resultOf(arg ?: return false, at2) ?: return false
+            return inner.contains("Ljavax/crypto/Cipher;->doFinal(")
+        }
+        return false
+    }
+
     private fun mask(s: String): String = s.take(6) + "..." + " (" + s.length + " chars)"
 
     fun scan(classType: String, clsIndex: Int, text: String, appPkg: String): List<Finding> {
@@ -74,7 +111,7 @@ object AndroGoatChecks {
 
         // --- Insecure data storage: SharedPreferences / SQLite / temp files ---
         for (m in rx("Landroid/content/SharedPreferences\\\$Editor;->putString\\(").findAll(text)) {
-            if (SecurityScanner.contextHas(text, m.range.first, m.range.last + 1, credWords)) {
+            if (SecurityScanner.contextHas(text, m.range.first, m.range.last + 1, credWords) && !(ENCRYPTED_PUT && encryptedValue(text, m.range.first))) {
                 add(Severity.MEDIUM, "Sensitive value saved to SharedPreferences (plaintext)",
                     "putString() is called next to a credential-like name. SharedPreferences are stored as plain XML in the app's data directory; they are readable on rooted devices and in backups when allowBackup is on.",
                     "Do not store passwords/tokens in SharedPreferences. Use EncryptedSharedPreferences or the Android Keystore, and prefer short-lived tokens.",
