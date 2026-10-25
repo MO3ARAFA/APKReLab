@@ -96,3 +96,26 @@ Device evidence (report 9, Axis Pay 3.0.4, warm group cache): `plan 21s + groups
 - Gradle (AGP 9.3.1, Gradle 9.8.2, JDK 21): assembleDebug about 2.5 min cold; testDebugUnitTest 648 tests / 0 failures; lintDebug 0 errors, 198 warnings.
 - Corrupted-APK fuzz (6 F-Droid APKs x 40 variants, 6 components, 30 s limit per call): 1,440 calls, 0 exceptions, 0 timeouts. Mangled-smali fuzz (600 classes from Axis Pay, K-9, AntennaPod, gh4a, 3 variants each): scanSmali + SSA + planner digest, 5,400 calls, 0 exceptions.
 - Device (owner, Axis Pay, 0.107.0 warm re-scan): plan 3 s + groups 0 s, 25 / 25 groups and 9,725 / 9,725 digests reused. WE Wallet cold: plan 16 s + groups 192 s, GC 175 s (160 s blocking) on 512 MB: the next memory target.
+
+## 1.0.0: measurements behind each pillar
+- **P1, R8 merged classes (MergeTags / MergeFacts)**, flow sets before -> after (MeasureBig, 4 threads, 2 GB):
+  | app | flows | change |
+  |---|---|---|
+  | Axis Pay 3.0.1 | 18 -> 15 | the 3 Crashlytics flows through m42.c removed: the writer (Firebase Installations, n62.a) holds a class-id 2 object from dr.a(), the reader (m13.b) a class-id 14 object (its m42.d is cast to g34). Read in the smali. |
+  | Keep It | 13 -> 11 | 2 flows through sw1.j removed: the reader's object is op0.a (class id 0xf), the tainted writes are ids 20 / 26. Read in the smali. 3 other sinks kept, with another representative source. |
+  | unitto, webviewkiosk, NewPipe | 6, 19, 1 | identical |
+  | Flowit, K-9, KeePassDX, QtLab, AntennaPod | 0 | identical |
+  Thunderbird: no manifest.xml in its decode folder, so the harness produced nothing for either engine (not an engine result). Real R8 8.13.25 fixture (tools/benchmark/r8_merge_fixture): negative 1 -> 0, positive 1 -> 1. Mutants: 10 of 10 killed (tests ir/IrMergeTagsTest). CPU: Keep It 12 -> 13 s, unitto 43 -> 49 s, Axis about the same. Axis needs 1,233 merged classes known from the digests; about 1,500 class texts are read again on demand for the facts (a phone cost NOT measured).
+- **P2, allocation** (JFR allocation samples, Axis Pay, 512 MB, 2 threads): 21.5 -> 12.4 GB sampled allocation (-42%), GC collections 296 -> 186. The call-site facts (owner, name, descriptor, argument layout, sink candidates) were re-parsed on every pass of every analysis: now one fixed lossy table of 16,384 slots shared by all threads (TaintIr.Call, like Canon). Also: invokeKind without a substring, sinkOwners built once (was once per class digest), the taint-only edge dedupe per call site (was one "caller|insn|callee" string per edge). Flow checksum and the taint-loss counters identical. Mutants 8 of 8 killed (ir/IrCallInfoTest).
+  Heap curve (Axis Pay, wall / pause-only GC from -Xlog:gc "Pause" lines / flows; old -> new):
+  | heap | old | new |
+  |---|---|---|
+  | 512 MB | 35 s / 7.3 s / 15 | 33 s / 4.4 s / 15 (same set) |
+  | 256 MB | 140 s / 104.7 s / 15 | 105 s / 73.6 s / 15 (same set) |
+  | 160 MB | 349 s / 281 s / 15 (24 of 25 groups re-run for memory) | 356 s / 289 s / 15 (same set; 22 re-run) |
+  | 128 MB | 145 s / 107 s / 12 | 291 s / 242 s / 14 |
+  Below about 200 MB both engines are in the memory-retry regime (groups re-run in smaller parts): the time goes to the live set, not to the churn, and the 128 MB flow set depends on which groups failed (neither run is a valid result there). The churn cut helps from 256 MB up. NOT measured: ART, the phone, WE Wallet (no APK here: only its report).
+- **P3**: 12 posture signals. Corpus (47 decoded apps): hits only where the APIs exist (Axis Pay biometric + user-auth keys, webviewkiosk, Paperless; Credential Manager / biometrics inside libraries for KeePassDX, K-9, Thunderbird). The "event-only biometric" row excludes a class that also binds a CryptoObject (2 wrappers in the corpus).
+- **Self-scan (APKReLab 1.0.0 debug APK, SandboxScan)**: in dev.apkrelab 4 HIGH, 18 MEDIUM, 8 LOW. The 4 HIGH read in the source: Zip Slip in MainActivity.analyzeFile (lists entry names, writes none: FP of the single-method heuristic), Zip Slip in Rebuilder.repack (zip to zip: FP), SplitApks.extractApks (the name is reduced to a sanitised basename: FP), the install receiver redirection (mitigated in 0.108.0: signature permission, not exported, URI grants stripped, own package refused). 3 more HIGH were matches of rule classes on their own pattern strings and were fixed (JS bridge annotation, provider header, ALLOW_ALL field read; 0 classes of the 47-app corpus change). The MEDIUM / LOW cards were not read one by one.
+- **Fuzz** (tools/sandbox/FuzzMerge.java: 300 merged / switch classes x 6 mangled variants, Axis Pay, Keep It, unitto; parse + digest + taint with and without app-wide facts): 108 batches, 0 exceptions, 0 over 60 s, 0 methods caught throwing inside the taint run.
+- **Gradle** (AGP 9.3.1, Gradle 9.8.2, JDK 21): assembleDebug OK, testDebugUnitTest 670 tests / 0 failures, lintDebug 0 errors, 198 warnings.

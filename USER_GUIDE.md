@@ -56,7 +56,15 @@ Alternatively tap **Installed apps** and pick the installed app: its base and sp
 - **Less memory churn in the data-flow step**: the engine allocated about 40% fewer bytes on Axis Pay (same flows, same loss counters); see "How this version was verified".
 - The first Deep scan after installing 1.0.0 reads every class again (the planner's cache format changed).
 
-## How this version was verified (0.108.0)
+## How 1.0.0 was verified
+- Gradle (AGP 9.3.1, Gradle 9.8.2, JDK 21): `assembleDebug` OK, 670 unit tests / 0 failures, `lintDebug` 0 errors.
+- Engine: 11 open-source apps and Axis Pay in the sandbox, flow sets compared before / after (see "What changed in 1.0.0"); a real R8 fixture; every new signal has a test that fails when it is switched off.
+- Memory: on Axis Pay at a 256 MB heap the data-flow step took 105 s instead of 140 s with the same flows; at 512 MB 33 s instead of 35 s. Below about 200 MB both versions run short of memory and re-run groups in parts (results are then incomplete in both): use a phone with a bigger heap for big apps.
+- Mangled input: 2,700 corrupted classes through the parser, the planner and the data-flow engine: no exception.
+- APKReLab's own APK scanned with itself: 4 HIGH cards in its own code, each read: 3 false alarms of heuristics, 1 already protected (the install receiver). Debug builds are flagged "debuggable" (expected).
+- NOT verified here: the UI on a device; the memory gain on the phone and on WE Wallet.
+
+## How 0.108.0 was verified
 - Built with the real Android toolchain for the first time (AGP 9.3.1, Gradle 9.8.2, JDK 21, compileSdk 36): `assembleDebug` OK, `testDebugUnitTest` 648 tests / 0 failures, `lintDebug` 0 errors. Steps: `tools/sandbox/GRADLE_BUILD.md`.
 - The engine was run on 46 real apps (34 + 5 F-Droid apps, Axis Pay 3.0.1 in the sandbox; the owner's device reports of Axis Pay and WE Wallet). Malformed input: 240 corrupted APKs and 1,800 mangled classes went through every static component without an exception.
 - NOT verified here: the UI on a device or an emulator (no emulator in the sandbox); every Android-only change is built and linted, but only the owner's phone runs it.

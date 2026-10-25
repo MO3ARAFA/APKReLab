@@ -80,6 +80,8 @@ object JsBridgeMethodRule : ScanRule {
     override val cwes = listOf("CWE-749")
     override val confidence = "HIGH"
 
+    private val jsAnnotation = rx("\\.annotation \\w+ Landroid/webkit/JavascriptInterface;")
+
     internal val dangerousApis: List<Pair<Regex, String>> = listOf(
         rx("Ljava/io/File(?:OutputStream|InputStream|Writer|Reader)?;-><init>|Ljava/io/RandomAccessFile;-><init>|Ljava/nio/file/") to "files",
         rx("Ljava/lang/Runtime;->exec|Ljava/lang/ProcessBuilder;") to "process execution",
@@ -114,7 +116,7 @@ object JsBridgeMethodRule : ScanRule {
         val callRe = if (cls.isEmpty()) null else rx(Regex.escape(cls) + "->([A-Za-z0-9_\$]+)\\(")
         for (mm in all) {
             val body = mm.groupValues[3]
-            if (!body.contains("Landroid/webkit/JavascriptInterface;")) continue
+            if (!jsAnnotation.containsMatchIn(body)) continue       // 1.0.0: the annotation, not the type name inside a string (APKReLab's own rule texts)
             val hits = LinkedHashSet<String>()
             dangerousApis.filter { it.first.containsMatchIn(body) }.forEach { hits.add(it.second) }
             if (callRe != null) {
@@ -897,7 +899,7 @@ object TlsHostnameVerifierRule : ScanRule {
         }
 
         if (text.contains("HostnameVerifier")) {
-            (rx("ALLOW_ALL_HOSTNAME_VERIFIER").find(text)
+            (rx("^[ \\t]*sget-object [vp]\\d+, L[^;\\s]+;->ALLOW_ALL_HOSTNAME_VERIFIER:", RegexOption.MULTILINE).find(text)    // 1.0.0: the field read itself, never a string that names it
                 ?: rx("\\.method[^\\n]* verify\\(Ljava/lang/String;Ljavax/net/ssl/SSLSession;\\)Z[^\\n]*\\n$METHOD_PREAMBLE\\s*const/4[^\\n]*,\\s*0x1\\s*\\n$METHOD_PREAMBLE\\s*return").find(text))
                 ?.let {
                     add(Severity.HIGH, "Hostname verification disabled",
@@ -1419,8 +1421,9 @@ object ProviderSqlInjectionRule : ScanRule {
         }
 
         // --- 0.35.0: ContentProvider SQL injection (query()/raw SQL built by concatenation) ---
-        if (text.contains(".super Landroid/content/ContentProvider;")) {
-            val qi = text.indexOf(".method public query(")
+        // 1.0.0: line-anchored (a scanner's own rule class holds both texts as string constants)
+        if (rx("^\\.super Landroid/content/ContentProvider;", RegexOption.MULTILINE).containsMatchIn(text)) {
+            val qi = rx("^\\.method public query\\(", RegexOption.MULTILINE).find(text)?.range?.first ?: -1
             if (qi >= 0) {
                 val (qs, qe) = methodBounds(text, qi)
                 val body = text.substring(qs, qe)
