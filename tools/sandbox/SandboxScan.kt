@@ -19,8 +19,14 @@ fun main(args: Array<String>) {
     // 0.86.2: like the device (MainActivity: SecurityScanner.codePackage(...)): the code package, not the manifest package. Quillpad's code is in
     // org.qosp.notes while the manifest says io.github.quillpad; with the manifest package an app-bound renamed class looked like a library.
     val pkg = SecurityScanner.codePackage(texts.map { it.first }, manifestPkg, mc.componentTypes(manifestPkg), mc.launcherTypes(manifestPkg))   // 0.106.0: like the app
-    DynamicReceivers.clear()
-    for ((i, p) in texts.withIndex()) { all.addAll(SecurityScanner.scanSmali(p.first, i, p.second, pkg)); DynamicReceivers.observe(p.second) }   // 1.1.0: like the app's scan loop
+    DynamicReceivers.clear(); NativeBridge.clear(); NativeBridge.clearApk(); PostureScanner.clear()
+    for ((i, p) in texts.withIndex()) {
+        all.addAll(SecurityScanner.scanSmali(p.first, i, p.second, pkg))
+        DynamicReceivers.observe(p.second)                       // 1.1.0: like the app's scan loop
+        NativeBridge.observe(p.first, p.second)                  // 1.2.0: for the verdict's NOT SEEN line, like the app
+        PostureScanner.observe(p.first, p.second, pkg)
+    }
+    ZipFile(apk).use { z -> NativeBridge.useLibs(NativeScanner.readLibs(z).first) }   // the base APK only (the sandbox imports no split)
     all.addAll(ResourceScanner.scanApk(apk).findings)
     // SSA taint flows
     val entries = mc.exportedComponents.map { mc.smaliTypeOf(it) }
@@ -45,10 +51,11 @@ fun main(args: Array<String>) {
     DynamicReceivers.lower(final, DynamicReceivers.protectedReceivers(minSdk) { p -> mc.declaredPerms[p]?.let { PermissionGuard.isSignatureLevel(it) } ?: ((ReportBuilder.defaultLevel(p) ?: 0) >= 2) })
     FindingPolish.applyProviderCodeChecks(final)
     FindingPolish.applyNetworkEvidence(final)
-    // 1.2.0: the verdict as the app builds it (no device: no native scan, no overlay, no splits; the whole app in one SSA run)
+    // 1.2.0: the verdict as the app builds it (no device: no strings overlay, no splits, no reach pass so MUST FIX stays empty here; the whole app in one SSA run)
     val cards = ReportBuilder.reportable(final).take(400)
     val verdict = Verdict.build(cards, try { AttackScenarios.build(final, mc, pkg) } catch (_: Throwable) { emptyList() },
-        Verdict.Coverage(deepScan = true, classesScanned = texts.size, decryptorCalls = 0), pkg)
+        Verdict.Coverage(deepScan = true, classesScanned = texts.size, nativeMethods = NativeBridge.bindings().size, nativeLibs = NativeBridge.libs.size,
+            decryptorCalls = PostureScanner.decryptorCallCount()), pkg)
     outMd.writeText("# APK ReLab report: $pkg\n\n(sandbox scan, no AI triage)\n\n" + Verdict.markdown(verdict) + "## Security scan\n\n" + ReportBuilder.securitySection(final, 400, pkg) + "\n")
     println("pkg=$pkg exported=${entries.size} findings=${final.size} ssaItems=${items.size}")
     final.filter { it.severity != SecurityScanner.Severity.INFO }.sortedBy { it.severity.rank }.forEach {
