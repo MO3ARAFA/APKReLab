@@ -2429,6 +2429,7 @@ class MainActivity : Activity() {
         SecurityScanner.clearKeyTracking()   // 0.94.0
         scanDetail = ""; scanDetailOpen = false   // 0.101.0
         PostureScanner.clear()   // 0.91.0
+        DynamicReceivers.clear()   // 1.1.0
         if (!SecretFormats.loaded()) try {   // 0.89.0: vendor token formats (assets/secret_formats.json)
             SecretFormats.load(assets.open("secret_formats.json").use { it.readBytes() }.toString(Charsets.UTF_8))
         } catch (_: Throwable) { RuleRegistry.noteError("secret-formats") }
@@ -2463,6 +2464,7 @@ class MainActivity : Activity() {
                             if (text.isNotEmpty()) {
                                 try {
                                     try { sdkAttr.observe(def.type, text) } catch (_: Throwable) { }
+                                    try { DynamicReceivers.observe(text) } catch (_: Throwable) { }   // 1.1.0
                                     val fs = SecurityScanner.scanSmali(def.type, i, text, appPkg)
                                     try { PostureScanner.observe(def.type, text, appPkg) } catch (_: Throwable) { }   // 0.91.0: only the full scan feeds the posture table (not a single-class review)
                                     parts[w].addAll(fs)
@@ -3486,6 +3488,11 @@ class MainActivity : Activity() {
                 FindingPolish.lowerNonExportedReceivers(secFindings, FindingPolish.nonExportedReceiversAndServices(mc))   // 0.80.0
                 FindingPolish.lowerSeparateProcessDialogs(secFindings, FindingPolish.separateProcessActivities(mc))       // 0.81.0
                 FindingPolish.lowerConstantFedActivities(secFindings, FindingPolish.nonExportedActivities(mc))            // 0.108.0
+                // 1.1.0: receivers registered at run time with a signature permission (or RECEIVER_NOT_EXPORTED and minSdk 33+): their Intent comes from the app or the system
+                val sys = PermissionGuard.systemResolver(this)
+                val minSdk = Regex("minSdkVersion\\s*=\\s*\"?(\\d+)").find(manifestFull)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+                DynamicReceivers.lower(secFindings, DynamicReceivers.protectedReceivers(minSdk) { p ->
+                    mc.declaredPerms[p]?.let { PermissionGuard.isSignatureLevel(it) } ?: ((sys(p) ?: ReportBuilder.defaultLevel(p) ?: 0) >= 2) })
                 FindingPolish.applyProviderCodeChecks(secFindings)                                                      // 0.81.0
                 FindingPolish.applyNetworkEvidence(secFindings)                                                         // 0.81.0
                 FindingPolish.restoreInstalledTls(secFindings)                                                          // 0.85.0

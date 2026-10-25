@@ -1096,6 +1096,8 @@ public final class TaintIr {
 
     /** 0.83.0: a call site that resolves to at least this many targets returns a weak taint (polymorphic fan-out). */
     static final int FANOUT_WEAK = 8;
+    /** 1.1.0: switch for the mutation check of the substringAfterLast('/') sanitizer. */
+    static boolean BASENAME_SANITIZER = !Boolean.getBoolean("apkrelab.noBasenameSanitizer");
     /** 1.1.0: switch for the mutation check of the erased-callback rule (Intra.invoke); false = 1.0.0 behaviour. */
     static boolean ERASED_FANOUT_DROP = !Boolean.getBoolean("apkrelab.keepErasedFanout");
 
@@ -1487,6 +1489,11 @@ public final class TaintIr {
             }
             // framework / unresolved callee
             if (isSanitizer(owner, name)) return;
+            // 1.1.0: Kotlin's substringAfterLast with a constant '/' keeps only the last path segment: a bare file name (the same as File.getName above)
+            if (BASENAME_SANITIZER && owner.startsWith("Lkotlin/text/StringsKt") && name.startsWith("substringAfterLast") && av.length > 1) {
+                Long sep = MergeTags.constOf(av[1]);
+                if ((sep != null && sep == '/') || "\"/\"".equals(constString(av[1]))) return;
+            }
             // 0.68.1: Kotlin Intrinsics that return a reference (stringPlus = string concatenation) hand their arguments to the result
             if (owner.equals("Lkotlin/jvm/internal/Intrinsics;") && call.ret.startsWith("L")) {
                 Tv all = Tv.NONE;

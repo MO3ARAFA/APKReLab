@@ -14,8 +14,11 @@ class CodePackageHybrid0106Test {
         val types = many("com/visionflutter/plugin", 60) + listOf("Lcom/axispay/consumer/wallet/MainActivity;", "Lcom/axispay/consumer/wallet/MainApplication;") + many("a", 10)
         val comps = listOf("Lcom/axispay/consumer/wallet/MainActivity;", "Lcom/axispay/consumer/wallet/CardDetailsActivity;", "Lae/network/x/A;", "Lae/network/x/B;", "Ldev/fluttercommunity/C;")
         assertEquals("com.axispay.consumer.wallet", SecurityScanner.codePackage(types, "com.axispay.consumer.wallet", comps))
-        // twin: without component evidence the old rule still applies (a big readable package with 4x the manifest prefix's classes wins)
-        assertEquals("com.visionflutter", SecurityScanner.codePackage(types, "com.axispay.consumer.wallet"))
+        // 1.1.0: com/visionflutter/ is a library prefix now, so even without component evidence the app's own package wins
+        assertEquals("com.axispay.consumer.wallet", SecurityScanner.codePackage(types, "com.axispay.consumer.wallet"))
+        // twin: without component evidence the old rule still applies to a package NOT in the library list (a big readable package with 4x the manifest prefix's classes wins)
+        val other = many("com/someplugin/plugin", 60) + types.drop(60)
+        assertEquals("com.someplugin", SecurityScanner.codePackage(other, "com.axispay.consumer.wallet"))
     }
 
     @Test fun theLauncherActivityKeepsTheAppsPackageAgainstPluginComponents() {

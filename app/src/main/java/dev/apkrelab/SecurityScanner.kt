@@ -100,7 +100,11 @@ object SecurityScanner {
         "me/leolin/shortcutbadger/", "net/openid/appauth/",
         // 0.85.0 (set 9, Axis Pay / InstaPay): marketing, analytics and attribution SDKs that are in most fintech apps
         "net/gotev/uploadservice/", "com/scottyab/rootbeer/", "net/sqlcipher/", "com/j256/ormlite/", "com/sleepbot/datetimepicker/", "com/fourmob/datetimepicker/", "com/akexorcist/", "com/lamudi/phonefield/", "org/simpleframework/", "org/zeroturnaround/zip/", "commons/collections/", "com/braze/", "com/appboy/", "bo/app/", "com/moengage/", "com/moe/pushlibrary/", "com/dynatrace/", "co/ab180/airbridge/", "antlr/",   // 0.108.0: antlr/ = ANTLR 2 (bundled by jadx; APKReLab's own scan listed its code generators as app code). 0.106.0: bo/app/ = the Braze SDK's own pre-obfuscated internals (861 classes in Axis Pay calling com/braze/support/BrazeLogger 1,639 times). 0.83.0 (FairEmail): launcher badge library, OAuth client library
-        "com/tonyodev/fetch2"   // 0.79.0: Fetch2 download library (Kiwix), reported as app code
+        "com/tonyodev/fetch2",   // 0.79.0: Fetch2 download library (Kiwix), reported as app code
+        // 1.1.0 (Axis Pay 1.0.0 device report: plugin code was "app" / "origin unknown" in cards and in the posture table): Flutter plugins (pub.dev publishers'
+        // Java/Kotlin packages), uCrop, the Network International card SDK, Bugsnag, LeakCanary. Checked: no app package of the 40-app corpus starts with any of them.
+        "dev/flutter/", "dev/fluttercommunity/", "com/dexterous/", "com/it_nomads/", "com/baseflow/", "com/pichillilorenzo/", "com/tekartik/", "com/mr/flutter/",
+        "com/crazecoder/", "com/lyokone/", "com/visionflutter/", "com/yalantis/ucrop/", "ae/network/nicardmanagementsdk/", "com/bugsnag/", "leakcanary/"
     )
 
     /**

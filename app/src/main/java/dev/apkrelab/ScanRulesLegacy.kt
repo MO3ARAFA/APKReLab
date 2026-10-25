@@ -1342,7 +1342,8 @@ object ZipSlipRule : ScanRule {
             val writesFile = body.contains("Ljava/io/FileOutputStream;-><init>") ||
                 body.contains("Ljava/io/File;-><init>(Ljava/io/File;Ljava/lang/String;)V") ||
                 body.contains("Ljava/io/File;-><init>(Ljava/lang/String;Ljava/lang/String;)V")
-            val guarded = body.contains("getCanonicalPath") || body.contains("getCanonicalFile") || body.contains("normalize")
+            val guarded = body.contains("getCanonicalPath") || body.contains("getCanonicalFile") || body.contains("normalize") ||
+                PathFlow.reachesPath(text, m.range.first, "Ljava/util/zip/ZipEntry;->getName(") == false      // 1.1.0: the name never reaches a path (listed, a key, a bare file name)
             // 0.77.0 (Termux TermuxInstaller: the bootstrap zip is a byte[] from the app's own native library): an archive that comes from
             // inside the APK (assets, raw resources, class-path resources, a byte[] returned by an app method with no arguments) is not
             // attacker-controlled; reported LOW so a reviewer can still see it
