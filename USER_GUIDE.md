@@ -1,4 +1,4 @@
-# APKReLab: how to use it as a security scanner (1.0.0)
+# APKReLab: how to use it as a security scanner (1.1.0)
 
 ## What it is good at today (measured, see "Evidence")
 - Static analysis of an APK ON THE PHONE: manifest, resources, Java/Kotlin code (Dalvik IR, SSA, call graph, inter-procedural taint from exported components / deep links / Intents to WebView, SQL,
@@ -47,6 +47,23 @@ Alternatively tap **Installed apps** and pick the installed app: its base and sp
 - **Hybrid apps** (Flutter, React Native, Expo): the app's own package is taken from the launcher activity, so the app's few Java classes are `in app code`.
 - **Agent tools**: `classify_class` (what an obfuscated class probably is, R8 merge signs) and `verify_class_edit` (does a smali patch assemble, which findings it removes or adds) next to callers / callees / flow_path / search_assets.
 - **Strings decrypted at run time** (a protector): the report prints a Frida snippet to dump them on YOUR test device; import the dump with the Strings button and scan again.
+
+## What changed in 1.1.0
+- **Attack surface: who can call each exported component.** A "Protection" column gives the permission a caller needs and how strong it is (signature = only apps signed with the same key or the system; normal / dangerous = any app can get it; NONE = open). A component that needs a signature permission is not "open" just because it is exported.
+- **Deep links, one row per intent-filter**: the links the app accepts, the activity and its launch mode, whether a web link is a verified App Link, and the query parameters / extras the activity reads by name. Android verifies App Links filter by filter: a web filter without `android:autoVerify="true"` is flagged even when another filter of the same activity is verified (Axis Pay: `axisapp.dre.agconnect.link`).
+- **Native methods (Java <-> .so)**: which library implements each `native` method (an exported JNI name, or registration at run time by the library the class loads), and the unsafe C functions that library imports. For Play Store apps, import the split APKs: the libraries are in the ABI split.
+- **Fewer false alarms**: flows through generic callbacks (coroutines, Compose lambdas) no longer pick up a value read in an unrelated lambda; zip "slip" needs the entry name to reach a file path; `name.substringAfterLast('/')` counts as a bare file name; receivers registered at run time with a signature permission get LOW Intent cards; a password stored after encryption is not "plaintext"; Flutter plugin and SDK packages (uCrop, NI card SDK, Bugsnag, LeakCanary ...) count as libraries.
+- **R8-merged classes on the phone**: the app now gives the grouped analysis the facts of the whole app (in 1.0.0 only the sandbox did), so Axis Pay card #15 should be gone.
+- **Versions**: firebase-common is read from Firebase's own registrar. Gson, Glide, Facebook and Play services have no version text in a shrunk APK: they stay "UNKNOWN VERSION" (check your Gradle files).
+- **String decryption**: the dump script hooks every decryptor the scan found; with a strings overlay loaded, the scan status says how many decryptor calls were resolved ("1,420 / 1,500 ... (94.7%)").
+- **AI Hub**: card numbers match the report (#12 = card 12; #L3 = third library / INFO card); `audit_brief` lists components exported without any permission, the deep links and the native bridge; the agent is told never to invent a finding and to check a component's permission before calling it open.
+
+## How 1.1.0 was verified
+- Gradle (AGP 9.3.1, Gradle 9.8.2, JDK 21): `assembleDebug` OK, 706 unit tests / 0 failures, `lintDebug` 0 errors.
+- Every new rule has a test with a negative twin and a test that fails when the rule is switched off (all mutants killed); the data-flow changes were compared flow by flow on 16 open-source apps and Axis Pay 3.0.1; deep links on 40 manifests; native libraries on 16 apps with their APKs.
+- Corrupted input: 8,100 mangled classes through the parser / planner / data-flow engine and 16,080 corrupted libraries, manifests and classes through the new parsers: no exception, no hang.
+- APKReLab's own APK scanned with the 1.0.0 and the 1.1.0 scanner: HIGH cards in its own code 4 -> 0, MEDIUM 18 -> 12 (the 12 left are rule classes that contain the very strings they search for). Debug builds are flagged "debuggable" (expected).
+- NOT verified here: anything on a phone; Axis Pay 3.0.4 (only 3.0.1 is in the sandbox).
 
 ## What changed in 1.0.0
 - **Fewer false flows through R8-merged classes.** R8 can merge unrelated classes into one (a Firebase class and a Crashlytics class in one renamed class, sharing its fields) and keeps a hidden class-id field. The data-flow engine now follows that id: a value written into an object of one original class is not read back through an object of another. It finds the id from the allocation, from the builder that returned the object, from the field the object was read from, from the callers of a method, from a switch on the id, and from how the reader casts the object's other fields. Writes whose id is unknown stay visible to every read (nothing real is dropped on a guess). Checked against real R8 output (a merged pair built with R8 8.13.25: the false flow goes, the real flow through the same field stays). On Axis Pay 3 of 18 flows went (all Crashlytics reading a Firebase value; read in the smali); on Keep It 2 of 13; unchanged on the other gate apps.
