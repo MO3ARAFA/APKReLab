@@ -101,7 +101,9 @@ object DynamicReceivers {
         for (i in 0 until 8) {
             val d = v?.def ?: return null
             when (d.kind) {
-                Insn.Kind.NEW_INSTANCE, Insn.Kind.CHECK_CAST -> return d.ref
+                Insn.Kind.NEW_INSTANCE -> return d.ref
+                // a cast to the base type says nothing (Kotlin casts an anonymous receiver held in a field back to BroadcastReceiver): the operand's type does
+                Insn.Kind.CHECK_CAST -> if (d.ref.trim() == "Landroid/content/BroadcastReceiver;") v = ssa.usesOf(d).firstOrNull() else return d.ref
                 Insn.Kind.FIELD_GET -> return d.ref.substringAfterLast(':').takeIf { it != "Landroid/content/BroadcastReceiver;" }
                 Insn.Kind.MOVE -> v = ssa.usesOf(d).firstOrNull()
                 else -> return null

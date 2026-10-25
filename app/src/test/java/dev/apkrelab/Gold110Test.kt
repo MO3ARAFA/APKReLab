@@ -119,6 +119,18 @@ class Gold110Test {
         assertTrue(protectedAfter(26, registers("com.example.permission.SIGNED", null), registers(null, null).replace("Host", "Host2")).isEmpty())
     }
 
+    @Test fun aReceiverHeldInAFieldAndCastToTheBaseTypeKeepsItsClass() {                      // APKReLab's own install receiver (self-scan of 1.1.0)
+        val viaField = registers("com.example.permission.SIGNED", 4).replace(
+            "new-instance v0, Lcom/example/Rx;\n    invoke-direct {v0}, Lcom/example/Rx;-><init>()V",
+            "iget-object v0, p0, Lcom/example/Host;->rx:Lcom/example/Rx;\n    check-cast v0, Landroid/content/BroadcastReceiver;")
+        assertTrue(viaField, viaField.contains("check-cast v0, Landroid/content/BroadcastReceiver;"))
+        assertEquals(setOf("Lcom/example/Rx;"), protectedAfter(26, viaField))
+        // twin: the same cast with no permission is not protected
+        assertTrue(protectedAfter(26, registers(null, 4).replace(
+            "new-instance v0, Lcom/example/Rx;\n    invoke-direct {v0}, Lcom/example/Rx;-><init>()V",
+            "iget-object v0, p0, Lcom/example/Host;->rx:Lcom/example/Rx;\n    check-cast v0, Landroid/content/BroadcastReceiver;")).isEmpty())
+    }
+
     @Test fun notExportedProtectsOnlyFromApi33() {
         assertEquals(setOf("Lcom/example/Rx;"), protectedAfter(33, registers(null, 4)))
         assertTrue(protectedAfter(26, registers(null, 4)).isEmpty())       // older devices ignore the flag
