@@ -44,6 +44,9 @@ class Verdict120Test {
         assertEquals(Verdict.MAX_MUST_FIX, v.mustFix.size)
         assertTrue(v.mustFix.all { it.contains("[HIGH]") })
         assertTrue(v.mustFix[0], v.mustFix[0].startsWith("#1 ") && v.mustFix[0].contains("getCanonicalPath"))            // the file-write template sentence
+        // twin: a CRITICAL card with no path from an exported component is not a must-fix
+        assertEquals(listOf("no HIGH/CRITICAL finding is reachable from an exported component"),
+            Verdict.build(listOf(card(Severity.CRITICAL, "Not reachable", "Lcom/x/N;", reach = "NO"), card(Severity.HIGH, "Not traced", "Lcom/x/T;")), emptyList(), full).mustFix)
     }
 
     @Test fun confidenceIsARatio() {
