@@ -131,7 +131,9 @@ class Gold110Test {
         val a = card("Lcom/example/Rx;", "Data from Intent.getStringExtra() reaches File.<init>")
         val b = card("Lcom/example/Other;", "Data from Intent.getStringExtra() reaches File.<init>")
         val c = card("Lcom/example/Rx;", "Data from ContentResolver.query() reaches File.<init>")
-        assertEquals(1, DynamicReceivers.lower(listOf(a, b, c), setOf("Lcom/example/Rx;")))
+        val d = card("Lcom/example/Rx;", "Data from Intent.getStringExtra() reaches File.<init>").also { it.sourceMethod = "Lcom/example/Other;->onReceive" }   // the Intent another class received
+        assertEquals(1, DynamicReceivers.lower(listOf(a, b, c, d), setOf("Lcom/example/Rx;")))
+        assertEquals(SecurityScanner.Severity.HIGH, d.severity)
         assertEquals(SecurityScanner.Severity.LOW, a.severity)
         assertEquals(SecurityScanner.Severity.HIGH, b.severity)
         assertEquals(SecurityScanner.Severity.HIGH, c.severity)

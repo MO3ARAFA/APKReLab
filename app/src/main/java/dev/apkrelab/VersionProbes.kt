@@ -43,10 +43,39 @@ object VersionProbes {
         return null
     }
 
+    /**
+     * 1.1.0: the version a Firebase component registrar hands to `LibraryVersionComponent.create("fire-core", "21.0.0")` (R8 renames the factory, the two constants stay):
+     * the version is the second argument of the first static (String, String) call that takes the constant [key] as its first argument, within 30 lines.
+     * The registrar classes keep their names (the manifest's ComponentDiscoveryService meta-data names them).
+     */
+    internal fun registrarVersion(text: String, key: String): String? {
+        val lines = text.lines()
+        val constRe = Regex("^\\s*const-string(?:/jumbo)?\\s+([vp]\\d+),\\s*\"([^\"]*)\"\\s*$")
+        for ((i, l) in lines.withIndex()) {
+            val k = constRe.find(l) ?: continue
+            if (k.groupValues[2] != key) continue
+            for (j in i + 1 until minOf(lines.size, i + 30)) {
+                val inv = lines[j]
+                if (!inv.contains("invoke-static") || !inv.contains("(Ljava/lang/String;Ljava/lang/String;)")) continue
+                val regs = Regex("\\{([^}]*)\\}").find(inv)?.groupValues?.get(1)?.split(',')?.map { it.trim() } ?: break
+                if (regs.size != 2 || regs[0] != k.groupValues[1]) break
+                // the value register's last write before the call must be a const-string (a value read from a field or a call is not read)
+                val writes = Regex("^\\s*[a-z][a-z0-9/-]*\\s+" + Regex.escape(regs[1]) + "\\s*(,|$)")
+                for (b in j - 1 downTo maxOf(0, i - 3)) {
+                    if (!writes.containsMatchIn(lines[b])) continue
+                    return constRe.find(lines[b])?.groupValues?.get(2)?.takeIf { versionLike.matches(it) }
+                }
+                break
+            }
+        }
+        return null
+    }
+
     private val fixed: List<Probe> = listOf(
         Probe("com.google.code.gson", "gson", "Lcom/google/gson/internal/GsonBuildConfig;") { fieldString(it, "VERSION") },
         Probe("org.jetbrains.kotlin", "kotlin-stdlib", "Lkotlin/KotlinVersionCurrentValue;") { kotlinVersion(it) },
-        Probe("org.jetbrains.kotlin", "kotlin-stdlib", "Lkotlin/KotlinVersion;") { kotlinVersion(it) }
+        Probe("org.jetbrains.kotlin", "kotlin-stdlib", "Lkotlin/KotlinVersion;") { kotlinVersion(it) },
+        Probe("com.google.firebase", "firebase-common", "Lcom/google/firebase/FirebaseCommonRegistrar;") { registrarVersion(it, "fire-core") }
     )
 
     /**
