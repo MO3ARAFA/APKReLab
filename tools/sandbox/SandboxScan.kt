@@ -19,7 +19,8 @@ fun main(args: Array<String>) {
     // 0.86.2: like the device (MainActivity: SecurityScanner.codePackage(...)): the code package, not the manifest package. Quillpad's code is in
     // org.qosp.notes while the manifest says io.github.quillpad; with the manifest package an app-bound renamed class looked like a library.
     val pkg = SecurityScanner.codePackage(texts.map { it.first }, manifestPkg, mc.componentTypes(manifestPkg), mc.launcherTypes(manifestPkg))   // 0.106.0: like the app
-    for ((i, p) in texts.withIndex()) all.addAll(SecurityScanner.scanSmali(p.first, i, p.second, pkg))
+    DynamicReceivers.clear()
+    for ((i, p) in texts.withIndex()) { all.addAll(SecurityScanner.scanSmali(p.first, i, p.second, pkg)); DynamicReceivers.observe(p.second) }   // 1.1.0: like the app's scan loop
     all.addAll(ResourceScanner.scanApk(apk).findings)
     // SSA taint flows
     val entries = mc.exportedComponents.map { mc.smaliTypeOf(it) }
@@ -39,6 +40,9 @@ fun main(args: Array<String>) {
     val final = SecurityScanner.dedupe(all)
     FindingPolish.lowerNonExportedReceivers(final, FindingPolish.nonExportedReceiversAndServices(mc))   // 0.80.0, like MainActivity.reachPass
     FindingPolish.lowerSeparateProcessDialogs(final, FindingPolish.separateProcessActivities(mc))        // 0.81.0
+    // 1.1.0, like MainActivity: receivers registered only with a signature permission (or NOT_EXPORTED and minSdk 33+); no device here, so platform levels come from ReportBuilder.defaultLevel
+    val minSdk = Regex("minSdkVersion\\s*=\\s*\"?(\\d+)").find(manifest)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+    DynamicReceivers.lower(final, DynamicReceivers.protectedReceivers(minSdk) { p -> mc.declaredPerms[p]?.let { PermissionGuard.isSignatureLevel(it) } ?: ((ReportBuilder.defaultLevel(p) ?: 0) >= 2) })
     FindingPolish.applyProviderCodeChecks(final)
     FindingPolish.applyNetworkEvidence(final)
     outMd.writeText("# APK ReLab report: $pkg\n\n(sandbox scan, no AI triage)\n\n## Security scan\n\n" + ReportBuilder.securitySection(final) + "\n")
