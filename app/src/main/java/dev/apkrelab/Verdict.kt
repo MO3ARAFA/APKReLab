@@ -26,6 +26,45 @@ object Verdict {
     }
 
     const val MAX_MUST_FIX = 3
+    /** 1.2.1: a MUST FIX card whose evidence is below this is marked "CHECK FIRST:" (no traced source + path). */
+    const val CHECK_FIRST_BELOW = 0.9
+    /** 1.2.1: switches for the mutation checks of the verify lines and the sanitizer families. */
+    internal var VERIFY = true
+    internal var SANITIZER_FAMILIES = true
+
+    private val methodRe = Regex("in method ([A-Za-z0-9_$.<>]+)\\(")
+    private val lineRe = Regex("\\(around line (\\d+)\\)")
+    // the families of TaintEngine.validationRe / SsaBridge.VALIDATION, by the sink they protect
+    private val noStandardSanitizer = listOf("Runtime.exec", "ProcessBuilder.", "WebView.addJavascriptInterface", "Class.forName", "Method.invoke", "DexClassLoader.", "PathClassLoader.",
+        "System.load", "ObjectInputStream.")
+    private fun family(sink: String): String? = when {
+        sink.startsWith("WebView.") -> "a host allow-list (Uri.parse + getHost / getScheme compared with equals / startsWith / an allow-list contains)"
+        sink.startsWith("File") || sink.startsWith("RandomAccessFile") || sink.startsWith("ParcelFileDescriptor.open") || sink.startsWith("Files.") || sink.startsWith("ZipFile") ->
+            "a canonical-path check (getCanonicalPath / getCanonicalFile / normalize, then startsWith of the base directory) or a \"..\" check"
+        sink.startsWith("SQLiteDatabase.") || sink.startsWith("SupportSQLiteDatabase.") -> "selection arguments (? placeholders) or DatabaseUtils.sqlEscapeString"
+        sink.startsWith("ContentResolver.open") -> "a scheme / authority allow-list (Uri.getScheme / getAuthority)"
+        else -> null
+    }
+    private fun fmtEv(e: Double) = if (e == 1.0) "1.0" else String.format(java.util.Locale.US, "%.1f", e)
+    private fun evidenceKind(e: Double) = when { e >= 1.0 -> "real SSA source+path"; e >= 0.8 -> "source only: a flow inside one class"; e >= 0.6 -> "rule-only"; else -> "validation-like calls on the path" }
+
+    /** 1.2.1: what the reader opens to confirm a card before acting on it, from the card's own fields. */
+    fun verifyOf(f: Finding): String {
+        val sink = FixTemplates.sinkOf(f)
+        val method = methodRe.find(f.detail)?.groupValues?.get(1)?.substringAfterLast('.')?.let { "$it()" }
+        val cls = f.classType?.removePrefix("L")?.removeSuffix(";")?.replace('/', '.')
+        val ssa = f.detail.contains("Found by the SSA data-flow engine")
+        val deepLink = f.detail.contains("Data from Intent.getData()") || f.detail.contains("Data from a deep link") || f.ruleId == "manifest-deep-links"
+        return when {
+            sink != null && noStandardSanitizer.any { sink.startsWith(it) } ->
+                (if (ssa) "SSA flow verified; " else "") + "no sanitizer is standard for $sink: confirm the value really comes from outside in ${method ?: cls}"
+            sink != null && sink.startsWith("WebView.") -> "check the host allow-list / Uri.parse before loadUrl in ${method ?: cls}" + (if (ssa) " or its direct callees" else "") + ". If present, this is a false positive."
+            deepLink && sink != null -> "check the host / path validation in ${method ?: cls} before the sink ($sink). If present, this is a false positive."
+            SANITIZER_FAMILIES && sink != null && family(sink) != null -> "check for ${family(sink)} in ${method ?: cls} or its direct callees. If present, this is a false positive."
+            f.classType == null -> "open ${f.location} (" + f.title.substringAfter(": ", f.title) + "): check the permission and the component's own caller checks (getCallingPackage / Binder.getCallingUid / a signature check); the rule read the manifest only."
+            else -> "open $cls" + (lineRe.find(f.detail)?.groupValues?.get(1)?.let { " at smali line $it" } ?: "") + " (offset ${f.at}): the rule matched a pattern there and traced no data flow; confirm the code does what the title says."
+        }
+    }
 
     /** "finished, 18093 / 18093 classes; ... (25 groups of up to 3000 classes ..." -> classes read, groups. */
     fun parseStatus(note: String): Pair<Int, Int> {
@@ -58,14 +97,18 @@ object Verdict {
             listOf("card ${label(pos[top]!!)}: ${best.title}",
                 "entry: ${best.entry} -> path: " + chain.joinToString(" -> ") { label(pos[it]!!) + " " + it.title.take(60) + " in " + where(it) } +
                     (FixTemplates.sinkOf(top)?.let { " -> sink: $it" } ?: ""),
-                "impact: ${best.impact}")
+                "impact: ${best.impact}") + chain.take(MAX_MUST_FIX).map { "→ to verify (" + label(pos[it]!!) + "): " + verifyOf(it) }      // 1.2.1
         }
 
         // MUST FIX: HIGH / CRITICAL, reachable from an exported component, highest priority first; never more than three
         val must = cards.withIndex().filter { (_, f) -> f.severity.rank <= Severity.HIGH.rank && (f.reach == "YES" || f.reach == "YES~") }
             .sortedWith(compareByDescending<IndexedValue<Finding>> { FindingScore.of(it.value).value }.thenBy { it.index }).take(MAX_MUST_FIX)
-            .map { (i, f) -> label(i) + " [" + f.severity.label + "] " + f.title + " in " + where(f) + " (" + FindingScore.of(f).short + "): " +
-                (FixTemplates.match(f, pkg)?.sentence ?: f.recommendation.substringBefore(". ").trimEnd('.') + ".") }
+            .map { (i, f) ->
+                val ev = FindingScore.confidence(f).evidence
+                (if (VERIFY && ev < CHECK_FIRST_BELOW) "CHECK FIRST: " else "") + label(i) + " [" + f.severity.label + "] " + f.title + " in " + where(f) + " (" + FindingScore.of(f).short + "): " +
+                    (FixTemplates.match(f, pkg)?.sentence ?: f.recommendation.substringBefore(". ").trimEnd('.') + ".") +
+                    (if (VERIFY) "\n→ to verify: " + verifyOf(f) + "\nEvidence: " + fmtEv(ev) + " (" + evidenceKind(ev) + ")" else "")      // 1.2.1
+            }
             .ifEmpty { listOf("no HIGH/CRITICAL finding is reachable from an exported component") }
 
         // CONFIDENCE: a ratio, not an adjective
