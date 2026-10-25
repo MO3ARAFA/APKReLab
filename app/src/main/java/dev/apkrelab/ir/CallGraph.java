@@ -703,6 +703,7 @@ public final class CallGraph {
                 if (in.kind != Insn.Kind.INVOKE) continue;
                 String owner = in.targetOwner(), sig = in.targetSig(), kind = in.invokeKind();
                 if (owner.isEmpty() || owner.charAt(0) == '[') continue;
+                seen.clear();                // 1.0.0: one caller, one call site at a time: the callees of this site are the only duplicates (was a "caller|insn|callee" string per edge)
                 switch (kind) {
                     case "static":
                     case "direct":
@@ -800,7 +801,7 @@ public final class CallGraph {
     }
 
     private void taintEdge(Set<String> seen, String caller, int insn, String callee, String kind) {
-        if (!seen.add(caller + "|" + insn + "|" + callee)) return;
+        if (!seen.add(callee)) return;
         Edge e = new Edge(caller, insn, callee, kind, !methods.containsKey(callee));
         taintOut.computeIfAbsent(caller, k -> new ArrayList<>()).add(e);
         if (!e.external) taintIn.computeIfAbsent(callee, k -> new ArrayList<>()).add(e);

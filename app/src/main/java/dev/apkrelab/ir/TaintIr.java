@@ -295,10 +295,16 @@ public final class TaintIr {
 
     /** 0.57.0: owners of every sink API (the scope planner looks for them in the invoke lines of a big app). */
     static Set<String> sinkOwners() {
-        Set<String> out = new HashSet<>();
-        for (List<Sink> l : SINKS.values()) for (Sink k : l) out.add(k.owner);
+        Set<String> out = sinkOwners;
+        if (out == null) {
+            out = new HashSet<>();
+            for (List<Sink> l : SINKS.values()) for (Sink k : l) out.add(k.owner);
+            sinkOwners = out = Collections.unmodifiableSet(out);       // 1.0.0: built once (CallSkeleton.digest asked for it once per class)
+        }
         return out;
     }
+
+    private static volatile Set<String> sinkOwners;
 
     /** 0.57.0: true when owner->name is one of the sink APIs. */
     static boolean isSink(String owner, String name) {
@@ -872,6 +878,44 @@ public final class TaintIr {
         }
     }
 
+    /**
+     * 1.0.0: what a call site's reference says (owner, name, descriptor, argument layout, sink candidates). It was re-parsed on every pass of every analysis of a method:
+     * about 25% of the bytes a big app's Deep scan allocated (Axis Pay, JFR allocation samples). A pure function of the reference and the invoke kind, so it is kept in a
+     * fixed lossy table shared by every thread, like {@link Canon}: a slot holds the last call seen, a race only loses a little reuse, the memory never grows.
+     */
+    static final class Call {
+        private static final int BITS = 14, SLOTS = 1 << BITS;
+        private static final Call[] TABLE = new Call[SLOTS];
+        final String ref, owner, sig, name, desc, ret;
+        final boolean isStatic;
+        final int[] phys;
+        final List<Sink> cands;
+
+        private Call(Insn in, boolean isStatic) {
+            ref = in.ref;
+            this.isStatic = isStatic;
+            owner = Canon.of(in.targetOwner());
+            sig = Canon.of(in.targetSig());
+            int paren = sig.indexOf('(');
+            name = paren < 0 ? sig : Canon.of(sig.substring(0, paren));
+            desc = Canon.of(sig.substring(Math.max(0, paren)));
+            ret = Canon.of(sig.substring(sig.lastIndexOf(')') + 1));
+            phys = owner.isEmpty() ? new int[0] : physical(allParams(sig), !isStatic);
+            cands = owner.isEmpty() ? null : SINKS.get(owner + "->" + name);
+        }
+
+        static Call of(Insn in) {
+            boolean st = in.op.startsWith("invoke-static");
+            int h = in.ref.hashCode() * 31 + (st ? 1 : 0);
+            int i = (h ^ (h >>> BITS)) & (SLOTS - 1);
+            Call c = TABLE[i];
+            if (c != null && c.isStatic == st && (c.ref == in.ref || c.ref.equals(in.ref))) return c;
+            c = new Call(in, st);
+            TABLE[i] = c;
+            return c;
+        }
+    }
+
     private static final class Run {
         final CallGraph g;
         final Map<String, Summary> summaries = new HashMap<>();
@@ -1327,11 +1371,11 @@ public final class TaintIr {
         // ---------- calls ----------
 
         void invoke(Insn in, SsaForm.Value[] u, SsaForm.Value[] d) {
-            String owner = in.targetOwner(), sig = in.targetSig(), name = in.targetName();
+            Call call = Call.of(in);
+            String owner = call.owner, sig = call.sig, name = call.name;
             if (owner.isEmpty()) return;
-            boolean isStatic = in.invokeKind().equals("static");
-            List<String> pt = allParams(sig);
-            int[] phys = physical(pt, !isStatic);
+            boolean isStatic = call.isStatic;
+            int[] phys = call.phys;
             Tv[] t = new Tv[phys.length];
             SsaForm.Value[] av = new SsaForm.Value[phys.length];
             for (int k = 0; k < phys.length; k++) {
@@ -1339,9 +1383,9 @@ public final class TaintIr {
                 t[k] = get(av[k]);
             }
             // sink
-            List<Sink> cands = SINKS.get(owner + "->" + name);
+            List<Sink> cands = call.cands;
             if (collect && cands != null) {
-                String desc = sig.substring(Math.max(0, sig.indexOf('(')));
+                String desc = call.desc;
                 for (Sink s : cands) {
                     if (!s.descPrefix.isEmpty() && !desc.startsWith(s.descPrefix)) continue;
                     Tv tt = Tv.NONE;
@@ -1353,7 +1397,7 @@ public final class TaintIr {
                 }
             }
             // 0.74.0: intent redirection (see REDIRECT_NAMES): the Intent object itself came from the caller
-            if (collect && !isStatic && REDIRECT_NAMES.contains(name) && sig.substring(Math.max(0, sig.indexOf('('))).startsWith("(Landroid/content/Intent;") && t.length > 1 && !t[1].isNone()
+            if (collect && !isStatic && REDIRECT_NAMES.contains(name) && call.desc.startsWith("(Landroid/content/Intent;") && t.length > 1 && !t[1].isNone()
                     && !owner.startsWith("Landroid/content/Intent;")) hit(REDIRECT_SINKS.get(name), in, t[1]);
             // 0.67.0: SharedPreferences.Editor.putString(key, value): a REAL source in the value is remembered for that key
             if (!isStatic && owner.equals(EDITOR_OWNER) && PREFS_PUTS.contains(name) && t.length >= 3) {
@@ -1423,7 +1467,7 @@ public final class TaintIr {
             // framework / unresolved callee
             if (isSanitizer(owner, name)) return;
             // 0.68.1: Kotlin Intrinsics that return a reference (stringPlus = string concatenation) hand their arguments to the result
-            if (owner.equals("Lkotlin/jvm/internal/Intrinsics;") && sig.substring(sig.lastIndexOf(')') + 1).startsWith("L")) {
+            if (owner.equals("Lkotlin/jvm/internal/Intrinsics;") && call.ret.startsWith("L")) {
                 Tv all = Tv.NONE;
                 for (Tv x : t) all = all.join(x);
                 for (SsaForm.Value y : d) raise(y, all);

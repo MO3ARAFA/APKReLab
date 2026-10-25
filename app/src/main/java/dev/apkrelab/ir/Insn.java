@@ -69,6 +69,12 @@ public final class Insn {
     /** virtual, super, direct, static, interface, polymorphic, custom ("" when not an invoke). */
     public String invokeKind() {
         if (kind != Kind.INVOKE) return "";
+        // 1.0.0: the known kinds without a substring (asked for every call site on every pass)
+        if (op.startsWith("invoke-virtual")) return "virtual";
+        if (op.startsWith("invoke-static")) return "static";
+        if (op.startsWith("invoke-direct")) return "direct";
+        if (op.startsWith("invoke-interface")) return "interface";
+        if (op.startsWith("invoke-super")) return "super";
         String s = op.substring("invoke-".length());
         int sl = s.indexOf('/');
         return sl < 0 ? s : s.substring(0, sl);

@@ -83,6 +83,9 @@ class PostureScannerTest {
         assertTrue(row("bio-event").app.isEmpty())                                                                      // twin: a prompt bound to a key is not the event-only one
         observe("Lcom/myapp/Bio2;", cls("Lcom/myapp/Bio2;", m("    invoke-virtual {v0, v1}, Landroidx/biometric/BiometricPrompt;->authenticate(Landroidx/biometric/BiometricPrompt\$PromptInfo;)V\n")))
         assertEquals(listOf("Lcom/myapp/Bio2;"), row("bio-event").app)
+        observe("Lcom/myapp/Both;", cls("Lcom/myapp/Both;", m("    invoke-virtual {v0, v1}, Landroidx/biometric/BiometricPrompt;->authenticate(Landroidx/biometric/BiometricPrompt\$PromptInfo;)V\n" +
+            "    invoke-virtual {v0, v1, v2}, Landroidx/biometric/BiometricPrompt;->authenticate(Landroidx/biometric/BiometricPrompt\$PromptInfo;Landroidx/biometric/BiometricPrompt\$CryptoObject;)V\n")))
+        assertEquals(listOf("Lcom/myapp/Bio2;"), row("bio-event").app)                                                // twin: a wrapper that binds a key when it has one
         observe("Lcom/myapp/Up;", cls("Lcom/myapp/Up;", m("    invoke-static {v0}, Lcom/google/android/play/core/appupdate/AppUpdateManagerFactory;->create(Landroid/content/Context;)Lcom/google/android/play/core/appupdate/AppUpdateManager;\n")))
         assertEquals(1, row("in-app-update").app.size)
         observe("Lcom/myapp/Login;", cls("Lcom/myapp/Login;", m("    invoke-virtual {v0, v1, v2}, Lnet/openid/appauth/AuthorizationService;->performAuthorizationRequest(Lnet/openid/appauth/AuthorizationRequest;Landroid/app/PendingIntent;)V\n")))

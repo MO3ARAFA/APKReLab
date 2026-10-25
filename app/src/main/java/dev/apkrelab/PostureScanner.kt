@@ -47,6 +47,9 @@ object PostureScanner {
         return false
     }
 
+    private fun bioCrypto(t: String) = has(t, "Landroidx/biometric/BiometricPrompt;->authenticate(Landroidx/biometric/BiometricPrompt\$PromptInfo;Landroidx/biometric/BiometricPrompt\$CryptoObject;)V",
+        "Landroid/hardware/biometrics/BiometricPrompt;->authenticate(Landroid/hardware/biometrics/BiometricPrompt\$CryptoObject;")
+
     val signals: List<Sig> = listOf(
         Sig("pin-okhttp", "Certificate pinning: OkHttp CertificatePinner", "MASVS-NETWORK-2") { has(it, "Lokhttp3/CertificatePinner\$Builder;->add(", "Lokhttp3/CertificatePinner\$Builder;->add") },
         Sig("pin-trustkit", "Certificate pinning: TrustKit", "MASVS-NETWORK-2") { has(it, "Lcom/datatheorem/android/trustkit/") },
@@ -75,12 +78,11 @@ object PostureScanner {
         Sig("auth-oauth", "Authentication: OAuth / OpenID Connect through AppAuth (a browser tab, not a WebView)", "MASVS-AUTH-1") { has(it, "Lnet/openid/appauth/AuthorizationService;->performAuthorizationRequest", "Lnet/openid/appauth/AuthorizationService;->getAuthorizationRequestIntent") },
         Sig("auth-credman", "Authentication: Credential Manager (passkeys / saved passwords)", "MASVS-AUTH-1") { has(it, "Landroidx/credentials/CredentialManager;->getCredential", "Landroidx/credentials/CredentialManager\$Companion;->create", "Landroid/credentials/CredentialManager;->getCredential") },
         Sig("auth-account", "Authentication: Android AccountManager tokens", "MASVS-AUTH-1") { has(it, "Landroid/accounts/AccountManager;->getAuthToken", "Landroid/accounts/AccountManager;->blockingGetAuthToken") },
-        Sig("bio-crypto", "Local authentication: biometric prompt bound to a Keystore key (CryptoObject)", "MASVS-AUTH-2") {
-            has(it, "Landroidx/biometric/BiometricPrompt;->authenticate(Landroidx/biometric/BiometricPrompt\$PromptInfo;Landroidx/biometric/BiometricPrompt\$CryptoObject;)V",
-                "Landroid/hardware/biometrics/BiometricPrompt;->authenticate(Landroid/hardware/biometrics/BiometricPrompt\$CryptoObject;") },
+        Sig("bio-crypto", "Local authentication: biometric prompt bound to a Keystore key (CryptoObject)", "MASVS-AUTH-2") { bioCrypto(it) },
+        // a wrapper that calls both overloads (Flutter's local_auth helpers, measured in 2 corpus apps) binds a key when it has one: only a class that never does is listed here
         Sig("bio-event", "Local authentication: biometric prompt WITHOUT a key (the result is a callback a hooked app can fake; bind a CryptoObject for anything sensitive)", "MASVS-AUTH-2") {
             has(it, "Landroidx/biometric/BiometricPrompt;->authenticate(Landroidx/biometric/BiometricPrompt\$PromptInfo;)V",
-                "Landroid/hardware/biometrics/BiometricPrompt;->authenticate(Landroid/os/CancellationSignal;") },
+                "Landroid/hardware/biometrics/BiometricPrompt;->authenticate(Landroid/os/CancellationSignal;") && !bioCrypto(it) },
         Sig("key-userauth", "Local authentication: a Keystore key that needs the user's authentication (setUserAuthenticationRequired)", "MASVS-AUTH-2") { has(it, "Landroid/security/keystore/KeyGenParameterSpec\$Builder;->setUserAuthenticationRequired(Z)") },
         Sig("key-bio-invalidate", "Local authentication: the key is invalidated when a new fingerprint is enrolled (setInvalidatedByBiometricEnrollment)", "MASVS-AUTH-2") { has(it, "Landroid/security/keystore/KeyGenParameterSpec\$Builder;->setInvalidatedByBiometricEnrollment(Z)") },
         Sig("step-up", "Sensitive operations: device-credential confirmation or Protected Confirmation before acting", "MASVS-AUTH-3") {

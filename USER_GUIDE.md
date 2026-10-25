@@ -1,4 +1,4 @@
-# APKReLab: how to use it as a security scanner (0.108.0)
+# APKReLab: how to use it as a security scanner (1.0.0)
 
 ## What it is good at today (measured, see "Evidence")
 - Static analysis of an APK ON THE PHONE: manifest, resources, Java/Kotlin code (Dalvik IR, SSA, call graph, inter-procedural taint from exported components / deep links / Intents to WebView, SQL,
@@ -12,7 +12,7 @@
 2. **CRITICAL / HIGH findings with `Scope: APP`** (the app's own code). Read the "Call path" and "Data path" lines: a reachable sink is the first to fix.
 3. **SCA table**: libraries with known advisories; for versions shown as "?", run the `dependencyInsight` lines printed under the table in your project.
 4. **Defense posture**: which protections are in the app's own code, which only inside an SDK ("library only"), which are of unknown origin.
-5. **MASVS v2 coverage**: which controls the tool assessed, which it did not (6 of 24 are never assessed: authentication, update enforcement, part of privacy).
+5. **MASVS v2 coverage**: which controls the tool assessed. Since 1.0.0 every one of the 24 has a rule or a posture signal, but 6 (authentication, update enforcement, part of privacy) are seen ONLY through what the code uses (the table says "posture signal(s) only"): a login done on the server or in a WebView, and a consent screen of the app's own design, are not seen.
 6. Export SARIF for GitHub code scanning / DefectDojo, CycloneDX for the SBOM.
 
 ## How to read the labels
@@ -47,6 +47,14 @@ Alternatively tap **Installed apps** and pick the installed app: its base and sp
 - **Hybrid apps** (Flutter, React Native, Expo): the app's own package is taken from the launcher activity, so the app's few Java classes are `in app code`.
 - **Agent tools**: `classify_class` (what an obfuscated class probably is, R8 merge signs) and `verify_class_edit` (does a smali patch assemble, which findings it removes or adds) next to callers / callees / flow_path / search_assets.
 - **Strings decrypted at run time** (a protector): the report prints a Frida snippet to dump them on YOUR test device; import the dump with the Strings button and scan again.
+
+## What changed in 1.0.0
+- **Fewer false flows through R8-merged classes.** R8 can merge unrelated classes into one (a Firebase class and a Crashlytics class in one renamed class, sharing its fields) and keeps a hidden class-id field. The data-flow engine now follows that id: a value written into an object of one original class is not read back through an object of another. It finds the id from the allocation, from the builder that returned the object, from the field the object was read from, from the callers of a method, from a switch on the id, and from how the reader casts the object's other fields. Writes whose id is unknown stay visible to every read (nothing real is dropped on a guess). Checked against real R8 output (a merged pair built with R8 8.13.25: the false flow goes, the real flow through the same field stays). On Axis Pay 3 of 18 flows went (all Crashlytics reading a Firebase value; read in the smali); on Keep It 2 of 13; unchanged on the other gate apps.
+- **Renamed code cards say what kind of renamed code it is**: an R8-merged class (mixed origins), R8's static helper holder, or renamed code no single library names, with the tool to check it (`classify_class`).
+- **Defense posture covers authentication, updates and privacy**: OAuth (AppAuth), Credential Manager, AccountManager tokens, biometric prompt with or without a Keystore key, keys that need the user's authentication or die with a new fingerprint, device-credential confirmation, Play In-App Updates, the Google consent dialog and its privacy options, Privacy Sandbox ads. Each row says app code / renamed / library only.
+- **Agent**: `audit_brief` gives one deterministic page (counts, what to verify first numbered like `get_findings`, flows through merged code, what the scan could not see). The agent is told to check a flow with `flow_path`, then `classify_class` for renamed classes on the path, and to test a patch with `verify_class_edit` before proposing it.
+- **Less memory churn in the data-flow step**: the engine allocated about 40% fewer bytes on Axis Pay (same flows, same loss counters); see "How this version was verified".
+- The first Deep scan after installing 1.0.0 reads every class again (the planner's cache format changed).
 
 ## How this version was verified (0.108.0)
 - Built with the real Android toolchain for the first time (AGP 9.3.1, Gradle 9.8.2, JDK 21, compileSdk 36): `assembleDebug` OK, `testDebugUnitTest` 648 tests / 0 failures, `lintDebug` 0 errors. Steps: `tools/sandbox/GRADLE_BUILD.md`.
