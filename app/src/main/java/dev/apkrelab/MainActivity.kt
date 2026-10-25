@@ -2623,6 +2623,7 @@ class MainActivity : Activity() {
         val maxClasses = 6000      // up to this size the whole app is one run (as before)
         val groupSize = 3000       // 0.59.0: above it the app is analysed group by group, each group fits in memory
         var groupIdx: List<List<Int>> = listOf(appIdx)
+        var mergeFacts: dev.apkrelab.ir.MergeFacts? = null     // 1.1.0: set only for a grouped (big) app; a single group is the whole program
         ssaScopeNote = ""
         ssaIncomplete = ""
         ssaPlanLine = ""
@@ -2639,7 +2640,7 @@ class MainActivity : Activity() {
             // 0.59.0 (P1 step 4, part 2): no total cap any more. ScopePlanner.groups reads every class text once (keeps only int arrays),
             // then covers EVERY class with a source or a sink in some group, best classes first; each group is parsed, analysed and freed
             val tPlan = System.currentTimeMillis()
-            val gr = dev.apkrelab.ir.ScopePlanner.groups(object : dev.apkrelab.ir.ScopePlanner.Source {
+            val planSrc = object : dev.apkrelab.ir.ScopePlanner.Source {
                 override fun count(): Int = appIdx.size
                 override fun type(i: Int): String = defs[appIdx[i]].type
                 override fun text(i: Int): String = try { agentIndexedText(defs[appIdx[i]]) } catch (_: Throwable) { "" }
@@ -2649,7 +2650,8 @@ class MainActivity : Activity() {
                     return dstore.get(t) ?: dev.apkrelab.ir.CallSkeleton.digest(text(i)).also { dstore.put(t, it) }
                 }
                 override fun cancelled(): Boolean = secScanCancel
-            }, entries, groupSize, false, false, false)   // 0.59.3: nothing is left out, accuracy before time
+            }
+            val gr = dev.apkrelab.ir.ScopePlanner.groups(planSrc, entries, groupSize, false, false, false)   // 0.59.3: nothing is left out, accuracy before time
             planMs = System.currentTimeMillis() - tPlan
             if (dstore != null && dstoreFile != null && dstore.changed() && !secScanCancel && !gr.cancelled) {
                 dstore.save(dstoreFile)
@@ -2658,6 +2660,9 @@ class MainActivity : Activity() {
             planDigestNote = if (dstore == null) "" else ", plan digests: ${minOf(dLoaded, appIdx.size)} of ${appIdx.size} reused"
             if (secScanCancel || gr.cancelled) return emptyList()
             groupIdx = gr.groups.map { g -> g.map { appIdx[it] } }
+            // 1.1.0: R8 class-merge facts over EVERY class the planner offered (1.0.0 built them only in the sandbox harness: on the phone each group saw its own classes,
+            // and Axis Pay's m42.c flows came back). Read from the plan digests just stored; class texts only for the merged classes a group asks about.
+            mergeFacts = try { dev.apkrelab.ir.MergeFacts.of(planSrc) } catch (_: Throwable) { null }
             ssaScopeNote = "${gr.groups.size} groups of up to $groupSize classes, ${gr.marked} classes with a source or sink of ${appIdx.size}" +
                 (if (gr.cappedGroups > 0) ", ${gr.cappedGroups} group(s) capped, ${gr.droppedClasses} class(es) cut, biggest closure ${gr.maxClosure} (${gr.maxClosureTiers})" else "") +
                 (if (gr.hubs > 0) ", ${gr.hubs} hub class(es) not expanded" else "") +
@@ -2692,8 +2697,10 @@ class MainActivity : Activity() {
         val budgetMs = ssaBudgetMin() * 60_000L
         ssaTimeUp = false
         val guardedTypes = guardedEntryTypes()      // 0.69.1: computed once, the groups may run on several threads
+        val facts = mergeFacts
         val host = object : dev.apkrelab.ir.SsaGroups.Host {
             override fun guardedEntries(): Collection<String> = guardedTypes
+            override fun mergeFacts(): dev.apkrelab.ir.MergeFacts? = facts
             // 0.104.0: finished groups are reused by the next scan of the same classes. 0.104.1: kept OUTSIDE the workspace (picking the same APK again deleted the workspace and the
             // cache with it: the owner's second run reused nothing); the keys are content hashes, so results of different apps cannot mix; at most 400 files, oldest first
             override fun groupCache(): dev.apkrelab.ir.GroupCache? = if (prefs().getBoolean("ssa_cache", true)) dev.apkrelab.ir.GroupCache.Disk(File(filesDir, "groupcache"), 400) else null
@@ -3509,7 +3516,7 @@ class MainActivity : Activity() {
         }
         if (manifestFull.isNotBlank()) {
             val xi2 = manifestFull.indexOf("<?xml")
-            sb.append(try { ReportBuilder.attackSurface(if (xi2 > 0) manifestFull.substring(xi2) else manifestFull, pkg) } catch (_: Throwable) { "" })
+            sb.append(try { ReportBuilder.attackSurface(if (xi2 > 0) manifestFull.substring(xi2) else manifestFull, pkg, PermissionGuard.systemResolver(this).let { sys -> { p: String -> sys(p) ?: ReportBuilder.defaultLevel(p) } }) } catch (_: Throwable) { "" })
         }
         sb.append("## Security scan\n\n")
         if (secFindings.isEmpty()) {
@@ -4445,7 +4452,14 @@ class MainActivity : Activity() {
         override fun flowPath(finding: String) = agentFlowPath(finding)
         override fun classifyClass(name: String) = agentClassify(name)
         override fun verifyClassEdit(name: String, modified: String) = agentVerifyEdit(name, modified)
-        override fun auditBrief() = AuditBrief.build(packageNameOrNull() ?: "", secSorted(secFindings).filter { it.verdict != "FP" }, PostureScanner.rows(), lastScanNote)
+        override fun auditBrief(): String {
+            val (cards, reported) = agentCards()
+            val open = try {
+                val mc = ManifestContext(manifestFull); val pg = PermissionGuard(mc, PermissionGuard.systemResolver(this@MainActivity))
+                mc.exportedComponents.filter { pg.guardFor(mc.smaliTypeOf(it)) == PermissionGuard.Guard.NONE }.map { it.name + " (" + it.tag + ")" }.distinct()
+            } catch (_: Throwable) { emptyList() }
+            return AuditBrief.build(packageNameOrNull() ?: "", cards, PostureScanner.rows(), lastScanNote, reported, open)
+        }
         override fun listEdits() = agentListEdits()
         override fun openClass(cls: String) = agentOpenClass(cls)
         override fun runScan(mode: String, ctx: AgentCtx) = agentRunScan(mode, ctx)
@@ -4941,16 +4955,24 @@ class MainActivity : Activity() {
         return if (manifestFull.length > 12000) manifestFull.take(12000) + "\n...(truncated)" else manifestFull
     }
 
+    /** 1.1.0: findings in report order (the report's cards first, numbered as the report numbers them), then the library / INFO ones; and how many carry report numbers. */
+    private fun agentCards(): Pair<List<SecurityScanner.Finding>, Int> {
+        val rep = ReportBuilder.reportable(secFindings)
+        val rest = secSorted(secFindings).filter { it !in rep }
+        return (rep + rest) to rep.size
+    }
+
     private fun agentFindings(limit: Int, minSeverity: String): String {
         if (secFindings.isEmpty()) return "No scan results yet. Ask the user to run 'Smart scan' in the Security tab first."
         val minRank = when (minSeverity.trim().uppercase()) { "CRITICAL" -> 0; "HIGH" -> 1; "MEDIUM" -> 2; "LOW" -> 3; else -> 4 }
-        val all = secSorted(secFindings).filter { it.verdict != "FP" }
-        val list = all.filter { it.severity.rank <= minRank }.take(limit)
+        val (all, reported) = agentCards()
+        val list = all.filter { it.severity.rank <= minRank && it.verdict != "FP" }.take(limit)
         val sb = StringBuilder()
-        sb.append(secFindings.size).append(" findings in total; showing ").append(list.size).append(" (AI-marked false positives hidden; #N is the number for flow_path):\n")
+        sb.append(secFindings.size).append(" findings in total; showing ").append(list.size)
+            .append(" (AI-marked false positives hidden). #N is the card number of the exported report (#L = library / INFO, not in the report); use it for flow_path. Only these cards exist: never describe a finding without its card number.\n")
         for (f in list) {
             try { traceFinding(f) } catch (_: Throwable) { }
-            sb.append("- #").append(all.indexOf(f) + 1).append(" [").append(f.severity.label).append("] ").append(f.title).append(" | ").append(f.location)
+            sb.append("- ").append(GraphTools.cardLabel(all.indexOf(f), reported)).append(" [").append(f.severity.label).append("] ").append(f.title).append(" | ").append(f.location)
             if (f.count > 1) sb.append(" x").append(f.count)
             if (f.cwe.isNotEmpty()) sb.append(" | ").append(f.cwe)
             if (f.reach.isNotEmpty()) sb.append(" | reachable from an exported component: ").append(f.reach)
@@ -5025,11 +5047,11 @@ class MainActivity : Activity() {
 
     private fun agentFlowPath(query: String): String {
         if (secFindings.isEmpty()) return "No scan results yet. Ask the user to run 'Smart scan' in the Security tab first."
-        val all = secSorted(secFindings).filter { it.verdict != "FP" }
-        val (no, f) = GraphTools.pick(all, query) ?: return "error: no finding matches \"$query\". Use the #N number from get_findings, or part of a title."
+        val (all, reported) = agentCards()
+        val (no, f) = GraphTools.pick(all, query, reported) ?: return "error: no finding matches \"$query\". Use the #N card number from get_findings (the same number as in the report), or part of a title."
         try { traceFinding(f) } catch (_: Throwable) { }
         val method = try { classDefs.getOrNull(f.clsIndex)?.let { SecurityScanner.methodKeyAt(it.type, agentIndexedText(it), f.at) } } catch (_: Throwable) { null }
-        return GraphTools.flowPath(f, no, method)
+        return GraphTools.flowPath(f, GraphTools.cardLabel(no - 1, reported), method)
     }
 
     private fun agentEntryPoints(): String {

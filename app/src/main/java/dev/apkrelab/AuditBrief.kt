@@ -12,7 +12,11 @@ import dev.apkrelab.SecurityScanner.Scope
 object AuditBrief {
     const val MAX_FIRST = 10
 
-    fun build(pkg: String, findings: List<Finding>, posture: List<PostureScanner.Row>, scanNote: String): String {
+    /**
+     * [reported] (1.1.0) = how many leading [findings] are the report's cards (numbered as the report numbers them; the rest are "#L" library / INFO entries, see
+     * GraphTools.cardLabel); [openComponents] = exported components that need no permission at all (null = not known).
+     */
+    fun build(pkg: String, findings: List<Finding>, posture: List<PostureScanner.Row>, scanNote: String, reported: Int = findings.size, openComponents: List<String>? = null): String {
         if (findings.isEmpty()) return "No scan results yet for $pkg: run scan_security (mode smart or deep) first."
         val sb = StringBuilder("AUDIT BRIEF ").append(pkg).append('\n')
         if (scanNote.isNotEmpty()) sb.append("Last scan: ").append(scanNote).append('\n')
@@ -34,19 +38,25 @@ object AuditBrief {
             .filter { (_, f) -> f.scope != Scope.LIB && f.severity.rank <= SecurityScanner.Severity.MEDIUM.rank }
             .sortedWith(compareBy({ reachRank(it.value) }, { it.value.severity.rank }, { it.index }))
             .take(MAX_FIRST)
-        sb.append("\nVERIFY FIRST (flow_path #N, then get_class at the source and the sink):\n")
+        sb.append("\nVERIFY FIRST (flow_path #N with the card number shown, then get_class at the source and the sink):\n")
         if (first.isEmpty()) sb.append("  none at MEDIUM or above outside libraries.\n")
         for ((i, f) in first) {
-            sb.append("  #").append(i + 1).append(" [").append(f.severity.label).append(if (f.scope == Scope.OTHER) "" else "/" + f.scope.tag)
+            sb.append("  ").append(GraphTools.cardLabel(i, reported)).append(" [").append(f.severity.label).append(if (f.scope == Scope.OTHER) "" else "/" + f.scope.tag)
                 .append(if (f.reach.isEmpty()) "" else ", reach " + f.reach).append(if (f.verdict.isEmpty()) "" else ", AI " + f.verdict).append("] ")
                 .append(f.title).append(" - ").append(f.location).append('\n')
         }
         val merged = findings.withIndex().filter { (_, f) -> f.detail.contains("R8 may have merged") || f.detail.contains("R8 merged several original classes") || f.detail.contains("from a class R8 merged") }
         if (merged.isNotEmpty()) {
             sb.append("\nTHROUGH R8-MERGED CODE (a lead until the smali shows writer and reader are the same original class; classify_class tells):\n")
-            for ((i, f) in merged.take(MAX_FIRST)) sb.append("  #").append(i + 1).append(' ').append(f.title).append(" - ").append(f.location).append('\n')
+            for ((i, f) in merged.take(MAX_FIRST)) sb.append("  ").append(GraphTools.cardLabel(i, reported)).append(' ').append(f.title).append(" - ").append(f.location).append('\n')
         }
 
+        // 1.1.0: which exported components another app can call without any permission (the attack surface table has the permission of every one)
+        if (openComponents != null) {
+            sb.append("\nEXPORTED WITHOUT ANY PERMISSION (").append(openComponents.size).append("): ")
+            sb.append(if (openComponents.isEmpty()) "none: every exported component needs a permission (see the report's attack surface table for its level)" else openComponents.take(15).joinToString(", "))
+            sb.append(". A component that needs a permission is not 'open' even when it is exported; never call one unprotected without checking.\n")
+        }
         // posture: controls present only in libraries, and the MASVS controls seen only through presence signals
         val libOnly = posture.filter { it.app.isEmpty() && it.obf.isEmpty() && it.lib.isNotEmpty() }.map { it.sig.control.substringBefore(':') }.distinct()
         if (libOnly.isNotEmpty()) sb.append("\nPosture only inside libraries (not the app's own protection): ").append(libOnly.joinToString("; ")).append(".\n")

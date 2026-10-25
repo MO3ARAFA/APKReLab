@@ -1096,6 +1096,22 @@ public final class TaintIr {
 
     /** 0.83.0: a call site that resolves to at least this many targets returns a weak taint (polymorphic fan-out). */
     static final int FANOUT_WEAK = 8;
+    /** 1.1.0: switch for the mutation check of the erased-callback rule (Intra.invoke); false = 1.0.0 behaviour. */
+    static boolean ERASED_FANOUT_DROP = !Boolean.getBoolean("apkrelab.keepErasedFanout");
+
+    /** 1.1.0: "(Ljava/lang/Object;...)Ljava/lang/Object;" or "...)V" with one or more parameters, all Object: the erased signature of a functional interface or a continuation. */
+    static boolean erasedGeneric(String desc) {
+        int close = desc.lastIndexOf(')');
+        if (!desc.startsWith("(") || close < 0) return false;
+        String ret = desc.substring(close + 1);
+        if (!ret.equals("Ljava/lang/Object;") && !ret.equals("V")) return false;
+        String ps = desc.substring(1, close);
+        for (int i = 0; i < ps.length(); ) {
+            if (!ps.startsWith("Ljava/lang/Object;", i)) return false;
+            i += "Ljava/lang/Object;".length();
+        }
+        return !ps.isEmpty();          // a nullary getter (Iterator.next, Lazy.getValue, Function0.invoke) is not a callback with an argument: measured, it removed real-looking flows
+    }
     /** Prefix of {@code Tv.via} marking a weak taint that came out of a high fan-out call (SsaBridge words it; {@link #shortRef} strips it). */
     static final String FANOUT_MARK = "fanout:";
     /** 0.83.0: chains with this many type-erased methods are weak (see Intra.addFlow). */
@@ -1432,6 +1448,11 @@ public final class TaintIr {
             List<String> callees = calleesAt.get(in.index);
             Tv res = Tv.NONE;
             boolean app = false;
+            // 1.1.0: an erased generic callback (every parameter Object, result Object or none: Function.invoke, a coroutine's invokeSuspend / resumeWith) that
+            // resolves to FANOUT_WEAK or more bodies hands back the union of every lambda of that shape. A source read INSIDE one of them is not this call's
+            // result (Axis Pay: withContext's block.invoke returned another lambda's getExtras() into a biometric plugin's coroutine state, card #12 of 1.0.0).
+            // Only that part is dropped: the caller's own arguments still come back where a body returns them, and still reach the sinks of every body.
+            boolean megamorphicGeneric = ERASED_FANOUT_DROP && callees != null && callees.size() >= FANOUT_WEAK && erasedGeneric(call.desc);
             if (callees != null) {
                 for (String c : callees) {
                     Summary sc = run.summaries.get(c);
@@ -1451,7 +1472,7 @@ public final class TaintIr {
                         }
                         if (k < 64 && (sc.retParams & (1L << k)) != 0) res = res.join(t[k]);
                     }
-                    if (sc.retLevel > 0) res = res.join(Tv.real(sc.retLevel, sc.retSrc, shortKey(c), sc.retWeak, sc.retInternal));
+                    if (sc.retLevel > 0 && !megamorphicGeneric) res = res.join(Tv.real(sc.retLevel, sc.retSrc, shortKey(c), sc.retWeak, sc.retInternal));
                 }
             }
             // 0.83.0 (FairEmail SimpleTask: `data = onExecute(...)` resolves to every task subclass, so ONE shared result field carried the

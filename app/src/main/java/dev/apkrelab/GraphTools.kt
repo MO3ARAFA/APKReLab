@@ -95,8 +95,11 @@ object GraphTools {
     }
 
     /** The answer of the `flow_path` tool for one finding: where it is, how it is reached, and the data path the SSA engine found. [no] = its number in the findings list. */
-    fun flowPath(f: Finding, no: Int, method: String?): String {
-        val sb = StringBuilder("Finding #$no [${f.severity.label}] ${f.title}\n")
+    fun flowPath(f: Finding, no: Int, method: String?): String = flowPath(f, "#$no", method)
+
+    /** [card] = the card number as the report and get_findings print it ("#12", "#L3"). */
+    fun flowPath(f: Finding, card: String, method: String?): String {
+        val sb = StringBuilder("Finding $card [${f.severity.label}] ${f.title}\n")
         sb.append("Where: ").append(f.location).append(if (method != null) " in $method" else "").append('\n')
         if (f.ruleId.isNotEmpty()) sb.append("Rule: ").append(f.ruleId).append(if (f.confidence.isNotEmpty()) " (confidence " + f.confidence + ")" else "").append('\n')
         if (f.adjusted.isNotEmpty()) sb.append("Severity adjusted: ").append(f.adjusted).append('\n')
@@ -114,11 +117,22 @@ object GraphTools {
         return sb.toString().trimEnd()
     }
 
-    /** The finding for a tool argument: a number from `get_findings` (1-based, in the same sorted order), or a part of the title / location. */
-    fun pick(list: List<Finding>, query: String): Pair<Int, Finding>? {
+    /**
+     * 1.1.0: the card number of position [i] (0-based) of the agent's list: the first [reported] entries are the report's cards in the report's order ("#12" is card 12 of
+     * the exported report), the others (library code, INFO) are "#L1", "#L2" ...
+     */
+    fun cardLabel(i: Int, reported: Int): String = if (i < reported) "#${i + 1}" else "#L${i - reported + 1}"
+
+    /**
+     * The finding for a tool argument: a card number ("12", "#12", "#L3", see [cardLabel]), or a part of the title / location. Returns the 1-based position in [list].
+     * [reported] = how many leading entries carry report numbers (all of them by default).
+     */
+    fun pick(list: List<Finding>, query: String, reported: Int = list.size): Pair<Int, Finding>? {
         val q = query.trim()
         if (q.isEmpty()) return null
-        q.removePrefix("#").toIntOrNull()?.let { n -> return if (n in 1..list.size) n to list[n - 1] else null }
+        val num = q.removePrefix("#")
+        if (num.startsWith("L") || num.startsWith("l")) num.substring(1).toIntOrNull()?.let { n -> val i = reported + n - 1; return if (n >= 1 && i < list.size) (i + 1) to list[i] else null }
+        num.toIntOrNull()?.let { n -> return if (n in 1..minOf(reported, list.size)) n to list[n - 1] else null }
         val low = q.lowercase()
         val i = list.indexOfFirst { it.title.lowercase().contains(low) || it.location.lowercase().contains(low) }
         return if (i < 0) null else (i + 1) to list[i]

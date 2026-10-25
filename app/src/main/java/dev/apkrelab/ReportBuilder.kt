@@ -60,15 +60,52 @@ object ReportBuilder {
     private val nameAttrRe = Regex("android:name\\s*=\\s*\"([^\"]+)\"")
     private val actionRe = Regex("<action\\s+android:name\\s*=\\s*\"([^\"]+)\"")
     private val permRe = Regex("<uses-permission[^>]*android:name\\s*=\\s*\"([^\"]+)\"")
+    private val declaredPermRe = Regex("<permission(?![\\w-])([^>]*)>")
 
-    private class Surface(val kind: String, val name: String, val exported: Boolean, val actions: List<String>) {
+    /**
+     * 1.1.0: platform permissions a third-party app cannot hold (their base protection level is signature): the report has no device to ask, so the common ones that guard
+     * exported components are listed (every android.permission.BIND_* is a signature permission of the framework). Others declared outside the APK: "level unknown here".
+     */
+    private val platformSignature = setOf("android.permission.DUMP", "android.permission.INSTALL_PACKAGES", "android.permission.DELETE_PACKAGES", "android.permission.BROADCAST_PACKAGE_REMOVED",
+        "android.permission.STATUS_BAR_SERVICE", "android.permission.MANAGE_DOCUMENTS", "android.permission.CALL_PRIVILEGED", "com.google.android.c2dm.permission.SEND")
+
+    fun defaultLevel(perm: String): Int? = if (perm in platformSignature || perm.startsWith("android.permission.BIND_")) 2 else null
+
+    /** "NONE (open to any app)", or the permission(s) and how strong they are. Providers: read and write permissions apart. */
+    private fun protectionOf(tag: String, header: String, declared: Map<String, String>, systemLevel: (String) -> Int?): String {
+        fun attr(n: String) = Regex("android:$n\\s*=\\s*\"([^\"]+)\"").find(header)?.groupValues?.get(1)
+        fun level(p: String): String {
+            declared[p]?.let {
+                if (PermissionGuard.isSignatureLevel(it)) return "signature"
+                val n = if (it.startsWith("0x", true)) it.substring(2).toIntOrNull(16) else it.toIntOrNull()
+                val name = if (n != null) (if ((n and 0xF) == 1) "dangerous" else "normal") else it.lowercase().substringBefore('|')
+                return "$name: any app can request it"
+            }
+            val b = systemLevel(p) ?: return "declared outside this APK, level unknown here"
+            return when { b >= 2 -> "signature / system"; b == 1 -> "dangerous: any app can request it (user grant)"; else -> "normal: any app can request it" }
+        }
+        val p = attr("permission")
+        if (tag == "provider") {
+            val r = attr("readPermission") ?: p; val w = attr("writePermission") ?: p
+            if (r == null && w == null) return "NONE (open to any app)"
+            if (r == w) return "`$r` (${level(r!!)})"
+            return "read: " + (r?.let { "`$it` (${level(it)})" } ?: "NONE (open)") + "; write: " + (w?.let { "`$it` (${level(it)})" } ?: "NONE (open)")
+        }
+        return if (p == null) "NONE (open to any app)" else "`$p` (${level(p)})"
+    }
+
+    private class Surface(val kind: String, val name: String, val exported: Boolean, val actions: List<String>, val protection: String = "") {
         var n: Int = 1   // 0.49.1: identical entries (e.g. 19 launcher-icon activity-aliases of one activity) are merged and counted
         val label: String get() = if (n > 1) "$name (x$n)" else name
     }
 
     /** Exported components (with their intent-filter actions) and the requested permissions, straight from the manifest. */
-    private fun surface(xml: String, pkg: String): Pair<List<Surface>, List<String>> {
+    private fun surface(xml: String, pkg: String, systemLevel: (String) -> Int?): Pair<List<Surface>, List<String>> {
         val comps = ArrayList<Surface>()
+        val declared = declaredPermRe.findAll(xml).associate { m ->
+            val a = m.groupValues[1]
+            (nameAttrRe.find(a)?.groupValues?.get(1) ?: "") to (Regex("android:protectionLevel\\s*=\\s*\"([^\"]+)\"").find(a)?.groupValues?.get(1) ?: "normal")
+        }
         for (m in compRe.findAll(xml)) {
             val tag = m.groupValues[1]
             val header = m.groupValues[2]
@@ -83,8 +120,8 @@ object ReportBuilder {
             val expM = Regex("android:exported\\s*=\\s*\"(true|false)\"").find(header)
             val exported = if (expM != null) expM.groupValues[1] == "true" else body.contains("<intent-filter")
             if (!exported) continue
-            val s = Surface(tag, full, true, actionRe.findAll(body).map { it.groupValues[1].substringAfterLast('.') }.distinct().take(6).toList())
-            val same = comps.firstOrNull { it.kind == s.kind && it.name == s.name && it.actions == s.actions }
+            val s = Surface(tag, full, true, actionRe.findAll(body).map { it.groupValues[1].substringAfterLast('.') }.distinct().take(6).toList(), protectionOf(tag, header, declared, systemLevel))
+            val same = comps.firstOrNull { it.kind == s.kind && it.name == s.name && it.actions == s.actions && it.protection == s.protection }
             if (same != null) same.n++ else comps.add(s)
         }
         val perms = permRe.findAll(xml).map { it.groupValues[1].removePrefix("android.permission.") }.distinct().sorted().toList()
@@ -92,16 +129,19 @@ object ReportBuilder {
     }
 
     /** Markdown table for the report: every exported component + its actions, and the full permission list. */
-    fun attackSurface(xml: String, pkg: String): String {
+    fun attackSurface(xml: String, pkg: String, systemLevel: (String) -> Int? = ::defaultLevel): String {
         if (xml.isBlank()) return ""
-        val (comps, perms) = surface(xml, pkg)
+        val (comps, perms) = surface(xml, pkg, systemLevel)
         val sb = StringBuilder()
         sb.append("## Attack surface\n\n")
         sb.append("Exported components (reachable by other apps): **").append(comps.sumOf { it.n }).append("** - requested permissions: **").append(perms.size).append("**\n\n")
         if (comps.isNotEmpty()) {
-            sb.append("| Component | Kind | Intent-filter actions |\n|---|---|---|\n")
+            // 1.1.0: the permission a caller needs, and whether a third-party app can hold it (a signature permission keeps other apps out)
+            sb.append("| Component | Kind | Intent-filter actions | Protection (permission a caller needs) |\n|---|---|---|---|\n")
             for (c in comps) sb.append("| `").append(c.label).append("` | ").append(c.kind).append(" | ")
-                .append(if (c.actions.isEmpty()) "-" else c.actions.joinToString(", ")).append(" |\n")
+                .append(if (c.actions.isEmpty()) "-" else c.actions.joinToString(", ")).append(" | ").append(c.protection).append(" |\n")
+            val open = comps.filter { it.protection.startsWith("NONE") }.sumOf { it.n }
+            sb.append("\n").append(open).append(" of ").append(comps.sumOf { it.n }).append(" exported component(s) need no permission at all; the others need the permission shown (a signature one only an app signed with the same key, or the system, can hold).\n")
             sb.append("\n")
         }
         if (perms.isNotEmpty()) sb.append("**Permissions:** ").append(perms.joinToString(", ")).append("\n")
@@ -110,16 +150,16 @@ object ReportBuilder {
     }
 
     /** Same summary as HTML (used by the .html report export). */
-    fun attackSurfaceHtml(xml: String, pkg: String): String {
+    fun attackSurfaceHtml(xml: String, pkg: String, systemLevel: (String) -> Int? = ::defaultLevel): String {
         if (xml.isBlank()) return ""
-        val (comps, perms) = surface(xml, pkg)
+        val (comps, perms) = surface(xml, pkg, systemLevel)
         val sb = StringBuilder()
         sb.append("<h2>Attack surface</h2><p>").append(comps.sumOf { it.n }).append(" exported component(s), ")
             .append(perms.size).append(" requested permission(s).</p>")
         if (comps.isNotEmpty()) {
-            sb.append("<table><tr><th>Component</th><th>Kind</th><th>Intent-filter actions</th></tr>")
+            sb.append("<table><tr><th>Component</th><th>Kind</th><th>Intent-filter actions</th><th>Protection</th></tr>")
             for (c in comps) sb.append("<tr><td>").append(esc(c.label)).append("</td><td>").append(c.kind).append("</td><td>")
-                .append(esc(if (c.actions.isEmpty()) "-" else c.actions.joinToString(", "))).append("</td></tr>")
+                .append(esc(if (c.actions.isEmpty()) "-" else c.actions.joinToString(", "))).append("</td><td>").append(esc(c.protection.replace("`", ""))).append("</td></tr>")
             sb.append("</table>")
         }
         if (perms.isNotEmpty()) sb.append("<p class=\"mut\"><b>Permissions:</b> ").append(esc(perms.joinToString(", "))).append("</p>")
