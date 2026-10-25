@@ -35,5 +35,8 @@ class VersionProbes110Test {
         assertNull(VersionProbes.registrarVersion(registrar("sget-object v2, Lx/Y;->v:Ljava/lang/String;"), "fire-core"))
         assertNull(VersionProbes.registrarVersion(registrar("const-string v2, \"unknown\""), "fire-core"))
         assertNull(VersionProbes.registrarVersion(registrar("const-string v2, \"21.0.0\""), "fire-android"))     // its value is a register from a call (the SDK level)
+        // a constant overwritten by a field read before the call is not the value passed
+        val overwritten = registrar("sget-object v2, Lx/Y;->v:Ljava/lang/String;").replace("const-string v1, \"fire-core\"", "const-string v2, \"1.2.3\"\n    const-string v1, \"fire-core\"")
+        assertNull(VersionProbes.registrarVersion(overwritten, "fire-core"))
     }
 }
