@@ -14,7 +14,8 @@ object ElfAnalyzer {
         val relroSegment: Boolean, val bindNow: Boolean, val textrel: Boolean,
         val rpath: String?, val runpath: String?, val soname: String?, val needed: List<String>,
         val imports: List<String>, val exports: Int, val dynsymCount: Int,
-        val minLoadAlign: Long, val hasSectionHeaders: Boolean
+        val minLoadAlign: Long, val hasSectionHeaders: Boolean,
+        val jniExports: List<String> = emptyList(), val jniOnLoad: Boolean = false     // 1.1.0: exported `Java_...` names (static JNI binding) and JNI_OnLoad (RegisterNatives)
     ) {
         /** "full" (RELRO segment + BIND_NOW), "partial" (segment only), "none". */
         val relro: String get() = if (!relroSegment) "none" else if (bindNow) "full" else "partial"
@@ -120,7 +121,7 @@ object ElfAnalyzer {
             if (hash >= 0) { val h = vaToOff(hash); if (h >= 0 && r.ok(h, 8)) count = r.u32(h + 4) }
             else if (gnuHash >= 0) count = gnuSymbolCount(r, vaToOff(gnuHash), is64)
         }
-        val imports = ArrayList<String>(); var exports = 0; var total = 0
+        val imports = ArrayList<String>(); var exports = 0; var total = 0; val jni = ArrayList<String>(); var onLoad = false
         if (symOff >= 0 && count > 0 && count < 2_000_000 && syment >= (if (is64) 24 else 16)) {
             for (i in 0 until count) {
                 val o = symOff + i * syment
@@ -131,12 +132,15 @@ object ElfAnalyzer {
                 val shndx = if (is64) r.u16(o + 6) else r.u16(o + 14)
                 if (nameIdx == 0L) continue
                 val name = dstr(nameIdx) ?: continue
-                if (shndx == 0) imports.add(name) else if ((info shr 4) != 0) exports++          // defined and not LOCAL
+                if (shndx == 0) imports.add(name) else if ((info shr 4) != 0) {          // defined and not LOCAL
+                    exports++
+                    if (name.startsWith("Java_")) jni.add(name) else if (name == "JNI_OnLoad") onLoad = true
+                }
             }
         }
         return ElfInfo(is64, machine, type, stack != null, stack != null && (stack.flags and 1L) != 0L, relro, bindNow, textrel,
             if (rpathOff >= 0) dstr(rpathOff) else null, if (runpathOff >= 0) dstr(runpathOff) else null, if (sonameOff >= 0) dstr(sonameOff) else null,
-            neededOffs.mapNotNull { dstr(it) }, imports, exports, total, minAlign, hasSh)
+            neededOffs.mapNotNull { dstr(it) }, imports, exports, total, minAlign, hasSh, jni, onLoad)
     }
 
     /** Number of dynamic symbols from DT_GNU_HASH: the highest symbol reachable through the buckets, walked to the end of its chain. */

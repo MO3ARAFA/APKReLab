@@ -2430,6 +2430,7 @@ class MainActivity : Activity() {
         scanDetail = ""; scanDetailOpen = false   // 0.101.0
         PostureScanner.clear()   // 0.91.0
         DynamicReceivers.clear()   // 1.1.0
+        NativeBridge.clear()   // 1.1.0
         if (!SecretFormats.loaded()) try {   // 0.89.0: vendor token formats (assets/secret_formats.json)
             SecretFormats.load(assets.open("secret_formats.json").use { it.readBytes() }.toString(Charsets.UTF_8))
         } catch (_: Throwable) { RuleRegistry.noteError("secret-formats") }
@@ -2465,6 +2466,7 @@ class MainActivity : Activity() {
                                 try {
                                     try { sdkAttr.observe(def.type, text) } catch (_: Throwable) { }
                                     try { DynamicReceivers.observe(text) } catch (_: Throwable) { }   // 1.1.0
+                                    try { NativeBridge.observe(def.type, text) } catch (_: Throwable) { }   // 1.1.0
                                     val fs = SecurityScanner.scanSmali(def.type, i, text, appPkg)
                                     try { PostureScanner.observe(def.type, text, appPkg) } catch (_: Throwable) { }   // 0.91.0: only the full scan feeds the posture table (not a single-class review)
                                     parts[w].addAll(fs)
@@ -2909,6 +2911,7 @@ class MainActivity : Activity() {
         inClasses = false
         inSecurity = false
         secFindings = emptyList()
+        NativeBridge.clearApk()   // 1.1.0: the libraries of the previous APK
         PostureScanner.clearApk()   // 0.103.1: before the resource scan of THIS apk starts (see PostureScanner.clearApk)
         scanResourcesAsync()
         callIdx = null
@@ -3527,6 +3530,7 @@ class MainActivity : Activity() {
             val xi2 = manifestFull.indexOf("<?xml")
             sb.append(try { ReportBuilder.attackSurface(if (xi2 > 0) manifestFull.substring(xi2) else manifestFull, pkg, PermissionGuard.systemResolver(this).let { sys -> { p: String -> sys(p) ?: ReportBuilder.defaultLevel(p) } }) } catch (_: Throwable) { "" })
             sb.append(try { DeepLinks.section(DeepLinks.parse(if (xi2 > 0) manifestFull.substring(xi2) else manifestFull, pkg)) { deepLinkParams(it) } } catch (_: Throwable) { "" })   // 1.1.0
+            sb.append(try { NativeBridge.section(pkg) } catch (_: Throwable) { "" })   // 1.1.0: filled by the Deep scan (declarations) and the native scan (libraries)
         }
         sb.append("## Security scan\n\n")
         if (secFindings.isEmpty()) {
@@ -4468,7 +4472,7 @@ class MainActivity : Activity() {
                 val mc = ManifestContext(manifestFull); val pg = PermissionGuard(mc, PermissionGuard.systemResolver(this@MainActivity))
                 mc.exportedComponents.filter { pg.guardFor(mc.smaliTypeOf(it)) == PermissionGuard.Guard.NONE }.map { it.name + " (" + it.tag + ")" }.distinct()
             } catch (_: Throwable) { emptyList() }
-            val links = try { DeepLinks.brief(DeepLinks.parse(manifestFull, packageNameOrNull() ?: "")) } catch (_: Throwable) { "" }   // 1.1.0
+            val links = try { DeepLinks.brief(DeepLinks.parse(manifestFull, packageNameOrNull() ?: "")) + NativeBridge.brief(packageNameOrNull() ?: "") } catch (_: Throwable) { "" }   // 1.1.0
             return AuditBrief.build(packageNameOrNull() ?: "", cards, PostureScanner.rows(), lastScanNote, reported, open) + links
         }
         override fun listEdits() = agentListEdits()
@@ -5024,7 +5028,8 @@ class MainActivity : Activity() {
         val def = classDefs[idx]
         val text = try { agentIndexedText(def) } catch (t: Throwable) { return "error: could not read the class: " + (t.message ?: t.javaClass.simpleName) }
         val appPkg = codePackageOf(classDefs)
-        return ClassTools.classify(def.type, text, appPkg, sdkFamilies[def.type], callIdx != null)
+        val native = try { NativeBridge.forClass(def.type) } catch (_: Throwable) { "" }   // 1.1.0
+        return ClassTools.classify(def.type, text, appPkg, sdkFamilies[def.type], callIdx != null) + (if (native.isEmpty()) "" else "\nNative bridge:\n$native")
     }
 
     private fun agentVerifyEdit(name: String, modified: String): String {

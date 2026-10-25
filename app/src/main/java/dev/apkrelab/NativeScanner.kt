@@ -79,6 +79,7 @@ object NativeScanner {
             // one ABI per library name across the base and the splits (arm64-v8a first)
             val order = listOf("arm64-v8a", "x86_64", "armeabi-v7a", "x86", "armeabi")
             libs0 = libs0.groupBy { it.name }.values.map { g -> g.minByOrNull { order.indexOf(it.abi).let { i -> if (i < 0) 99 else i } }!! }
+            try { NativeBridge.useLibs(libs0) } catch (_: Throwable) { }   // 1.1.0: the JNI names / JNI_OnLoad of every library, for the Java <-> .so map
             return scanLibs(zip, manifest, libs0, notElf0)
         } finally { for (z in opened) try { z.close() } catch (_: Throwable) { } }
     }
