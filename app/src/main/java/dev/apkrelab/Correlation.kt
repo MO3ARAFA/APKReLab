@@ -4,10 +4,10 @@ import dev.apkrelab.SecurityScanner.Finding
 
 /**
  * 1.2.0: findings that share a root cause, so one fix can close several. Nodes are the reported cards of MEDIUM or worse; an edge joins two cards that share
- *  - the sink API in the same class (several sources ending in one File write),
  *  - the entry method the reach pass traced ("Entry: ..." of the call path),
  *  - the tainted field the detail names ("through field X"),
- *  - the class (two different rules in one class; same class + same title was already merged by dedupe).
+ *  - the class (two different rules in one class; same class + same title was already merged by dedupe; several sources ending in one sink of a class are linked
+ *    by this edge and described by the shared sink).
  * Connected components of two or more cards are linked. The suggested fix comes from the strongest shared element (sink, then entry, then field, then class).
  * No AI and nothing new detected: every input is a field of the card.
  */
@@ -42,7 +42,6 @@ object Correlation {
             val first = HashMap<String, Int>()
             for (i in idx) { val k = key(cards[i]) ?: continue; val f = first[k]; if (f == null) first[k] = i else union(f, i) }
         }
-        link { f -> FixTemplates.sinkOf(f)?.let { s -> cls(f)?.let { "$it|$s" } } }
         if (ENTRY_EDGE) link { entryOf(it) }
         link { fieldOf(it) }
         link { cls(it) }
