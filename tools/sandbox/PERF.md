@@ -168,3 +168,10 @@ Protocol for the owner (1.1.0, Axis Pay 3.0.4, the same phone, charger on, after
 - Step 1 VERSION MATCH: FAILED. The only Axis APK in ./private is axispay-3.0.1.apk: versionName 3.0.1, versionCode 672, 2 dex (classes.dex, classes2.dex), 0 native libraries (the manifest requires base__abi and base__density splits, not present). "srgtpoyic" occurs 0 times in both dex files; the decryptor of this build is vs.C.d(I). The 3.0.4 indices cannot be extracted from anything in the sandbox.
 - Steps 2-6 NOT run: step 2 needs the 3.0.4 arm64 split (the .so with the decryptor's JNI stub); steps 3-5 need the owner's device (Frida does not run in this container); step 6 needs the dump.
 - Needed to continue: the 3.0.4 base APK and its split_config.arm64_v8a.apk in ./private (APKReLab's installed-apps picker reads both from the device since 0.102.0).
+
+## 1.2.0 "The Verdict": report layer, no detection change
+- Same decode, 1.1.0 vs 1.2.0 scanner (SandboxScan): Flowit 4 LOW+ cards, webviewkiosk 49 LOW+ cards / 15 SSA items: card lists identical (title, rule, class, severity).
+- Verdict, Flowit (clean): "0 critical / 0 high-priority / 3 informational ...; no HIGH or CRITICAL finding", CRITICAL PATH none, MUST FIX none, CONFIDENCE weak (no HIGH+ card).
+- Verdict, webviewkiosk: "2 critical / 1 high-priority / 40 informational of 43", CRITICAL PATH card #1 (backup scenario: #1 allowBackup -> #21 plain SQLite in bl0), MUST FIX none (the sandbox has no reach pass), CONFIDENCE strong (3 of 3 HIGH+ cards HIGH), NOT SEEN "8 native methods, flows into .so not followed, 1 libraries read; ... splits: base only; groups: whole app in one run". Related findings: 0 groups (its 12 MEDIUM+ cards share no class, entry or field: the shared "locations" are the manifest and one resource file, which have no class). Suggested fix: 12 cards.
+- Self-check: not run on the current build (APKs absent, GitHub blocked). On the frozen 0.75.1 device reports: Sieve 8/8 (held-out), Allsafe 6/7.
+- Gradle 736 / 0 failures, lint 0 errors.
