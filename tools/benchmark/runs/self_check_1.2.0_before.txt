@@ -1,0 +1,237 @@
+======================================================================
+Benchmark: com.mwr.example.sieve (22 findings parsed, 9 expected)
+
+FOUND          Exported activity (PWList) opens the password list without the login screen
+    card #4 [MEDIUM] Exported activity without a permission: .FileSelectActivity | AndroidManifest.xml
+    card #5 [MEDIUM] Exported activity without a permission: .PWList | AndroidManifest.xml
+    card #6 [MEDIUM] Exported service without a permission: .AuthService | AndroidManifest.xml
+FOUND          Exported DBContentProvider: /Passwords readable by any app (path-permission only on /Keys)
+    card #4 [MEDIUM] Exported activity without a permission: .FileSelectActivity | AndroidManifest.xml
+    card #5 [MEDIUM] Exported activity without a permission: .PWList | AndroidManifest.xml
+    card #6 [MEDIUM] Exported service without a permission: .AuthService | AndroidManifest.xml
+FOUND          SQL injection in DBContentProvider.query (projection / selection)
+    card #19 [HIGH] Untrusted input reaches an SQL statement | com.mwr.example.sieve.DBContentProvider
+    card #20 [HIGH] Untrusted input reaches an SQL statement | com.mwr.example.sieve.DBContentProvider
+    card #21 [HIGH] Untrusted input reaches an SQL statement | com.mwr.example.sieve.DBContentProvider
+FOUND          FileBackupProvider.openFile reads any file the app can read (path traversal)
+    card #14 [HIGH] ContentProvider.openFile builds a path from the URI | com.mwr.example.sieve.FileBackupProvider
+    card #22 [LOW] Untrusted input chooses the file or content URI the app opens | com.mwr.example.sieve.SettingsActivity
+FOUND          Exported AuthService / CryptoService (Messenger) let any app drive PIN / password and crypto operations
+    card #4 [MEDIUM] Exported activity without a permission: .FileSelectActivity | AndroidManifest.xml
+    card #5 [MEDIUM] Exported activity without a permission: .PWList | AndroidManifest.xml
+    card #6 [MEDIUM] Exported service without a permission: .AuthService | AndroidManifest.xml
+FOUND          android:debuggable=true
+    card #1 [CRITICAL] Debuggable build | AndroidManifest.xml
+FOUND          android:allowBackup=true (database with the master password can be backed up)
+    card #2 [MEDIUM] Backup allowed (allowBackup) | AndroidManifest.xml
+FOUND          Master password and PIN stored in plaintext in the Key table of the SQLite database
+    card #12 [MEDIUM] Data copied to clipboard | com.mwr.example.sieve.PWList
+    card #14 [HIGH] ContentProvider.openFile builds a path from the URI | com.mwr.example.sieve.FileBackupProvider
+    card #15 [MEDIUM] Sensitive data stored in plain SQLite | com.mwr.example.sieve.PWDBHelper
+OUT OF SCOPE   Password encryption done in a native library with a key derived from the PIN   <- native code (.so) is not analysed
+
+8/8 found, 0 known gap(s), 0 need attention, 1 out of scope
+RECALL (independent entries, presence check, upper bound): 8/8 = 100%
+UNREVIEWED HIGH/CRITICAL code findings (precision is unknown until each is read): 1
+
+HIGH/CRITICAL code findings not in the expected list (check for false positives):
+  [CRITICAL] TLS certificate validation disabled | NetBackupHandler$1 | not triaged
+
+FLOWS: 4 flow(s), no baseline
+======================================================================
+Benchmark: infosecadventures.allsafe (42 findings parsed, 12 expected)
+
+FOUND          Insecure logging
+    card #15 [MEDIUM] Credentials may be written to the log | infosecadventures.allsafe.challenges.InsecureLogging
+FOUND          Hardcoded credentials
+    card #26 [HIGH] High-entropy embedded string near a credential-like name | infosecadventures.allsafe.challenges.NoteReceiver
+OUT OF SCOPE   Root detection (Frida practice)   <- dynamic bypass challenge, not a code weakness
+FOUND          Arbitrary code execution
+    card #10 [HIGH] Code loaded from another app's package context | infosecadventures.allsafe.ArbitraryCodeExecution
+    card #11 [HIGH] Dex code loaded from a shared or world-accessible directory | infosecadventures.allsafe.ArbitraryCodeExecution
+OUT OF SCOPE   Secure flag bypass   <- dynamic bypass challenge
+OUT OF SCOPE   Certificate pinning bypass   <- dynamic bypass challenge
+FOUND          Insecure broadcast receiver
+    card #6 [MEDIUM] Exported receiver without a permission: infosecadventures.allsafe.chal | AndroidManifest.xml
+FOUND          Deep link exploitation
+    card #3 [LOW] Deep link entry point: infosecadventures.allsafe.challenges.DeepLinkTa | AndroidManifest.xml
+FOUND          SQL injection
+    card #23 [MEDIUM] Possible SQL built by string concatenation | infosecadventures.allsafe.challenges.SQLInjection
+    card #39 [HIGH] Untrusted input reaches an SQL statement | infosecadventures.allsafe.challenges.DataProvider
+    card #40 [HIGH] Untrusted input reaches an SQL statement | infosecadventures.allsafe.challenges.DataProvider
+MISS           Vulnerable WebView   <- 
+OUT OF SCOPE   Smali patching   <- reverse-engineering exercise, not a code weakness
+OUT OF SCOPE   Native library   <- no native-code analysis (known limit)
+
+6/7 found, 0 known gap(s), 1 need attention, 5 out of scope
+
+HIGH/CRITICAL code findings not in the expected list (check for false positives):
+  [HIGH] Weak cipher mode: ECB ("AES/ECB/PKCS5PADDING") | WeakCryptography | not triaged
+  [HIGH] Hardcoded encryption key | WeakCryptography | not triaged
+  [HIGH] Credential stored in plain SharedPreferences | InsecureSharedPreferences | not triaged
+  [HIGH] Untrusted Intent is launched by this app (intent redirection | ProxyActivity | not triaged
+
+FLOWS: 5 flow(s), no baseline
+======================================================================
+Benchmark: com.htbridge.pivaa (34 findings parsed, 27 expected)
+
+FOUND          Usage of weak Initialization Vector
+    card #15 [MEDIUM] Static IV (x2) | com.htbridge.pivaa.handlers.Encryption
+FOUND          Missing hostname verification (MITM)
+    card #21 [HIGH] Hostname verification disabled | com.htbridge.pivaa.handlers.API$1
+FOUND          Remote URL load in WebView
+    card #11 [LOW] Hardcoded cleartext URL | com.htbridge.pivaa.WebviewActivity$4
+FOUND          Object deserialization on untrusted data
+    card #19 [MEDIUM] Java deserialization (ObjectInputStream.readObject) | com.htbridge.pivaa.handlers.ObjectSerialization
+FOUND          User-supplied input in SQL queries
+    card #17 [MEDIUM] Possible SQL built by string concatenation | com.htbridge.pivaa.handlers.database.DatabaseHelper
+    card #34 [HIGH] Untrusted input reaches an SQL statement | com.htbridge.pivaa.handlers.database.DatabaseHelper
+FOUND          Missing tapjacking protection
+    card #31 [MEDIUM] Password screen not protected against tapjacking | res/layout/activity_main.xml
+FOUND          Enabled application backup
+    card #2 [MEDIUM] Backup allowed (allowBackup) | AndroidManifest.xml
+FOUND          Enabled debug mode
+    card #1 [CRITICAL] Debuggable build | AndroidManifest.xml
+FOUND          Weak encryption
+    card #13 [HIGH] Weak cipher mode: ECB ("AES/ECB/PKCS5Padding") (x2) | com.htbridge.pivaa.handlers.Encryption
+FOUND          Hardcoded encryption keys
+    card #14 [HIGH] Hardcoded encryption key (x3) | com.htbridge.pivaa.handlers.Encryption
+FOUND          Dynamic load of code
+    card #18 [MEDIUM] Dynamic code loading | com.htbridge.pivaa.handlers.LoadCode
+FOUND          World readable/writable files
+    card #23 [MEDIUM] World-readable/writable file mode (openFileOutput) | com.htbridge.pivaa.handlers.Authentication
+FOUND          Unencrypted HTTP
+    card #11 [LOW] Hardcoded cleartext URL | com.htbridge.pivaa.WebviewActivity$4
+FOUND          Weak hashing algorithms
+    card #22 [MEDIUM] Weak hash: MD5 | com.htbridge.pivaa.handlers.Authentication
+    card #30 [MEDIUM] Weak hash: MD5 | com.htbridge.pivaa.EncryptionActivity$1
+FOUND          Predictable random number generator
+    card #16 [MEDIUM] Predictable random value used for security | com.htbridge.pivaa.handlers.Encryption
+FOUND          Exported content provider
+    card #6 [HIGH] Exported provider without a permission: com.htbridge.pivaa.handlers.Vu | AndroidManifest.xml
+FOUND          Exported broadcast receiver
+    card #5 [MEDIUM] Exported receiver without a permission: com.htbridge.pivaa.handlers.Vu | AndroidManifest.xml
+FOUND          Exported service
+    card #4 [MEDIUM] Exported service without a permission: com.htbridge.pivaa.handlers.Vul | AndroidManifest.xml
+MISS           JavaScript enabled in WebView   <- 
+FOUND          Deprecated setPluginState in WebView
+    card #12 [LOW] WebView plugins enabled (deprecated setPluginState) | com.htbridge.pivaa.WebviewActivity
+FOUND          Temporary file creation
+    card #25 [LOW] Temp file created | com.htbridge.pivaa.handlers.Authentication
+MISS           Hardcoded sensitive data   <- 
+FOUND          Untrusted CA acceptance (TrustManager)
+    card #28 [CRITICAL] TLS certificate validation disabled | com.htbridge.pivaa.handlers.API$2
+OUT OF SCOPE   Usage of banned API functions   <- README does not say which APIs: cannot be checked
+MISS           Self-signed CA accepted in WebView   <- 
+OUT OF SCOPE   Path traversal (README text is about NSTemporaryDirectory = iOS API)   <- README text copied from an iOS app, not an Android check
+MISS           Cleartext SQLite database   <- 
+
+21/25 found, 0 known gap(s), 4 need attention, 2 out of scope
+
+HIGH/CRITICAL code findings not in the expected list (check for false positives):
+  [HIGH] Broadcast sent without a receiver permission | BroadcastReceiverActivity$1 | not triaged
+  [HIGH] Untrusted input is used as a file path | VulnerableReceiver | not triaged
+
+FLOWS: 2 flow(s), no baseline
+======================================================================
+Benchmark: com.vuldroid.application (28 findings parsed, 8 expected)
+
+FOUND          Code execution via malicious app
+    card #13 [MEDIUM] Shell command execution | com.vuldroid.application.RootDetection
+    card #24 [CRITICAL] Untrusted input reaches a shell command | com.vuldroid.application.RootDetection
+FOUND          Steal files via WebView XHR
+    card #15 [HIGH] WebView: setAllowFileAccessFromFileURLs(true) | com.vuldroid.application.YoutubeViewer
+    card #16 [HIGH] WebView: setAllowUniversalAccessFromFileURLs(true) | com.vuldroid.application.YoutubeViewer
+MISS           Steal files via FileProvider through Intents   <- 
+FOUND          Steal password-reset tokens / magic login links (deep link)
+    card #4 [LOW] Deep link entry point: com.vuldroid.application.BlogsViewer | AndroidManifest.xml
+FOUND          WebView XSS via exported activity
+    card #25 [HIGH] Untrusted input is loaded into a WebView | com.vuldroid.application.BlogsViewer
+    card #26 [HIGH] Untrusted input is loaded into a WebView | com.vuldroid.application.ForgetPassword
+    card #28 [HIGH] Untrusted input is loaded into a WebView | com.vuldroid.application.YoutubeViewer
+FOUND          WebView XSS via deep link
+    card #25 [HIGH] Untrusted input is loaded into a WebView | com.vuldroid.application.BlogsViewer
+    card #26 [HIGH] Untrusted input is loaded into a WebView | com.vuldroid.application.ForgetPassword
+    card #28 [HIGH] Untrusted input is loaded into a WebView | com.vuldroid.application.YoutubeViewer
+FOUND          Intent sniffing between two apps
+    card #19 [LOW] Broadcast sent without a receiver permission | com.vuldroid.application.EmailViewer
+FOUND          Reading user email via broadcasts
+    card #5 [MEDIUM] Exported activity without a permission: com.vuldroid.application.Routi | AndroidManifest.xml
+    card #6 [MEDIUM] Exported receiver without a permission: com.vuldroid.application.MyRec | AndroidManifest.xml
+    card #7 [LOW] Exported activity without a permission: com.vuldroid.application.Blogs | AndroidManifest.xml
+
+7/8 found, 0 known gap(s), 1 need attention, 0 out of scope
+
+HIGH/CRITICAL code findings not in the expected list (check for false positives):
+  [HIGH] Untrusted Intent is launched by this app (intent redirection | RoutingActivity | not triaged
+
+FLOWS: 5 flow(s), no baseline
+======================================================================
+Benchmark: oversecured.ovaa (37 findings parsed, 19 expected)
+
+FOUND          Debuggable build
+    card #1 [CRITICAL] Debuggable build | AndroidManifest.xml
+FOUND-NOREACH  Deep link parameter stored as login URL   <- 
+    card #21 [HIGH] Deep link parameter stored as configuration | oversecured.ovaa.activities.DeeplinkActivity
+FOUND          Intent extra loaded into WebView
+    card #34 [HIGH] Untrusted input is loaded into a WebView | oversecured.ovaa.activities.WebViewActivity
+FOUND-NOREACH  WebView setAllowFileAccessFromFileURLs   <- 
+    card #17 [HIGH] WebView: setAllowFileAccessFromFileURLs(true) | oversecured.ovaa.activities.WebViewActivity
+FOUND          TheftOverwriteProvider openFile path traversal
+    card #10 [HIGH] ContentProvider.openFile builds a path from the URI | oversecured.ovaa.providers.TheftOverwriteProvider
+FOUND          InsecureLoggerService writes to caller-chosen file
+    card #35 [HIGH] Untrusted input is used as a file path | oversecured.ovaa.services.InsecureLoggerService
+FOUND          Hardcoded AES key (WeakCrypto)
+    card #27 [HIGH] Hardcoded encryption key | oversecured.ovaa.utils.WeakCrypto
+FOUND          LoginData with password written to log
+    card #16 [HIGH] Credentials may be written to the log | oversecured.ovaa.activities.LoginActivity
+FOUND          Credentials in an unprotected broadcast
+    card #19 [HIGH] Broadcast sent without a receiver permission | oversecured.ovaa.activities.MainActivity$2
+FOUND          Token in an implicit Intent
+    card #24 [HIGH] Sensitive data in an implicit Intent | oversecured.ovaa.activities.MainActivity$3
+FOUND          DexClassLoader on /sdcard/updater.apk
+    card #26 [HIGH] Dex code loaded from a shared or world-accessible directory | oversecured.ovaa.OversecuredApplication
+FOUND          Code loaded from another package's context
+    card #25 [HIGH] Code loaded from another app's package context | oversecured.ovaa.OversecuredApplication
+FOUND          Serializable deletes a file in readObject
+    card #13 [HIGH] File deleted while deserialising an object | oversecured.ovaa.objects.DeleteFilesSerializable
+FOUND          Serializable with native free (memory corruption)
+    card #12 [HIGH] Native method in a Serializable/Parcelable class | oversecured.ovaa.objects.MemoryCorruptionSerializable
+FOUND          Credentials in a hardcoded URL
+    card #32 [HIGH] Hardcoded credentials in a URL | resources.arsc
+FOUND          Plaintext credentials in SharedPreferences
+    card #29 [MEDIUM] Sensitive value saved to SharedPreferences (plaintext) | oversecured.ovaa.utils.LoginUtils
+    card #30 [HIGH] Credential stored in plain SharedPreferences | oversecured.ovaa.utils.LoginUtils
+FOUND-NOREACH  LoginActivity launches an Intent from extras   <- 
+    card #15 [MEDIUM] Possible intent redirection (an Intent from the extras is launched) | oversecured.ovaa.activities.LoginActivity
+FOUND          Exported provider without permission
+    card #8 [HIGH] Exported provider without a permission: oversecured.ovaa.providers.The | AndroidManifest.xml
+FOUND          FileProvider root-path
+    card #31 [MEDIUM] FileProvider shares too much (<root-path path="/">) | res/xml/provider_paths.xml
+
+16/19 found, 0 known gap(s), 3 need attention, 0 out of scope
+
+FLOWS: 4 flow(s), no baseline
+======================================================================
+Benchmark: com.insecureshop (34 findings parsed, 2 expected)
+
+FOUND          webview2-url
+    card #20 [LOW] WebView JavaScript enabled | com.insecureshop.WebView2Activity
+    card #31 [HIGH] Untrusted input is loaded into a WebView | com.insecureshop.WebView2Activity
+FOUND          webview-url
+    card #21 [LOW] WebView JavaScript enabled | com.insecureshop.WebViewActivity
+    card #32 [HIGH] Untrusted input is loaded into a WebView | com.insecureshop.WebViewActivity
+
+2/2 found, 0 known gap(s), 0 need attention, 0 out of scope
+
+HIGH/CRITICAL code findings not in the expected list (check for false positives):
+  [HIGH] Credential stored in plain SharedPreferences | Prefs | not triaged
+  [HIGH] Code loaded from another app's package context | LoginActivity | not triaged
+  [HIGH] Broadcast sent without a receiver permission | AboutUsActivity | not triaged
+  [HIGH] Untrusted Intent is launched by this app (intent redirection | WebView2Activity | not triaged
+  [HIGH] Untrusted input is loaded into a WebView | PrivateActivity | not triaged
+
+FLOWS: 5 flow(s), no baseline
+======================================================================
+Recall: Sieve: 8/8 (held-out); 4 flow(s), no baseline | Allsafe: 6/7 (tuning set); 5 flow(s), no baseline | PIVAA: 21/25 (tuning set); 2 flow(s), no baseline | Vuldroid: 7/8 (tuning set); 5 flow(s), no baseline | OVAA: 16/19 (tuning set); 4 flow(s), no baseline | InsecureShop: 2/2 (tuning set); 5 flow(s), no baseline
+SELF-CHECK PASSED (baseline written to /home/user/APKReLab/private/qa120/baseline_120)

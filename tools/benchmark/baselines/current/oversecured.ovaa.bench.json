@@ -1,0 +1,24 @@
+{
+ "package": "oversecured.ovaa",
+ "status": {
+  "debuggable": "FOUND",
+  "deeplink-config": "FOUND-NOREACH",
+  "webview-taint": "FOUND",
+  "webview-file-access": "FOUND-NOREACH",
+  "theft-provider": "FOUND",
+  "logger-service": "FOUND",
+  "weak-crypto": "FOUND",
+  "log-credentials": "FOUND",
+  "broadcast": "FOUND",
+  "implicit-intent": "FOUND",
+  "dex-load": "FOUND",
+  "package-context": "FOUND",
+  "serial-delete": "FOUND",
+  "serial-native": "FOUND",
+  "url-credentials": "FOUND",
+  "plain-prefs": "FOUND",
+  "intent-redirect": "FOUND-NOREACH",
+  "exported-provider": "FOUND",
+  "fileprovider": "FOUND"
+ }
+}

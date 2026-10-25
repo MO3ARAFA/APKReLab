@@ -1,0 +1,2 @@
+Untrusted input is used as a file path | com.htbridge.pivaa.handlers.VulnerableReceiver | Data from Intent.getStringExtra() reaches FileOutputStream.<init>() in method VulnerableReceiver.onReceive(Landroid/content/Context;Landroid/content/Intent;)V.
+Untrusted input reaches an SQL statement | com.htbridge.pivaa.handlers.database.DatabaseHelper | Data from a ContentProvider method parameter reaches SQLiteDatabase.rawQuery() in method DatabaseHelper.rawSQLQueryCursor(Ljava/lang/String;)Landroid/database/Cursor;.
