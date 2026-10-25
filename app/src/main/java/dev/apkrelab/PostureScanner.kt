@@ -242,17 +242,27 @@ object PostureScanner {
         }
         sb.append("| Certificate pinning: network_security_config pin-set | MASVS-NETWORK-2 | ").append(when (nscPins) { true -> "present"; false -> "a config exists, no pin-set"; null -> if (nscDeclared == false) "no network security config declared (the platform default applies: system CAs only, no cleartext from targetSdk 28)" else "not checked: no network security config was read (see the INFO finding if the manifest declares one)" }).append(" | - |\n")
         sb.append("\nObfuscation / debug information: ").append(obfuscationLine()).append(".\n")
-        val dec = decryptCalls.entries.maxByOrNull { it.value.get() }
-        if (dec != null && dec.value.get() >= DECRYPTOR_MIN_CALLS) {
-            val cls = dec.key.substringBefore(";->").removePrefix("L").replace('/', '.'); val m = dec.key.substringAfter(";->")
-            sb.append("\nString decryption table: the static method ").append(cls).append('.').append(m).append("(int) is called ").append(dec.value.get())
-                .append(" times: the strings of this app are decrypted at run time (a protector or an in-app scheme; the method may be native). Every rule that reads string constants (secrets, URLs, cipher names, extra names, root-check paths) is BLIND here: ")
-                .append("0 findings of those kinds means nothing. To read the strings, dump them on a test device (your own build) and import the file with the Security screen's Strings button (0.102.0: the rules then see the real strings):\n\n```js\n// frida -U -f <package> -l dump.js\nJava.perform(function () {\n  console.log('#decryptor\\t").append(dec.key).append("(I)Ljava/lang/String;');\n  var C = Java.use('").append(cls).append("');\n  C['").append(m)
-                .append("'].overload('int').implementation = function (i) { var s = this['").append(m).append("'](i); console.log(i + '\\t' + JSON.stringify(s)); return s; };\n});\n```\n")
+        // 1.1.0: every method over the threshold, not only the largest (one dump per method: the overlay file names one method on its '#decryptor' line)
+        val decs = decryptCalls.entries.filter { it.value.get() >= DECRYPTOR_MIN_CALLS }.sortedByDescending { it.value.get() }
+        if (decs.isNotEmpty()) {
+            sb.append("\nString decryption table: ")
+            for ((k, dec) in decs.withIndex()) {
+                if (k > 0) sb.append("; ")
+                sb.append("the static method ").append(dec.key.substringBefore(";->").removePrefix("L").replace('/', '.')).append('.').append(dec.key.substringAfter(";->")).append("(int) is called ").append(dec.value.get()).append(" times")
+            }
+            sb.append(": the strings of this app are decrypted at run time (a protector or an in-app scheme; the method may be native). Every rule that reads string constants (secrets, URLs, cipher names, extra names, root-check paths) is BLIND here: ")
+                .append("0 findings of those kinds means nothing. To read the strings, dump them on a test device (your own build) and import the file with the Security screen's Strings button (0.102.0: the rules then see the real strings)")
+                .append(if (decs.size > 1) "; the script below writes one block per method: save each block (from its '#decryptor' line) as its own file and import them one at a time" else "").append(":\n\n```js\n// frida -U -f <package> -l dump.js\nJava.perform(function () {\n")
+            for (dec in decs) {
+                val cls = dec.key.substringBefore(";->").removePrefix("L").replace('/', '.'); val m = dec.key.substringAfter(";->")
+                sb.append("  console.log('#decryptor\\t").append(dec.key).append("(I)Ljava/lang/String;');\n  Java.use('").append(cls).append("')['").append(m)
+                    .append("'].overload('int').implementation = function (i) { var s = this['").append(m).append("'](i); console.log(i + '\\t' + JSON.stringify(s)); return s; };\n")
+            }
+            sb.append("});\n```\n")
         }
         StringOverlay.current?.let { o ->
-            sb.append("\nDecoded-strings overlay: ").append(o.strings.size).append(" strings imported for ").append(o.method).append("; ").append(o.replaced).append(" call site(s) in the classes read were replaced by their plaintext, ")
-                .append(o.unresolved).append(" stay encrypted (the index is not a constant in the same block, or is not in the dump). The string rules see the plaintext of the replaced sites only.\n")
+            sb.append("\nDecoded-strings overlay: ").append(o.strings.size).append(" strings imported for ").append(o.method).append("; ").append(StringOverlay.coverage(o.replaced, o.unresolved)).append(" (")
+                .append(o.unresolved).append(" stay encrypted: the index is not a constant in the same block, or is not in the dump). The string rules see the plaintext of the replaced sites only.\n")
         }
         if (strEnc.get() >= 20 || reflMarshal.get() >= 20) sb.append("\nString encryption / reflection marshalling (DexGuard-style): ").append(strEnc.get()).append(" classes carry a string-decrypting method and ").append(reflMarshal.get())
             .append(" call the app's own code through a reflection lookup. Everything that reads string constants (secrets, URLs, cipher names, the names of Intent extras) and every call-graph edge made this way is BLIND in those classes: a finding that is absent there is not a pass, and the names in a call path can be misleading.\n")

@@ -114,6 +114,12 @@ class StringOverlay(val method: String, val strings: Map<Int, String>) {
             return sb.toString()
         }
 
+        /** 1.1.0: "1,420 / 1,500 decryptor call sites resolved (94.7%)": how much of the string table the scan now reads. */
+        fun coverage(replaced: Int, unresolved: Int): String {
+            val all = replaced + unresolved
+            return String.format(java.util.Locale.US, "%,d / %,d decryptor call sites resolved", replaced, all) + (if (all == 0) "" else String.format(java.util.Locale.US, " (%.1f%%)", 100.0 * replaced / all))
+        }
+
         class Parsed(val method: String?, val strings: Map<Int, String>, val skippedLines: Int)
 
         /**

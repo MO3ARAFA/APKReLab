@@ -266,16 +266,18 @@ object ManifestDeepLinksRule : ManifestComponentRule() {
             val hosts = rx("android:host\\s*=\\s*\"([^\"]*)\"").findAll(body).map { it.groupValues[1] }.toSet()
             val web = schemes.any { it == "http" || it == "https" }
             val custom = schemes.any { it != "http" && it != "https" && it.isNotEmpty() }
+            // 1.1.0: App Links are verified filter by filter; one verified filter does not verify another one of the same activity (Axis Pay: 2 of 3 https filters)
+            val unverified = if (web) DeepLinks.unverifiedWebHosts(body) else emptyList()
             val sev = when {
                 custom && hosts.isEmpty() -> Severity.MEDIUM
-                web && !body.contains("autoVerify") -> Severity.LOW
+                unverified.isNotEmpty() -> Severity.LOW
                 else -> Severity.INFO
             }
             out.add(Finding(sev, "Deep link entry point: $name",
                 "This activity can be opened from a browser/other apps via ${schemes.joinToString(", ").ifEmpty { "(no scheme listed)" }}://${hosts.joinToString("|")}. " +
                     "Anything in the link (path, query, fragment) is attacker-controlled input" +
                     (if (custom && hosts.isEmpty()) ", and a custom scheme with no host can be claimed by any other installed app (link hijacking)." else ".") +
-                    (if (web && !body.contains("autoVerify")) " No android:autoVerify, so the link is not verified as belonging to this app." else ""),
+                    (if (unverified.isNotEmpty()) " No android:autoVerify on the filter(s) of ${unverified.joinToString(", ")}, so those links are not verified as belonging to this app: another installed app can declare the same host and be offered for them." else ""),
                 "Validate every parameter taken from the incoming Intent data (host allow-list, type checks), never load it into a WebView or use it as a file path unchecked; for web links use verified App Links (autoVerify + assetlinks.json).",
                 cwe = "CWE-939"))
         }

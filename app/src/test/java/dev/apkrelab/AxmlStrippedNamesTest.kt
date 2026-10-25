@@ -88,11 +88,10 @@ class AxmlStrippedNamesTest {
         out.write(startEl(5, emptyList()))
         out.write(startEl(6, listOf(attr(10, 3, boolean = true))))                      // testOnly (pool index 3 -> id 0x01010272)
         out.write(startEl(7, listOf(attr(10, 0, str = 12), attr(10, 1, boolean = true))))   // name, exported
-        out.write(startEl(8, emptyList()))
+        out.write(startEl(8, if (autoVerify) listOf(attr(10, 2, boolean = true)) else emptyList()))   // autoVerify belongs to <intent-filter> (1.1.0: judged per filter)
         out.write(startEl(17, listOf(attr(10, 0, str = 18)))); out.write(endEl(17))      // <category android:name="...BROWSABLE"/> (name = pool index 0 -> id 0x01010003)
         val data = ArrayList<ByteArray>()
         data.add(attr(10, 4, str = 13))                                                  // scheme
-        if (autoVerify) data.add(attr(10, 2, boolean = true))                            // autoVerify
         out.write(startEl(9, data))
         out.write(endEl(9)); out.write(endEl(8)); out.write(endEl(7)); out.write(endEl(6)); out.write(endEl(5))
         out.write(endNs(prefix = 11, uri = 10))

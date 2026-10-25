@@ -2545,12 +2545,14 @@ class MainActivity : Activity() {
                 if (classDefs !== defs) { if (smartRunning) smartFinish(); return@runOnUiThread }   // a different APK was loaded meanwhile
                 secFindings = secSorted(secFindings.filter { it.clsIndex < 0 } + aggregated)
                 callIdx = edges
+                val overlayNote = StringOverlay.current?.let { o -> "strings overlay: " + StringOverlay.coverage(o.replaced, o.unresolved) } ?: ""   // 1.1.0
                 lastScanNote = (if (stopped) "stopped at $scanned / ${defs.size}" else "finished, $scanned / ${defs.size} classes") +
                     (if (errors > 0) "; $errors classes failed" else "") +
-                    (if (ssaNote.isNotEmpty()) "; $ssaNote" else "")
+                    (if (ssaNote.isNotEmpty()) "; $ssaNote" else "") +
+                    (if (overlayNote.isNotEmpty()) "; $overlayNote" else "")
                 if (inSecurity) {
                     showSecurityList()
-                    scanDetail = listOfNotNull(if (stopped) "stopped at $scanned / ${defs.size}" else null, if (errors > 0) "$errors classes failed" else null, ssaNote.ifEmpty { null }).joinToString("; ")
+                    scanDetail = listOfNotNull(if (stopped) "stopped at $scanned / ${defs.size}" else null, if (errors > 0) "$errors classes failed" else null, ssaNote.ifEmpty { null }, overlayNote.ifEmpty { null }).joinToString("; ")
                     scanDetailOpen = false
                     pathView.text = listTitle + scanTail()
                 }
@@ -3524,6 +3526,7 @@ class MainActivity : Activity() {
         if (manifestFull.isNotBlank()) {
             val xi2 = manifestFull.indexOf("<?xml")
             sb.append(try { ReportBuilder.attackSurface(if (xi2 > 0) manifestFull.substring(xi2) else manifestFull, pkg, PermissionGuard.systemResolver(this).let { sys -> { p: String -> sys(p) ?: ReportBuilder.defaultLevel(p) } }) } catch (_: Throwable) { "" })
+            sb.append(try { DeepLinks.section(DeepLinks.parse(if (xi2 > 0) manifestFull.substring(xi2) else manifestFull, pkg)) { deepLinkParams(it) } } catch (_: Throwable) { "" })   // 1.1.0
         }
         sb.append("## Security scan\n\n")
         if (secFindings.isEmpty()) {
@@ -4465,7 +4468,8 @@ class MainActivity : Activity() {
                 val mc = ManifestContext(manifestFull); val pg = PermissionGuard(mc, PermissionGuard.systemResolver(this@MainActivity))
                 mc.exportedComponents.filter { pg.guardFor(mc.smaliTypeOf(it)) == PermissionGuard.Guard.NONE }.map { it.name + " (" + it.tag + ")" }.distinct()
             } catch (_: Throwable) { emptyList() }
-            return AuditBrief.build(packageNameOrNull() ?: "", cards, PostureScanner.rows(), lastScanNote, reported, open)
+            val links = try { DeepLinks.brief(DeepLinks.parse(manifestFull, packageNameOrNull() ?: "")) } catch (_: Throwable) { "" }   // 1.1.0
+            return AuditBrief.build(packageNameOrNull() ?: "", cards, PostureScanner.rows(), lastScanNote, reported, open) + links
         }
         override fun listEdits() = agentListEdits()
         override fun openClass(cls: String) = agentOpenClass(cls)
@@ -4899,6 +4903,17 @@ class MainActivity : Activity() {
     }
 
     /** The class text every scan reads: edited smali, else the cached index, else a fresh disassembly; with the decoded-strings overlay applied when one is loaded (0.102.0). */
+    /** 1.1.0: link query parameters and Intent extras read (as constants) in an activity's own class and its inner classes; empty when the classes are not indexed. */
+    private fun deepLinkParams(activity: String): Map<String, Set<String>> {
+        val t = "L" + activity.replace('.', '/') + ";"; val inner = t.removeSuffix(";") + "$"
+        val out = HashMap<String, MutableSet<String>>()
+        for (d in classDefs) {
+            if (d.type != t && !d.type.startsWith(inner)) continue
+            for ((k, v) in DeepLinks.paramsRead(agentIndexedText(d))) out.getOrPut(k) { HashSet() }.addAll(v)
+        }
+        return out
+    }
+
     private fun agentIndexedText(def: ClassDef): String { val raw = agentIndexedTextRaw(def); return try { StringOverlay.view(raw, def.type) } catch (_: Throwable) { raw } }
 
     private fun agentIndexedTextRaw(def: ClassDef): String {
