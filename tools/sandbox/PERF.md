@@ -137,3 +137,22 @@ Device evidence (report 9, Axis Pay 3.0.4, warm group cache): `plan 21s + groups
 - **Robustness**: FuzzMerge 2,700 mangled classes x 3 apps (Axis, Keep It, unitto): 0 exceptions, 0 over 60 s, 0 throws inside taint. FuzzParsers110: 16,080 corrupted .so / manifest / smali inputs into ElfAnalyzer, DeepLinks, the deep-link rule, NativeBridge, DynamicReceivers, PathFlow, VersionProbes: 0 escaped, 0 over 5 s.
 - **Gradle** (AGP 9.3.1, Gradle 9.8.2, JDK 21): testDebugUnitTest 706 / 0 failures, lintDebug 0 errors (198 warnings), assembleDebug OK (1.1.0 / 223).
 - Not measured: anything on the phone for 1.1.0; Axis 3.0.4 (not in the sandbox); WE Wallet (no APK).
+
+## A0 (NEXT_GEN_ROADMAP): device baseline from the owner's reports (Axis Pay 3.0.4, 512 MB heap, 8 cores; collected 2026-10-25 from ./private)
+Every Axis report in ./private is versionName 3.0.4 (checked in each manifest). 10,586 -> 9,725 "classes outside libraries" from 0.107 on is the 0.106.0 library-prefix change, not another APK.
+| scanner | run | flows | plan s | groups s | threads | groups reused | GC ms total | GC ms blocking | cpu parse s | cpu analysis s |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0.102 | report 2 | 16 | 16 | 1016 | 1 | - | - | - | 40 | 975 |
+| 0.102 | report 3 | 16 | 29 | 544 | 1 | - | - | - | 46 | 497 |
+| 0.104 | report 6 (= 7) | 16 | 18 | 752 | 1 | - | 446,810 | 310,964 | 17 | 724 |
+| 0.104 | report 8 | 16 | 25 | 743 | 2 | - | 620,158 | 538,329 | 37 | 1,407 |
+| 0.104.1 | report 9 (warm) | 16 | 21 | 8 | 2 | 25 / 25 | 910 | 0 | 0 | 0 |
+| 0.105 | cold | 16 | 15 | 211 | 2 | 0 | 124,048 | 31,133 | 18 | 392 |
+| 0.105 | warm | 16 | 4 | 0 | 2 | 25 / 25 | 42 | 0 | 0 | 0 |
+| 0.107 | warm | 17 | 3 | 0 | 2 | 25 / 25 | 26 | 0 | 0 | 0 |
+| 0.108 | cold | 17 | 30 | 301 | 2 | 0 | 170,147 | 24,953 | 22 | 573 |
+| 1.0.0 | cold | 17 | 30 | 137 | 2 | 0 | 77,373 | 108 | 16 | 252 |
+| 1.0.0 | warm | 17 | 3 | 0 | 2 | 25 / 25 | 31 | 0 | 0 | 0 |
+WE Wallet 1.0.73 on 0.107: 8 flows, plan 16 s + groups 192 s, GC 175,460 ms (160,406 blocking).
+What this baseline does NOT give: (1) two cold runs of the same version (0.102 is the only pair: 1016 vs 544 s, -46% between identical scans), so a cold change below ~50% cannot be told apart from run-to-run spread; (2) any 1.1.0 run; (3) battery / temperature; (4) peak heap (the status line has GC, not the live set).
+Protocol for the owner (1.1.0, Axis Pay 3.0.4, the same phone, charger on, after the phone has cooled): open the app, Deep scan (cold: the first scan after installing 1.1.0 rebuilds the cache); export the report; Deep scan again without re-picking the APK (warm); clear the plan cache by re-installing 1.1.0 or picking the APK again and run a second cold scan; send the three reports. The status lines are the measurement; nothing else is needed.
