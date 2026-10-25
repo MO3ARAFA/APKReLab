@@ -126,3 +126,8 @@ specific decoding (blutter-style) is version-locked and heavy: only after D3's f
 
 "Done" for any item: tests with negative twins, a mutation check for engine changes, flow set identical where nothing should change, numbers before and
 after in the commit message and `HANDOFF.md`, and a plain list of what was not measured.
+
+## Recorded by the 1.2.0 QA round (not built; each needs its own measurement first)
+- **Sanitizer in a callee reached through an interface** (Paperless 244, expo ClipboardFileProvider): openFile hands the Uri to a path strategy (`ClipboardFileProvider$b.a`, implemented by `$c.a`) that does File(root, path) -> getCanonicalFile -> "still under root" else SecurityException. The SSA flow to ParcelFileDescriptor.open is reported (HIGH, MUST FIX, CRITICAL PATH) although the traversal is blocked; the chain's validation sentence is not added either (the check is not in a method of the reported path). Census first: how many provider / file flows in the corpus pass a getCanonicalFile + startsWith + throw in a callee.
+- **Code-level caller checks of exported providers** (K-9 SettingsProvider: signing-certificate check in openFile, other methods throw; Nextcloud FileContentProvider: per-URI uid check): the manifest rule stays HIGH in the sandbox. HANDOFF says K-9's case is lowered on the device since 0.94.0: verify the device report before any change.
+- **Hybrid code**: Dart (libapp.so) and JavaScript / Hermes code are read as strings only; NOT SEEN says so since 1.2.0. No analysis planned without a measurement of what the strings miss.
