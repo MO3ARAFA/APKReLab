@@ -906,7 +906,7 @@ public final class TaintIr {
 
         static Call of(Insn in) {
             boolean st = in.op.startsWith("invoke-static");
-            int h = in.ref.hashCode() * 31 + (st ? 1 : 0);
+            int h = in.ref.hashCode();                // one slot per reference: a static and a virtual call of one reference (never both valid in one dex) replace each other
             int i = (h ^ (h >>> BITS)) & (SLOTS - 1);
             Call c = TABLE[i];
             if (c != null && c.isStatic == st && (c.ref == in.ref || c.ref.equals(in.ref))) return c;

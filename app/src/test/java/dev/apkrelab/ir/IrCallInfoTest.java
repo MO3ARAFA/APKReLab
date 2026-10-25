@@ -41,6 +41,17 @@ public class IrCallInfoTest {
         assertTrue(TaintIr.Call.of(v).phys.length == 3 && !TaintIr.Call.of(v).isStatic);
     }
 
+    /** The table has one slot per reference: a static call of a reference seen before as a virtual one must get its own layout, not the cached one. */
+    @Test
+    public void aStaticCallOfAReferenceCachedAsVirtualGetsItsOwnLayout() {
+        String ref = "Lx/Z;->only(I)V";
+        TaintIr.Call v = TaintIr.Call.of(invoke("invoke-virtual {v0, v1}, " + ref));
+        TaintIr.Call s = TaintIr.Call.of(invoke("invoke-static {v1}, " + ref));
+        assertTrue(!v.isStatic && s.isStatic);
+        assertTrue(Arrays.equals(new int[]{0}, s.phys));
+        assertTrue(Arrays.equals(new int[]{0, 1}, TaintIr.Call.of(invoke("invoke-virtual {v0, v1}, " + ref)).phys));
+    }
+
     @Test
     public void sinkCandidatesComeWithTheFacts() {
         assertNotNull(TaintIr.Call.of(invoke("invoke-virtual {v0, v1}, Landroid/webkit/WebView;->loadUrl(Ljava/lang/String;)V")).cands);
