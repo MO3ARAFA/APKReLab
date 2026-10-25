@@ -45,6 +45,7 @@ object Verdict {
         sink.startsWith("ContentResolver.open") -> "a scheme / authority allow-list (Uri.getScheme / getAuthority)"
         else -> null
     }
+    private val COMPONENT_CARD = Regex("(?i)exported|permission|provider|receiver|service|activity")
     private fun fmtEv(e: Double) = if (e == 1.0) "1.0" else String.format(java.util.Locale.US, "%.1f", e)
     private fun evidenceKind(e: Double) = when { e >= 1.0 -> "real SSA source+path"; e >= 0.8 -> "source only: a flow inside one class"; e >= 0.6 -> "rule-only"; else -> "validation-like calls on the path" }
 
@@ -61,6 +62,10 @@ object Verdict {
             sink != null && sink.startsWith("WebView.") -> "check the host allow-list / Uri.parse before loadUrl in ${method ?: cls}" + (if (ssa) " or its direct callees" else "") + ". If present, this is a false positive."
             deepLink && sink != null -> "check the host / path validation in ${method ?: cls} before the sink ($sink). If present, this is a false positive."
             SANITIZER_FAMILIES && sink != null && family(sink) != null -> "check for ${family(sink)} in ${method ?: cls} or its direct callees. If present, this is a false positive."
+            // 1.2.1 QA (VulnLab #54: an SSA card whose sink has no sanitizer family was described as a rule-only match)
+            sink != null && (ssa || f.ruleId.startsWith("taint")) -> (if (ssa) "SSA flow verified; " else "") + "the scanner knows no standard sanitizer for $sink: read ${method ?: cls} between the source and $sink and confirm nothing restricts the value."
+            // 1.2.1 QA (Gu3ssWeak: debuggable / allowBackup got the exported-component caller-check sentence)
+            f.classType == null && !COMPONENT_CARD.containsMatchIn(f.title) -> "open ${f.location} and confirm \"" + f.title + "\" in the manifest of the build you ship (the rule read the manifest only)."
             f.classType == null -> "open ${f.location} (" + f.title.substringAfter(": ", f.title) + "): check the permission and the component's own caller checks (getCallingPackage / Binder.getCallingUid / a signature check); the rule read the manifest only."
             else -> "open $cls" + (lineRe.find(f.detail)?.groupValues?.get(1)?.let { " at smali line $it" } ?: "") + " (offset ${f.at}): the rule matched a pattern there and traced no data flow; confirm the code does what the title says."
         }

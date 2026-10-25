@@ -57,6 +57,22 @@ class Verify121Test {
         assertTrue(Verdict.verifyOf(man).startsWith("open AndroidManifest.xml (com.x.P): check the permission and the component's own caller checks"))
     }
 
+    @Test fun anSsaCardWithoutASanitizerFamilyIsNotCalledRuleOnly() {                // 1.2.1 QA: VulnLab #54 (intent redirection)
+        val f = flow("Intent.getParcelableExtra()", "Context.startActivity", "IntentRedirectReceiver.onReceive", "Untrusted Intent is launched by this app (intent redirection)")
+        assertEquals("SSA flow verified; the scanner knows no standard sanitizer for Context.startActivity: read onReceive() between the source and Context.startActivity and confirm nothing restricts the value.", Verdict.verifyOf(f))
+        // twin: a rule card without a flow keeps the rule-only sentence
+        val rule = Finding(Severity.HIGH, "Weak cipher mode", "Cipher ... (around line 9)", "Use GCM.", "Lcom/x/B;", 2, 1, "CWE-327").also { it.ruleId = "crypto-cipher" }
+        assertTrue(Verdict.verifyOf(rule).contains("traced no data flow"))
+    }
+
+    @Test fun applicationFlagsAreNotAskedForCallerChecks() {                         // 1.2.1 QA: Gu3ssWeak #1 / #2
+        val flag = Finding(Severity.CRITICAL, "Debuggable build", "android:debuggable=true", "r").also { it.ruleId = "manifest-debuggable" }
+        assertEquals("open AndroidManifest.xml and confirm \"Debuggable build\" in the manifest of the build you ship (the rule read the manifest only).", Verdict.verifyOf(flag))
+        // twin: an exported component keeps the caller-check sentence
+        val comp = Finding(Severity.HIGH, "Exported receiver without a permission: com.x.R", "d", "r").also { it.ruleId = "manifest-exported-components" }
+        assertTrue(Verdict.verifyOf(comp).contains("caller checks"))
+    }
+
     @Test fun criticalPathHopsGetAVerifyLine() {
         val sink = flow("Intent.getStringExtra()", "FileOutputStream.<init>")
         val sc = AttackScenarios.Scenario("s", "Another app chooses the file", Severity.HIGH, "", "", "", "com.x.A (exported)", listOf(sink), "overwrite files", "", "", emptyList())
