@@ -1,0 +1,142 @@
+[
+ {
+  "id": "debuggable",
+  "vuln": "Debuggable build",
+  "rule": "manifest-debuggable",
+  "min_severity": "CRITICAL"
+ },
+ {
+  "id": "deeplink-config",
+  "vuln": "Deep link parameter stored as login URL",
+  "rule": "deeplink-config-poisoning",
+  "class": "DeeplinkActivity",
+  "min_severity": "HIGH",
+  "reach": true
+ },
+ {
+  "id": "webview-taint",
+  "vuln": "Intent extra loaded into WebView",
+  "rule": "taint-flow",
+  "class": "WebViewActivity",
+  "min_severity": "HIGH",
+  "reach": true,
+  "hint": "call graph must follow DeeplinkActivity -> WebViewActivity"
+ },
+ {
+  "id": "webview-file-access",
+  "vuln": "WebView setAllowFileAccessFromFileURLs",
+  "rule": "webview-file-access",
+  "class": "WebViewActivity",
+  "min_severity": "HIGH",
+  "reach": true
+ },
+ {
+  "id": "theft-provider",
+  "vuln": "TheftOverwriteProvider openFile path traversal",
+  "rule": "provider-openfile-segment",
+  "class": "TheftOverwriteProvider",
+  "min_severity": "HIGH"
+ },
+ {
+  "id": "logger-service",
+  "vuln": "InsecureLoggerService writes to caller-chosen file",
+  "rule": "taint-flow",
+  "class": "InsecureLoggerService",
+  "min_severity": "HIGH",
+  "reach": true
+ },
+ {
+  "id": "weak-crypto",
+  "vuln": "Hardcoded AES key (WeakCrypto)",
+  "rule": "crypto-hardcoded-key",
+  "class": "WeakCrypto",
+  "min_severity": "HIGH"
+ },
+ {
+  "id": "log-credentials",
+  "vuln": "LoginData with password written to log",
+  "rule": "log-credential-object",
+  "class": "LoginActivity",
+  "min_severity": "HIGH"
+ },
+ {
+  "id": "broadcast",
+  "vuln": "Credentials in an unprotected broadcast",
+  "rule": "broadcast-unprotected-send",
+  "class": "MainActivity$2",
+  "min_severity": "HIGH"
+ },
+ {
+  "id": "implicit-intent",
+  "vuln": "Token in an implicit Intent",
+  "rule": "implicit-intent-sensitive",
+  "class": "MainActivity$3",
+  "min_severity": "HIGH"
+ },
+ {
+  "id": "dex-load",
+  "vuln": "DexClassLoader on /sdcard/updater.apk",
+  "rule": "dex-load-writable-dir",
+  "class": "OversecuredApplication",
+  "min_severity": "HIGH"
+ },
+ {
+  "id": "package-context",
+  "vuln": "Code loaded from another package's context",
+  "rule": "package-context-code",
+  "class": "OversecuredApplication",
+  "min_severity": "HIGH"
+ },
+ {
+  "id": "serial-delete",
+  "vuln": "Serializable deletes a file in readObject",
+  "rule": "serializable-dangerous",
+  "class": "DeleteFilesSerializable",
+  "min_severity": "HIGH"
+ },
+ {
+  "id": "serial-native",
+  "vuln": "Serializable with native free (memory corruption)",
+  "rule": "serializable-dangerous",
+  "class": "MemoryCorruptionSerializable",
+  "min_severity": "MEDIUM"
+ },
+ {
+  "id": "url-credentials",
+  "vuln": "Credentials in a hardcoded URL",
+  "rule": "res-strings-url-credentials",
+  "min_severity": "HIGH"
+ },
+ {
+  "id": "plain-prefs",
+  "vuln": "Plaintext credentials in SharedPreferences",
+  "title_any": [
+   "SharedPreferences"
+  ],
+  "class": "LoginUtils",
+  "min_severity": "MEDIUM"
+ },
+ {
+  "id": "intent-redirect",
+  "vuln": "LoginActivity launches an Intent from extras",
+  "rule": "intent-redirection",
+  "class": "LoginActivity",
+  "min_severity": "MEDIUM",
+  "reach": true
+ },
+ {
+  "id": "exported-provider",
+  "vuln": "Exported provider without permission",
+  "rule": "manifest-exported-components",
+  "title_any": [
+   "provider"
+  ],
+  "min_severity": "HIGH"
+ },
+ {
+  "id": "fileprovider",
+  "vuln": "FileProvider root-path",
+  "rule": "res-fileprovider-paths",
+  "min_severity": "MEDIUM"
+ }
+]

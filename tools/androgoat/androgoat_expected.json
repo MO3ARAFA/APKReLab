@@ -1,0 +1,248 @@
+[
+ {
+  "vuln": "Root Detection",
+  "match_any": [
+   "Root detection"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Emulator Detection",
+  "match_any": [
+   "Emulator detection"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Insecure Data Storage - Shared Prefs 1",
+  "match_any": [
+   "SharedPreferences"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Insecure Data Storage - Shared Prefs 2",
+  "match_any": [
+   "SharedPreferences"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Insecure Data Storage - SQLite",
+  "match_any": [
+   "SQLite"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Insecure Data Storage - Temp Files",
+  "match_any": [
+   "Temp file"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Insecure Data Storage - SD Card",
+  "match_any": [
+   "Shared external storage"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Keyboard Cache",
+  "match_any": [
+   "Keyboard cache"
+  ],
+  "via": "res-xml"
+ },
+ {
+  "vuln": "Insecure Logging",
+  "match_any": [
+   "sensitive data in logs"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Input Validations - XSS",
+  "match_any": [
+   "dynamically built content",
+   "JavaScript enabled"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Input Validations - SQLi",
+  "match_any": [
+   "SQL built by string"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Input Validations - WebView",
+  "match_any": [
+   "WebView"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Input Validations - QR Code",
+  "match_any": [
+   "QR/barcode"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Unprotected Components - Activity",
+  "match_any": [
+   "Exported activity"
+  ],
+  "via": "manifest"
+ },
+ {
+  "vuln": "Unprotected Components - Service",
+  "match_any": [
+   "Exported service"
+  ],
+  "via": "manifest"
+ },
+ {
+  "vuln": "Unprotected Components - Broadcast Receivers",
+  "match_any": [
+   "Exported receiver"
+  ],
+  "via": "manifest"
+ },
+ {
+  "vuln": "Unprotected Components - Content Providers",
+  "match_any": [
+   "Exported provider",
+   "ContentProvider"
+  ],
+  "via": "manifest"
+ },
+ {
+  "vuln": "Insecure Clipboard Usage",
+  "match_any": [
+   "clipboard"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Hardcoding - Shopping Cart",
+  "match_any": [
+   "Hardcoded",
+   "High-entropy"
+  ],
+  "via": "ai-only (VulnHunter)"
+ },
+ {
+  "vuln": "Hardcoding - AI",
+  "match_any": [
+   "OpenAI",
+   "Anthropic",
+   "Hugging Face",
+   "API key"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Hardcoding - Cloud Service",
+  "match_any": [
+   "AWS",
+   "Firebase",
+   "bucket",
+   "Azure"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Network intercepting - HTTP",
+  "match_any": [
+   "cleartext",
+   "Cleartext"
+  ],
+  "via": "manifest+scanner"
+ },
+ {
+  "vuln": "Network intercepting - HTTPS",
+  "match_any": [
+   "user-installed CA",
+   "No network security config"
+  ],
+  "via": "res-xml"
+ },
+ {
+  "vuln": "Certificate Pinning - OkHttp3",
+  "match_any": [
+   "certificate pinning"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Certificate Pinning - Network Security Config",
+  "match_any": [
+   "pin-set",
+   "Network Security Config"
+  ],
+  "via": "res-xml"
+ },
+ {
+  "vuln": "Misconfigured Network_Security_Config.xml",
+  "match_any": [
+   "Network Security Config"
+  ],
+  "via": "res-xml"
+ },
+ {
+  "vuln": "Android Debuggable",
+  "match_any": [
+   "Debuggable"
+  ],
+  "via": "manifest"
+ },
+ {
+  "vuln": "Android allowBackup",
+  "match_any": [
+   "allowBackup"
+  ],
+  "via": "manifest"
+ },
+ {
+  "vuln": "Custom URL Scheme",
+  "match_any": [
+   "Deep link"
+  ],
+  "via": "manifest"
+ },
+ {
+  "vuln": "Broken Cryptography",
+  "match_any": [
+   "Weak",
+   "Hardcoded encryption key",
+   "Static IV"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Misconfigured Firebase DB",
+  "match_any": [
+   "Firebase"
+  ],
+  "via": "scanner"
+ },
+ {
+  "vuln": "Binary Patching",
+  "match_any": [
+   "integrity",
+   "signature check"
+  ],
+  "via": "scanner (info only)"
+ },
+ {
+  "vuln": "Biometric Authentication",
+  "match_any": [
+   "Biometric"
+  ],
+  "via": "scanner"
+ }
+]

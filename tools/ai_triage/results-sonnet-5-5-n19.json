@@ -1,0 +1,505 @@
+{
+ "model": "claude-sonnet-5-5",
+ "runs": 2,
+ "tokens": {
+  "in": 66268,
+  "out": 16628
+ },
+ "table": [
+  {
+   "app": "Session",
+   "card": "CRITICAL trust-all `HttpClientsKt$createRegularNodeOkHttpClient$trustManager$1` ",
+   "matched": "Hostname verification disabled | api.http.HttpClientsKt$$ExternalSyntheticLambda0",
+   "hand": "TRUE OBSERVATION, probab",
+   "truth": "REAL",
+   "ai": [
+    "REVIEW",
+    "TP"
+   ],
+   "reason": "{\"verdict\":\"NEEDS_REVIEW\",\"confidence\":55,\"reason\":\"The verify() method always returns true, so hostname checking is intrinsically disabled for any client that uses this lambda. The call site and the trust manager are not shown, so I cannot tell whether a pinn"
+  },
+  {
+   "app": "Monerujo",
+   "card": "Hardcoded credential: JWT (ExolixApiImpl)",
+   "matched": "Hardcoded credential: JWT | llet.service.shift.provider.exolix.ExolixApiImpl",
+   "hand": "TP",
+   "truth": "REAL",
+   "ai": [
+    "TP",
+    "TP"
+   ],
+   "reason": "{\"verdict\":\"TRUE_POSITIVE\",\"confidence\":80,\"reason\":\"The code hardcodes a complete, signed HS256 JWT as the Exolix API 'Authorization: Bearer' header. Its payload decodes to a developer email, a subject ID and an expiry in 2028, so it is a real, long-lived cre"
+  },
+  {
+   "app": "Kiwix",
+   "card": "addJavascriptInterface, CoreReaderFragment",
+   "matched": "WebView addJavascriptInterface | g.kiwix.kiwixmobile.core.main.CoreReaderFragment",
+   "hand": "FP",
+   "truth": "NOT",
+   "ai": [
+    "REVIEW",
+    "REVIEW"
+   ],
+   "reason": "{\"verdict\":\"NEEDS_REVIEW\",\"confidence\":45,\"reason\":\"CoreReaderFragment adds two bridges to a KiwixWebView: DocumentParser$ParserCallback (named \\\"DocumentParser\\\") and ServiceWorkerUninitialiser. The WebView is a Kiwix reader that loads offline ZIM archive con"
+  },
+  {
+   "app": "Kiwix",
+   "card": "addJavascriptInterface, VideoEnabledWebView",
+   "matched": "WebView addJavascriptInterface | org.kiwix.videowebview.VideoEnabledWebView",
+   "hand": "FP",
+   "truth": "NOT",
+   "ai": [
+    "FP",
+    "FP"
+   ],
+   "reason": "{\"verdict\":\"FALSE_POSITIVE\",\"confidence\":60,\"reason\":\"This is the VideoEnabledWebView library's boilerplate. It registers its own JavascriptInterface object under the name _VideoEnabledWebView, and that object is used only to notify the app when HTML5 video pl"
+  },
+  {
+   "app": "Markor",
+   "card": "addJavascriptInterface, DocumentEditAndViewFragment",
+   "matched": "WebView addJavascriptInterface | tner.markor.activity.DocumentEditAndViewFragment",
+   "hand": "FP",
+   "truth": "NOT",
+   "ai": [
+    "FP",
+    "FP"
+   ],
+   "reason": "{\"verdict\":\"FALSE_POSITIVE\",\"confidence\":60,\"reason\":\"The fragment is exposed to JavaScript as \\\"Android\\\", but the finding itself says none of its @JavascriptInterface methods reach files, processes, Intents, databases, preferences, accounts, location or refl"
+  },
+  {
+   "app": "Markor",
+   "card": "file path, GsFileUtils.writeFile (via contentColumnData)",
+   "matched": "Untrusted input is used as a file path | net.gsantner.opoc.util.GsFileUtils",
+   "hand": "TP-1CLICK",
+   "truth": "REAL",
+   "ai": [
+    "FP",
+    "FP"
+   ],
+   "reason": "{\"verdict\":\"FALSE_POSITIVE\",\"confidence\":70,\"reason\":\"copyFile is a generic file-copy helper. The destination File comes from AppSettings.getAttachmentFolder, which reads a folder path from the app's own private SharedPreferences. That is a user-configured set"
+  },
+  {
+   "app": "Markor",
+   "card": "file path, GsFileUtils.copyUriToFile",
+   "matched": "Untrusted input is used as a file path | net.gsantner.opoc.util.GsFileUtils",
+   "hand": "FP",
+   "truth": "NOT",
+   "ai": [
+    "FP",
+    "FP"
+   ],
+   "reason": "{\"verdict\":\"FALSE_POSITIVE\",\"confidence\":70,\"reason\":\"copyFile is a generic file-copy helper. The flagged destination File comes from AppSettings.getAttachmentFolder, which reads the app's own SharedPreferences. That is a user-configured setting, not input an "
+  },
+  {
+   "app": "Markor",
+   "card": "file path, GsFileUtils copyFile / touch / isContentsPlainText (3 cards)",
+   "matched": "Untrusted input is used as a file path | net.gsantner.opoc.util.GsFileUtils",
+   "hand": "FP",
+   "truth": "NOT",
+   "ai": [
+    "FP",
+    "FP"
+   ],
+   "reason": "{\"verdict\":\"FALSE_POSITIVE\",\"confidence\":70,\"reason\":\"copyFile is a generic file-copy utility from the opoc library (used by Markor). The destination File comes from AppSettings.getAttachmentFolder, which reads a SharedPreferences value. That value is the user"
+  },
+  {
+   "app": "Breezy",
+   "card": "file path, MainActivity.onCreate (Parcel source through `o02.next()`)",
+   "matched": "Untrusted input is used as a file path | org.breezyweather.ui.main.MainActivity",
+   "hand": "FP",
+   "truth": "NOT",
+   "ai": [
+    "FP",
+    "FP"
+   ],
+   "reason": "{\"verdict\":\"FALSE_POSITIVE\",\"confidence\":90,\"reason\":\"The File.delete() target comes from o02.next(), which is a walk over the app's own directory (<base>/files/objectbox/) built from a constant suffix, using a bottom-up file tree walker (Kotlin's File.walkBot"
+  },
+  {
+   "app": "Read You",
+   "card": "CRITICAL trust-all TrustManager (OkHttpClientModuleKt.setupSsl)",
+   "matched": "TLS certificate validation disabled | .di.OkHttpClientModuleKt$setupSsl$trustManager$2",
+   "hand": "BY-DESIGN",
+   "truth": "DESIGN",
+   "ai": [
+    "TP",
+    "NOJSON"
+   ],
+   "reason": "{\"verdict\":\"TRUE_POSITIVE\",\"confidence\":80,\"reason\":\"checkServerTrusted() in the anonymous X509TrustManager created by setupSsl is just `return-void`, so it never validates the server certificate chain, and this weakness is intrinsic. The class name suggests i"
+  },
+  {
+   "app": "Read You",
+   "card": "Hardcoded sensitive field `secret` (DESUtils)",
+   "matched": "Hardcoded sensitive field: secret | sh.reader.domain.model.account.security.DESUtils",
+   "hand": "TP",
+   "truth": "REAL",
+   "ai": [
+    "TP",
+    "TP"
+   ],
+   "reason": "{\"verdict\":\"TRUE_POSITIVE\",\"confidence\":85,\"reason\":\"DESUtils holds a hardcoded 32-character string, `secret`, in a private static final field. The finding says it is used to build a KeySpec, so it is a fixed symmetric DES/3DES key that anyone can recover from"
+  },
+  {
+   "app": "Jellyfin",
+   "card": "JavaScript-exposed method, bridge.NativeInterface",
+   "matched": "JavaScript-exposed method reaches a sensitive API | org.jellyfin.mobile.bridge.NativeInterface",
+   "hand": "TP-low",
+   "truth": "REAL",
+   "ai": [
+    "FP",
+    "FP"
+   ],
+   "reason": "{\"verdict\":\"FALSE_POSITIVE\",\"confidence\":80,\"reason\":\"The method shown is disableFullscreen(), not hideMediaSession(). It takes no parameters and only emits a fixed ChangeFullscreen(false) event to the in-app ActivityEventHandler. It starts no component and se"
+  },
+  {
+   "app": "Shizuku",
+   "card": "2 x \"selects a class by name\" (`rikka.shizuku.Kc`, `Tk`)",
+   "matched": "Dynamic code loading | rikka.shizuku.se",
+   "hand": "FP",
+   "truth": "NOT",
+   "ai": [
+    "FP",
+    "FP"
+   ],
+   "reason": "{\"verdict\":\"FALSE_POSITIVE\",\"confidence\":88,\"reason\":\"This static initializer in the Shizuku/HiddenApiBypass-style code builds a PathClassLoader (rikka.shizuku.R7) from the first entry of the system property java.boot.class.path. It uses it to load framework c"
+  },
+  {
+   "app": "FairEmail",
+   "card": "\"Credential stored in plain SharedPreferences\" `cloud_password` (FragmentOptions",
+   "matched": "Credential stored in plain SharedPreferences | eu.faircode.email.FragmentOptionsBackup",
+   "hand": "TP-low",
+   "truth": "REAL",
+   "ai": [
+    "TP",
+    "TP"
+   ],
+   "reason": "{\"verdict\":\"TRUE_POSITIVE\",\"confidence\":65,\"reason\":\"The cloud account password (\\\"cloud_password\\\") is written with putString() into the default SharedPreferences XML, with no encryption or Keystore use. The value is almost certainly the user's typed password"
+  },
+  {
+   "app": "FairEmail",
+   "card": "3 x \"Hostname verification disabled\" (EmailProvider$5 / $6, ConnectionHelper$1)",
+   "matched": "Hostname verification disabled | eu.faircode.email.EmailProvider$5",
+   "hand": "TP-low",
+   "truth": "REAL",
+   "ai": [
+    "TP",
+    "TP"
+   ],
+   "reason": "{\"verdict\":\"TRUE_POSITIVE\",\"confidence\":65,\"reason\":\"EmailProvider$5.verify() unconditionally returns true, so any certificate is accepted for any hostname. That is an intrinsic CWE-297 weakness and a man-in-the-middle could impersonate the server. I couldn't "
+  },
+  {
+   "app": "FairEmail",
+   "card": "broadcast `NEW_MESSAGE_COUNT` without permission (ServiceSynchronize$14)",
+   "matched": "Broadcast sent without a receiver permission | eu.faircode.email.ServiceSynchronize$14",
+   "hand": "BY-DESIGN",
+   "truth": "DESIGN",
+   "ai": [
+    "FP",
+    "FP"
+   ],
+   "reason": "{\"verdict\":\"FALSE_POSITIVE\",\"confidence\":70,\"reason\":\"FairEmail sends a deliberate, implicit broadcast \\\"eu.faircode.email.NEW_MESSAGE_COUNT\\\" whose only extra is an integer unread \\\"count\\\", so it is a public integration point (for example for launcher or wid"
+  },
+  {
+   "app": "FairEmail",
+   "card": "Intent -> WebView.loadDataWithBaseURL (ActivityAMP, exported VIEW of text/x-amp-",
+   "matched": "Untrusted input is loaded into a WebView | eu.faircode.email.ActivityAMP$2",
+   "hand": "BY-DESIGN",
+   "truth": "DESIGN",
+   "ai": [
+    "REVIEW",
+    "REVIEW"
+   ],
+   "reason": "{\"verdict\":\"NEEDS_REVIEW\",\"confidence\":55,\"reason\":\"In ActivityAMP$2.onExecuted, the HTML in p2 goes into WebView.loadDataWithBaseURL with a null base URL, and the flagged flow starts at Intent.getParcelableExtra() in the SimpleTask arguments. The code shown d"
+  },
+  {
+   "app": "FairEmail",
+   "card": "12 cards: file path / intent redirection / class by name through `SimpleTask$2.a",
+   "matched": "Untrusted input is used as a file path | eu.faircode.email.EntityAttachment",
+   "hand": "FP (probable)",
+   "truth": "NOT",
+   "ai": [
+    "FP",
+    "FP"
+   ],
+   "reason": "{\"verdict\":\"FALSE_POSITIVE\",\"confidence\":72,\"reason\":\"The FileOutputStream path is the file returned by EntityAttachment.getFile(context) plus a fixed \\\".zip\\\" suffix. In FairEmail, getFile builds the path from the app's private files directory and the attachm"
+  },
+  {
+   "app": "OpenTracks",
+   "card": "\"ContentProvider.query() may build SQL by string concatenation\" (`CustomContentP",
+   "matched": "ContentProvider.query() may build SQL by string concatenatio | dennisguse.opentracks.data.CustomContentProvider",
+   "hand": "FP",
+   "truth": "NOT",
+   "ai": [
+    "REVIEW",
+    "REVIEW"
+   ],
+   "reason": "{\"verdict\":\"NEEDS_REVIEW\",\"confidence\":55,\"reason\":\"In the visible cases the concatenated pieces are constants plus ContentUris.parseId (a long, so it cannot carry SQL) and parseTrackIdsFromUri joined into an IN(...) clause. That second source is attacker-infl"
+  }
+ ],
+ "unmatched": [
+  [
+   "Feeder",
+   "\"OpenAI API key embedded\" (`ComposableSingletons$OpenAISectionKt`)",
+   "no dump for Feeder"
+  ],
+  [
+   "Feeder",
+   "\"TLS certificate validation disabled\" (`OkHttpBuilderExtensionsKt$trus",
+   "no dump for Feeder"
+  ],
+  [
+   "Nextcloud Notes",
+   "\"Hardcoded sensitive field: TOKEN_RECIPIENT_CLASS\" (`Recipient`)",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Nextcloud Notes",
+   "\"High-entropy string near a credential-like name (x3)\" (`CustomLinkKt`",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Nextcloud Notes",
+   "\"Hardcoded sensitive field: AccessControlAllowCredentials\" (`io.ktor.h",
+   "no confident match (best score 3)"
+  ],
+  [
+   "Nextcloud Notes",
+   "\"Hardcoded sensitive field: LockToken\" (`io.ktor.http.HttpHeaders`)",
+   "no confident match (best score 3)"
+  ],
+  [
+   "Session",
+   "high-entropy string near a credential name, `FirebaseTokenFetcher`",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Nextcloud Notes",
+   "high-entropy x3, `CustomLinkKt`",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Nextcloud Notes",
+   "hardcoded sensitive field `TOKEN_RECIPIENT_CLASS`",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Nextcloud Notes",
+   "hardcoded sensitive field `AccessControlAllowCredentials`, `LockToken`",
+   "no confident match (best score 3)"
+  ],
+  [
+   "Termux",
+   "Debuggable build",
+   "no dump for Termux"
+  ],
+  [
+   "Termux",
+   "Zip Slip, TermuxInstaller$1",
+   "no dump for Termux"
+  ],
+  [
+   "Termux",
+   "CRITICAL shell command, AppShell (from RunCommandService)",
+   "no dump for Termux"
+  ],
+  [
+   "Termux",
+   "file path, FileReceiverActivity.onResume (Intent.getData)",
+   "no dump for Termux"
+  ],
+  [
+   "Termux",
+   "file path, FileReceiverActivity.saveStreamWithName",
+   "no dump for Termux"
+  ],
+  [
+   "Termux",
+   "file path, FileUtils (resultDirectoryPath) x2",
+   "no dump for Termux"
+  ],
+  [
+   "Termux",
+   "file path, FileUtils (ReportActivity)",
+   "no dump for Termux"
+  ],
+  [
+   "Termux",
+   "file path, TermuxShellUtils (executable)",
+   "no dump for Termux"
+  ],
+  [
+   "Monerujo",
+   "Cleartext traffic allowed",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Ivy Wallet",
+   "Cleartext traffic allowed",
+   "no dump for Ivy Wallet"
+  ],
+  [
+   "Ivy Wallet",
+   "class by name, S1.b (OBF)",
+   "no dump for Ivy Wallet"
+  ],
+  [
+   "TermuxFileReceiverActivity.onResume: Intent.getData() -> FileInputStream (reachable, exported)",
+   "TRUE POSITIVE",
+   "no dump for TermuxFileReceiverActivity.onResume: Intent.getData() -> FileInputStream (reachable, exported)"
+  ],
+  [
+   "KeystoreAPI$2.writeResult (not reached from an exported component)",
+   "NEEDS REVIEW",
+   "no dump for KeystoreAPI$2.writeResult (not reached from an exported component)"
+  ],
+  [
+   "StorageGetAPI$StorageActivity.onActivityResult (exported=false)",
+   "NEEDS REVIEW",
+   "no dump for StorageGetAPI$StorageActivity.onActivityResult (exported=false)"
+  ],
+  [
+   "DAVx5",
+   "NSC cleartext permitted",
+   "no confident match (best score 0)"
+  ],
+  [
+   "DAVx5",
+   "NSC trusts user CAs",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Kiwix",
+   "Intent extra -> VideoEnabledWebView.loadUrl",
+   "no confident match (best score 3)"
+  ],
+  [
+   "Markor",
+   "Cleartext traffic allowed",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Catima",
+   "SQL from provider parameters, CardsContentProvider.query",
+   "no confident match (best score 3)"
+  ],
+  [
+   "Breezy",
+   "Hardcoded credential: JWT (a9)",
+   "no confident match (best score 1)"
+  ],
+  [
+   "Breezy",
+   "Hardcoded credential: JWT (kv3)",
+   "no confident match (best score 1)"
+  ],
+  [
+   "Breezy",
+   "Hardcoded credential: JWT (g10)",
+   "no confident match (best score 1)"
+  ],
+  [
+   "Mihon",
+   "NSC cleartext permitted",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Mihon",
+   "NSC trusts user CAs",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Infinity",
+   "Cleartext traffic allowed",
+   "no dump for Infinity"
+  ],
+  [
+   "Infinity",
+   "Intent -> WebView.loadUrl, WebViewActivity (2 cards: in-class + SSA, s",
+   "no dump for Infinity"
+  ],
+  [
+   "Infinity",
+   "Intent.getData -> File.delete, DownloadedMediaDeleteActionBroadcastRec",
+   "no dump for Infinity"
+  ],
+  [
+   "LibreTube",
+   "NSC cleartext / user CAs (2)",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Read You",
+   "Cleartext traffic allowed",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Read You",
+   "Hardcoded sensitive field `INJECTION_TOKEN`",
+   "no confident match (best score 3)"
+  ],
+  [
+   "Catima / Mihon / LibreTube",
+   "1 / 2 / 2 -> same",
+   "no confident match (best score 0)"
+  ],
+  [
+   "Jellyfin",
+   "NSC cleartext / user CAs (2)",
+   "no confident match (best score 0)"
+  ],
+  [
+   "AnkiDroid",
+   "Cleartext traffic allowed + NSC cleartext / user CAs (3)",
+   "no dump for AnkiDroid"
+  ],
+  [
+   "AnkiDroid",
+   "Exported provider without a permission (CardContentProvider)",
+   "no dump for AnkiDroid"
+  ],
+  [
+   "AnkiDroid",
+   "file path, jx2 (OBF) via ACRA CrashReportDialog",
+   "no dump for AnkiDroid"
+  ],
+  [
+   "AnkiDroid",
+   "class by name, k73 (OBF = androidx FragmentFactory)",
+   "no dump for AnkiDroid"
+  ],
+  [
+   "FairEmail",
+   "broadcast in `me.leolin.shortcutbadger.impl.VivoHomeBadger`",
+   "no confident match (best score 1)"
+  ],
+  [
+   "FairEmail",
+   "hardcoded `KEY_LAST_TOKEN_RESPONSE` (net.openid.appauth.AuthState)",
+   "no confident match (best score 1)"
+  ],
+  [
+   "FairEmail",
+   "`w71` Class.forName from Intent extra through `gt.next()`",
+   "no confident match (best score 1)"
+  ],
+  [
+   "Quillpad",
+   "\"Insecure TLS protocol requested: SSL\" (`eq2`, OBF)",
+   "no dump for Quillpad"
+  ],
+  [
+   "Quillpad",
+   "(NOT reported) trust-all TrustManager `gq2`",
+   "no dump for Quillpad"
+  ],
+  [
+   "OpenTracks",
+   "Zip Slip, `KMZTrackImporter.readAndSaveImageFile`",
+   "no confident match (best score 3)"
+  ],
+  [
+   "Orbot",
+   "2 x \"Untrusted input reaches an SQL statement\" (`OnionServiceContentPr",
+   "no confident match (best score 2)"
+  ]
+ ]
+}

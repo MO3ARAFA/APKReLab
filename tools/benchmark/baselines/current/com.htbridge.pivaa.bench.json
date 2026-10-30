@@ -1,0 +1,32 @@
+{
+ "package": "com.htbridge.pivaa",
+ "status": {
+  "weak-iv": "FOUND",
+  "hostname-verify": "FOUND",
+  "webview-remote-url": "FOUND",
+  "deserialization": "FOUND",
+  "sql-input": "FOUND",
+  "tapjacking": "FOUND",
+  "backup": "FOUND",
+  "debug": "FOUND",
+  "weak-crypto": "FOUND",
+  "hardcoded-key": "FOUND",
+  "dyn-code": "FOUND",
+  "world-files": "FOUND",
+  "http": "FOUND",
+  "weak-hash": "FOUND",
+  "weak-rng": "FOUND",
+  "provider": "FOUND",
+  "receiver": "FOUND",
+  "service": "FOUND",
+  "js-enabled": "MISS",
+  "plugin-state": "FOUND",
+  "temp-file": "FOUND",
+  "hardcoded-data": "MISS",
+  "untrusted-ca": "FOUND",
+  "banned-api": "OUT OF SCOPE",
+  "webview-ssl": "MISS",
+  "path-traversal": "OUT OF SCOPE",
+  "sqlite-clear": "MISS"
+ }
+}

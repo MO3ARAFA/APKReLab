@@ -1,0 +1,31 @@
+{
+ "app": "InjuredAndroid",
+ "app_prefix": "Lb3nac/injuredandroid/",
+ "note": "status verified = owner read the smali (0.55.2); documented = public write-up of the app, not checked here",
+ "entries": [
+  {
+   "id": "rce-deeplink",
+   "class": "RCEActivity",
+   "title_any": [
+    "shell"
+   ],
+   "status": "verified"
+  },
+  {
+   "id": "flag12-webview",
+   "class": "FlagTwelveProtectedActivity",
+   "title_any": [
+    "WebView"
+   ],
+   "status": "verified"
+  },
+  {
+   "id": "xss-webview",
+   "class": "DisplayPostXSS",
+   "title_any": [
+    "WebView"
+   ],
+   "status": "documented"
+  }
+ ]
+}

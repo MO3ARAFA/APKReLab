@@ -1,0 +1,17 @@
+{
+ "package": "infosecadventures.allsafe",
+ "status": {
+  "logging": "FOUND",
+  "hardcoded-creds": "FOUND",
+  "root-detection": "OUT OF SCOPE",
+  "code-exec": "FOUND",
+  "secure-flag": "OUT OF SCOPE",
+  "pinning-bypass": "OUT OF SCOPE",
+  "broadcast": "FOUND",
+  "deeplink": "FOUND",
+  "sqli": "FOUND",
+  "webview": "MISS",
+  "smali-patch": "OUT OF SCOPE",
+  "native": "OUT OF SCOPE"
+ }
+}

@@ -1,0 +1,5 @@
+Untrusted Intent is launched by this app (intent redirection) | com.insecureshop.WebView2Activity | Data from Intent.getParcelableExtra() reaches Context.startActivity() in method WebView2Activity.onCreate(Landroid/os/Bundle;)V.
+Untrusted input chooses the file or content URI the app opens | com.insecureshop.ChooserActivity | Data from Intent.getParcelableExtra() reaches ContentResolver.openInputStream() in method ChooserActivity.makeTempCopy(Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;.
+Untrusted input is loaded into a WebView | com.insecureshop.PrivateActivity | Data from Intent.getStringExtra() reaches WebView.loadUrl() in method PrivateActivity.onCreate(Landroid/os/Bundle;)V.
+Untrusted input is loaded into a WebView | com.insecureshop.WebView2Activity | Data from Intent.getDataString() reaches WebView.loadUrl() in method WebView2Activity.onCreate(Landroid/os/Bundle;)V.
+Untrusted input is loaded into a WebView | com.insecureshop.WebViewActivity | Data from Intent.getData() reaches WebView.loadUrl() in method WebViewActivity.onCreate(Landroid/os/Bundle;)V.

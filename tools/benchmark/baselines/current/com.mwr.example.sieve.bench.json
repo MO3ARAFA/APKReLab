@@ -1,0 +1,14 @@
+{
+ "package": "com.mwr.example.sieve",
+ "status": {
+  "exported-activity-login-bypass": "FOUND",
+  "exported-provider-passwords": "FOUND",
+  "provider-sqli": "FOUND",
+  "provider-path-traversal": "FOUND",
+  "exported-services": "FOUND",
+  "debuggable": "FOUND",
+  "allow-backup": "FOUND",
+  "sqlite-plaintext-key": "FOUND",
+  "native-crypto": "OUT OF SCOPE"
+ }
+}

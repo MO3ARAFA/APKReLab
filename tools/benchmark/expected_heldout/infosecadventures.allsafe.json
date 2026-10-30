@@ -1,0 +1,120 @@
+[
+ {
+  "id": "logging",
+  "vuln": "Insecure logging",
+  "rule": [
+   "log-sensitive-strings",
+   "log-credential-object"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "hardcoded-creds",
+  "vuln": "Hardcoded credentials",
+  "rule": [
+   "secrets-sensitive-fields",
+   "high-entropy-strings",
+   "secrets-known-formats",
+   "res-strings-secret-names"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "root-detection",
+  "vuln": "Root detection (Frida practice)",
+  "min_severity": "INFO",
+  "independent": true,
+  "out_of_scope": "dynamic bypass challenge, not a code weakness"
+ },
+ {
+  "id": "code-exec",
+  "vuln": "Arbitrary code execution",
+  "rule": [
+   "package-context-code",
+   "dynamic-code-loading",
+   "dex-load-writable-dir"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "secure-flag",
+  "vuln": "Secure flag bypass",
+  "min_severity": "INFO",
+  "independent": true,
+  "out_of_scope": "dynamic bypass challenge"
+ },
+ {
+  "id": "pinning-bypass",
+  "vuln": "Certificate pinning bypass",
+  "min_severity": "INFO",
+  "independent": true,
+  "out_of_scope": "dynamic bypass challenge"
+ },
+ {
+  "id": "broadcast",
+  "vuln": "Insecure broadcast receiver",
+  "rule": [
+   "manifest-exported-components",
+   "receiver-export-flag"
+  ],
+  "title_any": [
+   "receiver"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "deeplink",
+  "vuln": "Deep link exploitation",
+  "rule": [
+   "manifest-deep-links",
+   "deeplink-host-validation",
+   "deeplink-config-poisoning"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "sqli",
+  "vuln": "SQL injection",
+  "rule": [
+   "sql-concat",
+   "taint-flow",
+   "provider-sql-injection"
+  ],
+  "title_any": [
+   "sql"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "webview",
+  "vuln": "Vulnerable WebView",
+  "rule": [
+   "webview-js-interface",
+   "webview-file-access",
+   "webview-intent-url",
+   "webview-mixed-content"
+  ],
+  "min_severity": "INFO",
+  "independent": true
+ },
+ {
+  "id": "smali-patch",
+  "vuln": "Smali patching",
+  "min_severity": "INFO",
+  "independent": true,
+  "out_of_scope": "reverse-engineering exercise, not a code weakness"
+ },
+ {
+  "id": "native",
+  "vuln": "Native library",
+  "min_severity": "INFO",
+  "independent": true,
+  "out_of_scope": "no native-code analysis (known limit)"
+ }
+]

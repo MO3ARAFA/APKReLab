@@ -1,0 +1,13 @@
+{
+ "package": "com.vuldroid.application",
+ "status": {
+  "code-exec-app": "FOUND",
+  "webview-xhr": "FOUND",
+  "fileprovider": "MISS",
+  "reset-token": "FOUND",
+  "xss-exported": "FOUND",
+  "xss-deeplink": "FOUND",
+  "intent-sniff": "FOUND",
+  "email-broadcast": "FOUND"
+ }
+}

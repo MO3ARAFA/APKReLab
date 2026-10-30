@@ -1,0 +1,42 @@
+allsafe.apk: libs=59 unknownVersion=0 flagged=1
+   com.squareup.okhttp3:okhttp 4.9.0 -> 1: GHSA-3cqm-mf7h-prrj[H]
+andotp.apk: libs=42 unknownVersion=0 flagged=0
+anki.apk: libs=92 unknownVersion=0 flagged=0
+aps.apk: libs=1 unknownVersion=0 flagged=1
+   org.bouncycastle:bcprov-jdk18on 1.78 -> 4: GHSA-574f-3g2m-x479[C],GHSA-c3fc-8qff-9hwx[M],GHSA-9pwp-9qqc-pr26[C],GHSA-qp49-qgx5-5m26[H]
+breezy.apk: libs=3 unknownVersion=0 flagged=1
+   com.squareup.okhttp3:okhttp 3.14.9 -> 1: GHSA-3cqm-mf7h-prrj[H]
+catima.apk: libs=86 unknownVersion=0 flagged=0
+davx5.apk: libs=116 unknownVersion=0 flagged=0
+fairemail.apk: libs=67 unknownVersion=0 flagged=0
+h_protonmail.apk: libs=109 unknownVersion=0 flagged=0
+h_syncthing.apk: libs=84 unknownVersion=0 flagged=0
+h_trailsense.apk: libs=85 unknownVersion=0 flagged=0
+infinity.apk: libs=104 unknownVersion=0 flagged=0
+insecureshop.apk: libs=41 unknownVersion=0 flagged=0
+ivy.apk: libs=99 unknownVersion=0 flagged=0
+jellyfin.apk: libs=91 unknownVersion=0 flagged=0
+kiwix.apk: libs=66 unknownVersion=0 flagged=0
+libretube.apk: libs=78 unknownVersion=0 flagged=0
+markor.apk: libs=57 unknownVersion=0 flagged=0
+mihon.apk: libs=3 unknownVersion=0 flagged=0
+monerujo.apk: libs=50 unknownVersion=0 flagged=0
+ncnotes.apk: libs=92 unknownVersion=0 flagged=0
+netguard.apk: libs=36 unknownVersion=0 flagged=0
+newpipe.apk: libs=101 unknownVersion=0 flagged=0
+opentracks.apk: libs=53 unknownVersion=0 flagged=0
+orbot.apk: libs=78 unknownVersion=0 flagged=0
+ovaa.apk: libs=34 unknownVersion=0 flagged=0
+pivaa.apk: libs=0 unknownVersion=0 flagged=0
+quillpad.apk: libs=102 unknownVersion=0 flagged=0
+readyou.apk: libs=126 unknownVersion=0 flagged=0
+seal.apk: libs=92 unknownVersion=0 flagged=0
+session.apk: libs=126 unknownVersion=0 flagged=0
+shizuku.apk: libs=0 unknownVersion=0 flagged=0
+sieve.apk: libs=0 unknownVersion=0 flagged=0
+termux.apk: libs=36 unknownVersion=0 flagged=0
+tusky.apk: libs=80 unknownVersion=0 flagged=1
+   org.bouncycastle:bcprov-jdk15on 1.70 -> 5: GHSA-hr8g-6v94-x4m9[M],GHSA-wjxj-5m7g-mg7q[M],GHSA-4h8f-2wvx-gg5w[M],GHSA-8xfc-gm6g-vgpv[M]
+unstoppable.apk: libs=123 unknownVersion=0 flagged=1
+   org.bouncycastle:bcprov-jdk15on 1.70 -> 5: GHSA-hr8g-6v94-x4m9[M],GHSA-wjxj-5m7g-mg7q[M],GHSA-4h8f-2wvx-gg5w[M],GHSA-8xfc-gm6g-vgpv[M]
+vuldroid.apk: libs=27 unknownVersion=0 flagged=0

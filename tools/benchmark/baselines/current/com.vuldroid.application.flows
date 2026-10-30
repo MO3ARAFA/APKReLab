@@ -1,0 +1,5 @@
+Untrusted Intent is launched by this app (intent redirection) | com.vuldroid.application.RoutingActivity | Data from Intent.getParcelableExtra() reaches Context.startActivity() in method RoutingActivity.handleIntentExtras(Landroid/content/Intent;)V.
+Untrusted input is loaded into a WebView | com.vuldroid.application.BlogsViewer | Data from Intent.getData() (through field BlogsViewer.gettoken:Ljava/lang/String; (written in BlogsViewer.onCreate(Landroid/os/Bundle;)V)) reaches WebView.loadUrl() in method BlogsViewer.onCreate(Landroid/os/Bundle;)V.
+Untrusted input is loaded into a WebView | com.vuldroid.application.ForgetPassword | Data from Intent.getData() reaches WebView.loadUrl() in method ForgetPassword.onCreate(Landroid/os/Bundle;)V.
+Untrusted input is loaded into a WebView | com.vuldroid.application.YoutubeViewer | Data from Intent.getStringExtra() reaches WebView.loadUrl() in method YoutubeViewer.onCreate(Landroid/os/Bundle;)V.
+Untrusted input reaches a shell command | com.vuldroid.application.RootDetection | Data from Intent.getStringExtra() reaches Runtime.exec() in method RootDetection.onCreate(Landroid/os/Bundle;)V.

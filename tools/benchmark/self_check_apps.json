@@ -1,0 +1,8 @@
+[
+ {"name": "Sieve", "package": "com.mwr.example.sieve", "expected": "expected_heldout/com.mwr.example.sieve.json", "heldout": true},
+ {"name": "Allsafe", "package": "infosecadventures.allsafe", "expected": "expected_heldout/infosecadventures.allsafe.json"},
+ {"name": "PIVAA", "package": "com.htbridge.pivaa", "expected": "expected_heldout/com.htbridge.pivaa.json"},
+ {"name": "Vuldroid", "package": "com.vuldroid.application", "expected": "expected_heldout/com.vuldroid.application.json"},
+ {"name": "OVAA", "package": "oversecured.ovaa", "expected": "expected/oversecured.ovaa.json"},
+ {"name": "InsecureShop", "package": "com.insecureshop", "expected": "expected_taint/insecureshop.json"}
+]
