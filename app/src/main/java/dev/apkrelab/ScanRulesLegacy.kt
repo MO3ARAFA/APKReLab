@@ -1465,7 +1465,13 @@ object ProviderCodePermissionRule : ScanRule {
     override val confidence = "MEDIUM"
 
     private val dataMethods = setOf("query", "insert", "update", "delete", "bulkInsert", "openFile", "call")
-    private val checkRe = rx("->(?:checkCallingPermission|checkCallingOrSelfPermission|enforceCallingPermission|enforceCallingOrSelfPermission|checkCallingUriPermission|enforceCallingUriPermission|getCallingPackage|getCallingUid)\\(")
+    private val checkRe = rx("->(?:checkCallingPermission|checkCallingOrSelfPermission|enforceCallingPermission|enforceCallingOrSelfPermission|checkCallingUriPermission|enforceCallingUriPermission|getCallingPackage|getCallingUid|checkSignatures)\\(")
+    /** Phase 3 (K-9 SettingsProvider: query / insert / update / delete only throw UnsupportedOperationException, openFile checks the caller's signing certificate):
+     *  a data method with a throw and no return instruction serves no data to anyone, so it counts as closed. */
+    internal var THROWING_IS_CLOSED = true
+    private val returnRe = rx("^\\s*return", RegexOption.MULTILINE)
+    private val throwRe = rx("^\\s*throw ", RegexOption.MULTILINE)
+    private fun alwaysThrows(body: String) = THROWING_IS_CLOSED && throwRe.containsMatchIn(body) && !returnRe.containsMatchIn(body)
 
     override fun scan(ctx: RuleContext): List<Finding> {
         val text = ctx.text
@@ -1490,9 +1496,12 @@ object ProviderCodePermissionRule : ScanRule {
             return false
         }
         val present = all.filter { it.groupValues[1] in dataMethods }
-        if (present.isEmpty() || present.any { !checked(it.groupValues[3]) }) return emptyList()
+        if (present.isEmpty() || present.any { !checked(it.groupValues[3]) && !alwaysThrows(it.groupValues[3]) }) return emptyList()
+        val closed = present.filter { !checked(it.groupValues[3]) }.map { it.groupValues[1] }.distinct()
+        if (closed.size == present.map { it.groupValues[1] }.distinct().size) return emptyList()     // nothing is checked: an empty provider is not "checked in code"
         return listOf(ctx.finding(Severity.INFO, title,
-            "Every data method of this provider (" + present.map { it.groupValues[1] }.distinct().joinToString(", ") + ") checks the calling app in code (permission check or calling package / uid).",
+            "Every data method of this provider (" + present.map { it.groupValues[1] }.distinct().filter { it !in closed }.joinToString(", ") + ") checks the calling app in code (permission check, calling package / uid or signature check)" +
+                (if (closed.isEmpty()) "." else "; " + closed.joinToString(", ") + " only throw" + (if (closed.size == 1) "s" else "") + " an exception and serve no data."),
             "Keep the check in every method; a manifest android:permission / readPermission / writePermission is easier to audit.",
             text.indexOf(".super Landroid/content/ContentProvider;").coerceAtLeast(0), "CWE-926"))
     }
