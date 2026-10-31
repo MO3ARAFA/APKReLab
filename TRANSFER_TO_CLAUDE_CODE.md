@@ -1,6 +1,6 @@
 # Transfer report: APK ReLab 0.82.0 -> Claude Code (2026-10-14)
 
-Paste this as your first message, then let Claude Code read CLAUDE.md, HANDOFF.md (top entries) and BLUEPRINT.md.
+Paste this as your first message, then let Claude Code read CLAUDE.md, docs/internal/HANDOFF.md (top entries) and BLUEPRINT.md.
 
 ## 1. What this is
 An on-device Android static-analysis app (APK ReLab). Pipeline: classes -> smali -> IR -> SSA -> call graph (RTA) -> inter-procedural taint -> cards; plus text rules, manifest / resource rules, an AI triage ("Council") layer. Big apps (JustMarkets: 59,667 classes) are analysed in groups under a 256-512 MB heap.

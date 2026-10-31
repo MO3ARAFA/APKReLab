@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
  * class (or, failing that, the app) loads with `System.loadLibrary("x")` and that exports JNI_OnLoad. A dynamic binding is a statement about the candidates, not proof of which function
  * implements the method (that needs the library's code).
  *
- * Measured on the decoded corpus (tools/sandbox/PERF.md 1.1.0) before it was built. Feeding untrusted input into a native method was measured too and NOT made a finding:
+ * Measured on the decoded corpus (docs/internal/PERF.md 1.1.0) before it was built. Feeding untrusted input into a native method was measured too and NOT made a finding:
  * one site in 16 apps, and that one reads the app's own APK entries (a protector's integrity check).
  */
 object NativeBridge {

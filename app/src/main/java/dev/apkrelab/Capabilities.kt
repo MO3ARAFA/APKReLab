@@ -3,7 +3,7 @@ package dev.apkrelab
 /**
  * 0.39.0: what the AI Hub knows about the APP ITSELF (its screens, features, scanner coverage and limits).
  * [overview] is part of the agent's system prompt (short); [topic] is returned by the tool `app_capabilities` (details).
- * KEEP IN SYNC with the code: when a check, tab or feature is added or removed, update the text here too (see HANDOFF.md).
+ * KEEP IN SYNC with the code: when a check, tab or feature is added or removed, update the text here too (see docs/internal/HANDOFF.md).
  */
 object Capabilities {
     fun overview(): String =
