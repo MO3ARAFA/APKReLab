@@ -48,6 +48,7 @@ fun main(args: Array<String>) {
     val final = SecurityScanner.dedupe(all)
     FindingPolish.lowerNonExportedReceivers(final, FindingPolish.nonExportedReceiversAndServices(mc))   // 0.80.0, like MainActivity.reachPass
     FindingPolish.lowerSeparateProcessDialogs(final, FindingPolish.separateProcessActivities(mc))        // 0.81.0
+    FindingPolish.lowerGuardedProviderFlows(final, mc, PermissionGuard(mc))                              // phase 3, like MainActivity (no device resolver)
     // 1.1.0, like MainActivity: receivers registered only with a signature permission (or NOT_EXPORTED and minSdk 33+); no device here, so platform levels come from ReportBuilder.defaultLevel
     val minSdk = Regex("minSdkVersion\\s*=\\s*\"?(\\d+)").find(manifest)?.groupValues?.get(1)?.toIntOrNull() ?: 1
     DynamicReceivers.lower(final, DynamicReceivers.protectedReceivers(minSdk) { p -> mc.declaredPerms[p]?.let { PermissionGuard.isSignatureLevel(it) } ?: ((ReportBuilder.defaultLevel(p) ?: 0) >= 2) })

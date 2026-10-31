@@ -440,6 +440,43 @@ object FindingPolish {
         return n
     }
 
+    /** Phase 3: switch for the mutation check of [lowerGuardedProviderFlows]. */
+    internal var PROVIDER_CONTEXT = true
+
+    /**
+     * Maturity protocol phase 3 (Nextcloud DiskLruImageCacheFileProvider: exported, android:permission="android.permission.MANAGE_DOCUMENTS"; the class-level flow
+     * "Data from a ContentProvider method parameter ... reaches FileOutputStream" was HIGH): a HIGH / CRITICAL taint card whose source is a ContentProvider parameter and whose
+     * class (or outer class) is a provider that the manifest does NOT export, or that only a SIGNATURE-level permission opens (PermissionGuard: signature / signatureOrSystem /
+     * privileged / system, or a platform permission such as MANAGE_DOCUMENTS / BIND_*), drops one level with confidence LOW. A dangerous or normal permission (READ_SMS) is not a
+     * guard: the card stays. The provider's guard for the operation is the weaker of read and write. Returns the number lowered; idempotent.
+     */
+    fun lowerGuardedProviderFlows(list: List<SecurityScanner.Finding>, mc: ManifestContext, guard: PermissionGuard): Int {
+        if (!PROVIDER_CONTEXT) return 0
+        val providers = mc.components.filter { it.tag == "provider" }.groupBy { mc.smaliTypeOf(it) }.filterKeys { it.isNotEmpty() }
+        var n = 0
+        for (f in list) {
+            try {
+                if (!f.ruleId.startsWith("taint") || f.severity.rank > 1 || !f.detail.startsWith("Data from a ContentProvider method parameter")) continue
+                if (f.adjusted.contains("provider is not exported") || f.adjusted.contains("signature-level permission guards this provider")) continue
+                val t = f.classType ?: continue
+                val outer = if (t.contains('$')) t.substringBefore('$') + ";" else t
+                val key = if (providers.containsKey(t)) t else outer
+                val entries = providers[key] ?: continue
+                val why = when {
+                    entries.none { it.exported } -> "the provider is not exported (only the app itself, or a URI it grants, reaches it)"
+                    guard.guardFor(key, PermissionGuard.Access.ANY) == PermissionGuard.Guard.SIGNATURE ->
+                        "a signature-level permission guards this provider (" + (entries.first { it.exported }.let { it.permission ?: it.readPermission ?: it.writePermission } ?: "") + "): only apps signed with the same key, or the system, can call it"
+                    else -> continue
+                }
+                f.severity = if (f.severity == SecurityScanner.Severity.CRITICAL) SecurityScanner.Severity.HIGH else SecurityScanner.Severity.MEDIUM
+                f.confidence = "LOW"
+                f.adjusted = (if (f.adjusted.isNotEmpty()) f.adjusted + " " else "") + "Lowered one level: $why."
+                n++
+            } catch (_: Throwable) { }
+        }
+        return n
+    }
+
     /** 0.108.0: smali types of NOT exported activities. */
     fun nonExportedActivities(mc: ManifestContext): Set<String> =
         mc.components.filter { !it.exported && it.tag == "activity" }.map { mc.smaliTypeOf(it) }.filter { it.isNotEmpty() }.toSet()

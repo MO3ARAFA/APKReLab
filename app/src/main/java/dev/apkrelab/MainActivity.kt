@@ -3493,6 +3493,7 @@ class MainActivity : Activity() {
                 FindingPolish.lowerNonExportedReceivers(secFindings, FindingPolish.nonExportedReceiversAndServices(mc))   // 0.80.0
                 FindingPolish.lowerSeparateProcessDialogs(secFindings, FindingPolish.separateProcessActivities(mc))       // 0.81.0
                 FindingPolish.lowerConstantFedActivities(secFindings, FindingPolish.nonExportedActivities(mc))            // 0.108.0
+                FindingPolish.lowerGuardedProviderFlows(secFindings, mc, PermissionGuard(mc, PermissionGuard.systemResolver(this)))   // phase 3
                 // 1.1.0: receivers registered at run time with a signature permission (or RECEIVER_NOT_EXPORTED and minSdk 33+): their Intent comes from the app or the system
                 val sys = PermissionGuard.systemResolver(this)
                 val minSdk = Regex("minSdkVersion\\s*=\\s*\"?(\\d+)").find(manifestFull)?.groupValues?.get(1)?.toIntOrNull() ?: 1

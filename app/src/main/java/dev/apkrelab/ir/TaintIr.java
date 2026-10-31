@@ -453,6 +453,8 @@ public final class TaintIr {
         String retSrc;
         boolean retWeak;
         boolean retInternal;
+        /** Maturity phase 3: 0 = no path check, 1 = a canonical-path check dominates every reference return (the return is clean), 2 = a check exists but not on every return. */
+        int pathSanitizer;
         final Map<Integer, Map<String, SinkRef>> sinkParams = new TreeMap<>();
         int refsDropped;      // 0.66.5: sink references not kept because the slot was full (MAX_REFS); measurement only
 
@@ -473,7 +475,7 @@ public final class TaintIr {
 
         String fingerprint() {
             StringBuilder sb = new StringBuilder();
-            sb.append(retParams).append('/').append(retLevel).append('/').append(retSrc).append(retWeak ? "~" : "").append(retInternal ? "!" : "");
+            sb.append(retParams).append('/').append(retLevel).append('/').append(retSrc).append(retWeak ? "~" : "").append(retInternal ? "!" : "");  // pathSanitizer is structural (the same at every analysis of the method): not part of the fingerprint
             for (Map.Entry<Integer, Map<String, SinkRef>> e : sinkParams.entrySet()) {
                 sb.append('|').append(e.getKey()).append(':');
                 for (SinkRef r : e.getValue().values()) sb.append(r.key()).append('#').append(r.chain.size()).append(',');
@@ -1040,6 +1042,7 @@ public final class TaintIr {
             Intra in = new Intra(this, m);
             in.solve();
             Summary s = in.finish();
+            if (PATH_SANITIZER_SUMMARY) s.pathSanitizer = pathSanitizerKind(m, in.ssa.cfg);
             summaries.put(m.key(), s);
             fingerprints.remove(m.key());
             flowsOf.put(m.key(), in.flows);
@@ -1088,6 +1091,7 @@ public final class TaintIr {
     static String shortRef(String ref) {
         if (ref != null && ref.startsWith(FANOUT_MARK)) ref = ref.substring(FANOUT_MARK.length());
         if (ref != null && ref.startsWith(ERASED_MARK)) ref = ref.substring(ERASED_MARK.length());
+        if (ref != null && ref.startsWith(SANITIZER_PARTIAL_MARK)) ref = ref.substring(SANITIZER_PARTIAL_MARK.length());
         if (ref != null && ref.startsWith(PARCEL_HELD_MARK)) ref = ref.substring(PARCEL_HELD_MARK.length());
         return ref == null || ref.isEmpty() ? "" : shortKey(ref);
     }
@@ -1096,6 +1100,75 @@ public final class TaintIr {
 
     /** 0.83.0: a call site that resolves to at least this many targets returns a weak taint (polymorphic fan-out). */
     static final int FANOUT_WEAK = 8;
+    /**
+     * Maturity phase 3 (Paperless ClipboardFileProvider: openFile hands the Uri to a path strategy, ClipboardFileProvider$c.a, which builds File(root, path), calls
+     * getCanonicalFile and throws SecurityException unless the result still starts with the root; the File it returns reached ParcelFileDescriptor.open and was a HIGH card):
+     * an interprocedural sanitizer summary. A callee counts as a path sanitizer ONLY when a canonicalisation (File.getCanonicalPath / getCanonicalFile, Path.normalize /
+     * toRealPath) is followed by a startsWith check that an if-eqz / if-nez tests, and EVERY reference return is dominated by the PASSING side of that test and none by
+     * its failing side (one return path, or every path to a return passes the check; the failing side throws). Then its returned value carries no taint. When the check is there but some return does not pass it, the taint is KEPT and
+     * the result is weak (LOW confidence) with a sentence that says which method to read.
+     */
+    static boolean PATH_SANITIZER_SUMMARY = !Boolean.getBoolean("apkrelab.noPathSanitizerSummary");
+    static final String SANITIZER_PARTIAL_MARK = "pathcheck-partial:";
+
+    static int pathSanitizerKind(MethodIr m, Cfg cfg) {
+        int canon = -1, check = -1, test = -1, result = -1, canonReg = -1;
+        List<Integer> rets = new ArrayList<>();
+        for (Insn in : m.insns) {
+            if (in.kind == Insn.Kind.INVOKE) {
+                String o = in.targetOwner(), n = in.targetName();
+                boolean canonical = ("Ljava/io/File;".equals(o) && (n.equals("getCanonicalPath") || n.equals("getCanonicalFile")))
+                        || ("Ljava/nio/file/Path;".equals(o) && (n.equals("normalize") || n.equals("toRealPath")));
+                if (canonical) { if (canon < 0) { canon = in.index; canonReg = in.defs.length > 0 ? in.defs[0] : -1; } }
+                else if (canon >= 0 && check < 0 && isContainmentCheck(in, canonReg)) {
+                    check = in.index;
+                    if (in.defs.length > 0) result = in.defs[0];               // the parser folds move-result into the invoke's defs
+                }
+            }
+            // the IF that tests the startsWith result itself (its first register is the result register)
+            else if (in.kind == Insn.Kind.IF && result >= 0 && test < 0 && in.uses.length > 0 && in.uses[0] == result) test = in.index;
+            else if (in.kind == Insn.Kind.RETURN && in.op.startsWith("return-object")) rets.add(in.index);
+        }
+        if (canon < 0 || check < 0 || test < 0 || rets.isEmpty() || cfg == null) return 0;
+        Insn ifi = m.insns.get(test);
+        boolean jumpFails;                                                   // which side of the boolean test is "startsWith == false"
+        if (ifi.op.startsWith("if-eqz")) jumpFails = true;
+        else if (ifi.op.startsWith("if-nez")) jumpFails = false;
+        else return 2;                                                       // a two-register compare: the side is not known from the opcode
+        if (ifi.labels.length == 0) return 2;
+        int jump = m.labelIndex(ifi.labels[0]);
+        Cfg.BasicBlock kb = cfg.blockOfInsn(canon), cb = cfg.blockOfInsn(check), ib = cfg.blockOfInsn(test);
+        Cfg.BasicBlock jb = cfg.blockOfInsn(jump), fb = cfg.blockOfInsn(test + 1);
+        if (kb == null || cb == null || ib == null || jb == null || fb == null) return 2;
+        Cfg.BasicBlock pass = jumpFails ? fb : jb;
+        if (!cfg.dominates(kb.id, cb.id) || !cfg.dominates(cb.id, ib.id) || !cfg.dominates(ib.id, pass.id)) return 2;
+        for (int r : rets) {
+            Cfg.BasicBlock rb = cfg.blockOfInsn(r);
+            // every reference return is on the passing side of the check (then none is on the failing side, which ends in a throw or loops)
+            if (rb == null || !cfg.dominates(pass.id, rb.id)) return 2;
+        }
+        return 1;
+    }
+
+    private static final Set<String> PATH_TYPES = new HashSet<>(Arrays.asList("Ljava/io/File;", "Ljava/lang/String;", "Ljava/nio/file/Path;"));
+
+    /**
+     * The confinement test on the canonical value. A framework API is trusted by its name (String / Path startsWith, Kotlin's StringsKt.startsWith / FilesKt.startsWith,
+     * equals); a renamed library helper (R8: Paperless calls kotlin.io.FilesKt.startsWith(File, File) as LH5/j;->p) by its SHAPE only: a static method returning boolean whose
+     * first two parameters are the same path type (File, String or Path) and that takes the canonical value itself. Contains / endsWith / exists are not confinement.
+     */
+    static boolean isContainmentCheck(Insn in, int canonReg) {
+        String o = in.targetOwner(), n = in.targetName(), sig = in.targetSig();
+        if (!sig.endsWith(")Z")) return false;
+        boolean framework = o.startsWith("Ljava/") || o.startsWith("Landroid/") || o.startsWith("Lkotlin/");
+        if (framework) return n.startsWith("startsWith") || n.equals("equals") && !o.equals("Ljava/lang/Object;");
+        if (!in.op.startsWith("invoke-static")) return false;
+        List<String> ps = allParams(sig);
+        if (ps.size() < 2 || !ps.get(0).equals(ps.get(1)) || !PATH_TYPES.contains(ps.get(0))) return false;
+        for (int u : in.uses) if (u == canonReg) return true;
+        return false;
+    }
+
     /** 1.1.0: switch for the mutation check of the substringAfterLast('/') sanitizer. */
     static boolean BASENAME_SANITIZER = !Boolean.getBoolean("apkrelab.noBasenameSanitizer");
     /** 1.1.0: switch for the mutation check of the erased-callback rule (Intra.invoke); false = 1.0.0 behaviour. */
@@ -1472,9 +1545,15 @@ public final class TaintIr {
                             Map<String, SinkRef> refs = sc.sinkParams.get(k);
                             if (refs != null) for (SinkRef r : refs.values()) hitVia(r, t[k]);
                         }
-                        if (k < 64 && (sc.retParams & (1L << k)) != 0) res = res.join(t[k]);
+                        if (k < 64 && (sc.retParams & (1L << k)) != 0 && !(PATH_SANITIZER_SUMMARY && sc.pathSanitizer == 1)) {
+                            Tv r1 = t[k];
+                            if (PATH_SANITIZER_SUMMARY && sc.pathSanitizer == 2 && r1.level > 0 && !r1.weak)
+                                r1 = new Tv(r1.params, r1.level, r1.src, SANITIZER_PARTIAL_MARK + shortKey(c), true, r1.internal);
+                            res = res.join(r1);
+                        }
                     }
-                    if (sc.retLevel > 0 && !megamorphicGeneric) res = res.join(Tv.real(sc.retLevel, sc.retSrc, shortKey(c), sc.retWeak, sc.retInternal));
+                    if (sc.retLevel > 0 && !megamorphicGeneric && !(PATH_SANITIZER_SUMMARY && sc.pathSanitizer == 1))
+                        res = res.join(Tv.real(sc.retLevel, sc.retSrc, shortKey(c), sc.retWeak || (PATH_SANITIZER_SUMMARY && sc.pathSanitizer == 2), sc.retInternal));
                 }
             }
             // 0.83.0 (FairEmail SimpleTask: `data = onExecute(...)` resolves to every task subclass, so ONE shared result field carried the
