@@ -82,7 +82,8 @@ object Verdict {
     private fun where(f: Finding) = f.location.substringAfterLast('/').substringAfterLast('.').ifEmpty { f.location }
 
     /** [all] = every finding of the scan, INFO included (the native and asset scans say there what they could not read); the cards are the reported subset. */
-    fun build(cards: List<Finding>, scenarios: List<AttackScenarios.Scenario>, cov: Coverage, pkg: String = "", all: List<Finding> = cards): Lines {
+    /** [guard] = the manifest's permission guards for the MUST FIX gate (phase 2); null = the reach pass's own seed filter is trusted. */
+    fun build(cards: List<Finding>, scenarios: List<AttackScenarios.Scenario>, cov: Coverage, pkg: String = "", all: List<Finding> = cards, guard: PermissionGuard? = null): Lines {
         if (cov.deepScan && cov.classesScanned == 0)
             return Lines(true, "SCAN FAILED: the deep scan read 0 classes, so nothing in this report is a verdict on the code (re-import the APK and run the Deep scan again).",
                 emptyList(), emptyList(), "not rated (no classes read)", notSeen(cards, cov, all))
@@ -105,8 +106,8 @@ object Verdict {
                 "impact: ${best.impact}") + chain.take(MAX_MUST_FIX).map { "→ to verify (" + label(pos[it]!!) + "): " + verifyOf(it) }      // 1.2.1
         }
 
-        // MUST FIX: HIGH / CRITICAL, reachable from an exported component, highest priority first; never more than three
-        val must = cards.withIndex().filter { (_, f) -> f.severity.rank <= Severity.HIGH.rank && (f.reach == "YES" || f.reach == "YES~") }
+        // MUST FIX: HIGH / CRITICAL cards that pass the four-condition gate (phase 2: MustFixGate), highest priority first; never more than three
+        val must = cards.withIndex().filter { (_, f) -> f.severity.rank <= Severity.HIGH.rank && MustFixGate.check(f, guard).passes }
             .sortedWith(compareByDescending<IndexedValue<Finding>> { FindingScore.of(it.value).value }.thenBy { it.index }).take(MAX_MUST_FIX)
             .map { (i, f) ->
                 val ev = FindingScore.confidence(f).evidence
@@ -114,7 +115,7 @@ object Verdict {
                     (FixTemplates.match(f, pkg)?.sentence ?: f.recommendation.substringBefore(". ").trimEnd('.') + ".") +
                     (if (VERIFY) "\n→ to verify: " + verifyOf(f) + "\nEvidence: " + fmtEv(ev) + " (" + evidenceKind(ev) + ")" else "")      // 1.2.1
             }
-            .ifEmpty { listOf("no HIGH/CRITICAL finding is reachable from an exported component") }
+            .ifEmpty { listOf("no HIGH/CRITICAL finding passes the MUST FIX gate (high-impact sink, exported entry without a signature-level guard, no validation seen, traced proof)") }
 
         // CONFIDENCE: a ratio, not an adjective
         val highPlus = cards.filter { it.severity.rank <= Severity.HIGH.rank }

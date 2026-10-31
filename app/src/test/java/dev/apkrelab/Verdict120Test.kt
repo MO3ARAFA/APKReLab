@@ -18,7 +18,7 @@ class Verdict120Test {
         val cards = listOf(card(Severity.MEDIUM, "Weak hash", "Lcom/x/A;", rule = "weak-hash"), card(Severity.LOW, "Log of data", "Lcom/x/B;", rule = "log"))
         val v = Verdict.build(cards, emptyList(), full)
         assertTrue(v.verdict, v.verdict.startsWith("0 critical / 0 high-priority / 2 informational") && v.verdict.contains("no HIGH or CRITICAL finding"))
-        assertEquals(listOf("no HIGH/CRITICAL finding is reachable from an exported component"), v.mustFix)
+        assertEquals(listOf("no HIGH/CRITICAL finding passes the MUST FIX gate (high-impact sink, exported entry without a signature-level guard, no validation seen, traced proof)"), v.mustFix)
         assertTrue(v.confidence, v.confidence.startsWith("weak"))
         assertTrue(v.criticalPath.single().startsWith("none"))
     }
@@ -45,7 +45,7 @@ class Verdict120Test {
         assertTrue(v.mustFix.all { it.contains("[HIGH]") })
         assertTrue(v.mustFix[0], v.mustFix[0].startsWith("#1 ") && v.mustFix[0].contains("getCanonicalPath"))            // the file-write template sentence
         // twin: a CRITICAL card with no path from an exported component is not a must-fix
-        assertEquals(listOf("no HIGH/CRITICAL finding is reachable from an exported component"),
+        assertEquals(listOf("no HIGH/CRITICAL finding passes the MUST FIX gate (high-impact sink, exported entry without a signature-level guard, no validation seen, traced proof)"),
             Verdict.build(listOf(card(Severity.CRITICAL, "Not reachable", "Lcom/x/N;", reach = "NO"), card(Severity.HIGH, "Not traced", "Lcom/x/T;")), emptyList(), full).mustFix)
     }
 

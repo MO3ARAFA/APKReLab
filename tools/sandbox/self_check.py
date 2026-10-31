@@ -33,6 +33,38 @@ def flows(report_text):
     return sorted(out)
 
 
+def must_fix_cards(report_text):
+    """Card numbers of the Verdict's MUST FIX lines ("  - #12 [HIGH] ..." or "  - CHECK FIRST: #12 ...")."""
+    v = report_text.split("## Security scan", 1)[0]
+    m = re.search(r"- \*\*MUST FIX:\*\*(.*?)(?=\n- \*\*[A-Z ]+:\*\*|\Z)", v, re.S)
+    if not m:
+        return []
+    return [int(n) for n in re.findall(r"^\s*- (?:CHECK FIRST: )?#(\d+) \[", m.group(1), re.M)] + \
+           [int(n) for n in re.findall(r"\A (?:CHECK FIRST: )?#(\d+) \[", m.group(1))]          # a single-line MUST FIX
+
+
+def found_cards(bench_stdout):
+    """Card numbers bench.py --evidence names under a FOUND or FOUND-NOREACH entry (the cards that match an expected issue); FOUND-AI-FP, MISS and
+    KNOWN GAP entries do not count."""
+    out, cur = set(), False
+    for line in bench_stdout.split("\n"):
+        st = re.match(r"^([A-Z][A-Z-]+(?: [A-Z]+)?) {2,}", line)
+        if st:
+            cur = st.group(1) in ("FOUND", "FOUND-NOREACH")
+        elif cur:
+            n = re.match(r"^\s+card #(\d+) ", line)
+            if n:
+                out.add(int(n.group(1)))
+    return out
+
+
+def top3(report_text, bench_stdout):
+    """(hits, size) of MUST FIX: how many of its (at most three) cards match an expected issue of the app's list."""
+    must = must_fix_cards(report_text)
+    good = found_cards(bench_stdout)
+    return sum(1 for n in must if n in good), len(must)
+
+
 def expected_file(app):
     """bench.py's expected list for the app; a taint_bench list (expected_taint) is converted on the fly (documented / verified entries)."""
     path = os.path.join(BENCH, app["expected"])
@@ -60,6 +92,7 @@ def main():
     write = "--write-baseline" in a
     fail = 0
     summary = []
+    tot_hit = tot_size = 0
     for app in apps:
         pkg, name = app["package"], app["name"]
         rep = os.path.join(reports, pkg + ".md")
@@ -84,7 +117,12 @@ def main():
         regress = len(re.findall(r"^  REGRESSION ", r.stdout, re.M))
         if regress:
             fail = 1
-        now = flows(open(rep, encoding="utf-8", errors="ignore").read())
+        text = open(rep, encoding="utf-8", errors="ignore").read()
+        hit, size = top3(text, r.stdout)
+        t3 = "top3 %d/%d" % (hit, size) if size else "top3 n/a (MUST FIX empty)"
+        tot_hit += hit; tot_size += size
+        print("\nTOP3: %s (MUST FIX cards that match an expected issue)" % t3)
+        now = flows(text)
         fpath = os.path.join(base_dir, pkg + ".flows")
         if os.path.exists(fpath) and not write:
             old = [l for l in open(fpath, encoding="utf-8").read().split("\n") if l]
@@ -104,10 +142,11 @@ def main():
             os.replace(tmp_save, bjson)
         elif os.path.exists(tmp_save):
             os.remove(tmp_save)
-        summary.append("%s: %s%s%s; %s" % (name, ("%s/%s" % (m.group(1), m.group(2))) if m else "?", " (held-out)" if app.get("heldout") else " (tuning set)",
-                                           ", %d REGRESSION(S)" % regress if regress else "", flow_line))
+        summary.append("%s: %s%s%s; %s; %s" % (name, ("%s/%s" % (m.group(1), m.group(2))) if m else "?", " (held-out)" if app.get("heldout") else " (tuning set)",
+                                           ", %d REGRESSION(S)" % regress if regress else "", t3, flow_line))
     print("=" * 70)
     print("Recall: " + " | ".join(summary))
+    print("top3_accuracy: %s" % ("%d/%d = %d%% of MUST FIX cards match an expected issue" % (tot_hit, tot_size, 100 * tot_hit // tot_size) if tot_size else "n/a (every MUST FIX empty)"))
     print("SELF-CHECK " + ("FAILED" if fail else "PASSED") + (" (baseline written to %s)" % base_dir if write else ""))
     return fail
 

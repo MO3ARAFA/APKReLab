@@ -58,7 +58,7 @@ fun main(args: Array<String>) {
     val vt0 = System.nanoTime()
     val verdict = Verdict.build(cards, try { AttackScenarios.build(final, mc, pkg) } catch (_: Throwable) { emptyList() },
         Verdict.Coverage(deepScan = true, classesScanned = texts.size, nativeMethods = NativeBridge.bindings().size, nativeLibs = NativeBridge.libs.size,
-            decryptorCalls = PostureScanner.decryptorCallCount()), pkg, final)
+            decryptorCalls = PostureScanner.decryptorCallCount()), pkg, final, guard = PermissionGuard(mc))   // phase 2: MUST FIX gate (no device resolver: BIND_* / platform levels from ReportBuilder.defaultLevel)
     val vtEnd = System.nanoTime()
     outMd.writeText("# APK ReLab report: $pkg\n\n(sandbox scan, no AI triage)\n\n" + Verdict.markdown(verdict) + "## Security scan\n\n" + ReportBuilder.securitySection(final, 400, pkg) + "\n")
     println("pkg=$pkg exported=${entries.size} findings=${final.size} ssaItems=${items.size} classes=${texts.size} scanMs=${(System.nanoTime() - t0) / 1_000_000} verdictMs=${(vtEnd - vt0) / 1_000_000.0}")
