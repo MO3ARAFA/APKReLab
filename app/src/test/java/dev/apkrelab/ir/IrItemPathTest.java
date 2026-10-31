@@ -57,5 +57,17 @@ public class IrItemPathTest {
         assertEquals("MEDIUM", items(t.replace("%CALL%", named)).get(0).confidence);
         assertEquals("HIGH", items(t.replace("%CALL%", plain)).get(0).confidence);
     }
+
+    @Test public void aVoidVerifierCallStepsTheConfidenceDownToo() {          // 2.0.0 step 2: Nextcloud 3.18.1 VerificationUtils.verifyWhere(selection)
+        String t = ".class public Lt/D;\n.super Landroid/app/Activity;\n\n.method public onCreate(Landroid/os/Bundle;)V\n    .locals 5\n"
+                + "    invoke-virtual {p0}, Lt/D;->getIntent()Landroid/content/Intent;\n    move-result-object v0\n    const-string v1, \"p\"\n"
+                + "    invoke-virtual {v0, v1}, Landroid/content/Intent;->getStringExtra(Ljava/lang/String;)Ljava/lang/String;\n    move-result-object v2\n"
+                + "%CALL%"
+                + "    new-instance v4, Ljava/io/FileInputStream;\n    invoke-direct {v4, v2}, Ljava/io/FileInputStream;-><init>(Ljava/lang/String;)V\n    return-void\n.end method\n\n"
+                + ".method public static verifyWhere(Ljava/lang/String;)V\n    .locals 0\n    return-void\n.end method\n"
+                + ".method public static record(Ljava/lang/String;)V\n    .locals 0\n    return-void\n.end method\n";
+        assertEquals("MEDIUM", items(t.replace("%CALL%", "    invoke-static {v2}, Lt/D;->verifyWhere(Ljava/lang/String;)V\n")).get(0).confidence);
+        assertEquals("HIGH", items(t.replace("%CALL%", "    invoke-static {v2}, Lt/D;->record(Ljava/lang/String;)V\n")).get(0).confidence);   // twin
+    }
 }
 

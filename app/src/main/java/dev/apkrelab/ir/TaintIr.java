@@ -1145,6 +1145,34 @@ public final class TaintIr {
     /** 2.0.0: switch for the mutation check of the explicit-Intent extra link; heap pseudo-field "icc-extra:<target type>:<key>". */
     static boolean ICC_EXTRAS = !Boolean.getBoolean("apkrelab.noIccExtras");
     static final String ICC_EXTRA_PREFIX = "icc-extra:";
+    /** 2.0.0 step 2 (real-CVE benchmark C01, CVE-2023-39957, Nextcloud Talk ConversationsListController.upload -> UploadAndShareFilesWorker):
+     *  WorkManager input data. Data.Builder.putX(literal key, real source) is remembered under "work-data:<key>" and Data.getX(same key) in a
+     *  Worker reads it back, the way SharedPreferences keys are linked. The key is app-wide (a Data object can be handed to any worker). */
+    static boolean WORK_DATA = !Boolean.getBoolean("apkrelab.noWorkData");
+    /** 2.0.0 step 2: switch for the mutation check of the collection-field write-back in raiseObj. */
+    /** 2.0.0 step 2: switch for the mutation check of the AsyncTask.execute argument link. */
+    static boolean ASYNC_TASK_ARGS = !Boolean.getBoolean("apkrelab.noAsyncTaskArgs");
+    static final String ASYNC_TASK_EXECUTE = "execute([Ljava/lang/Object;)Landroid/os/AsyncTask;";
+    static final String ASYNC_TASK_ON_EXECUTOR = "executeOnExecutor(Ljava/util/concurrent/Executor;[Ljava/lang/Object;)Landroid/os/AsyncTask;";
+    static final String ASYNC_TASK_BG = "doInBackground([Ljava/lang/Object;)Ljava/lang/Object;";
+    /** 2.0.0 step 2 (real-CVE benchmark C05 / C08, ownCloud and Nextcloud UriUploader(activity, streams, ...) keeps the shared Uri list in a field):
+     *  constructor capture also for a parameter stored into a COLLECTION-typed field of any class (pillar 1 kept it to deferred tasks: every field
+     *  of every class added 14 LOW flows on Axis Pay). Switch for the mutation check. */
+    static boolean CTOR_COLLECTIONS = !Boolean.getBoolean("apkrelab.noCtorCollections");
+    static boolean CONTAINER_FIELD_WRITEBACK = !Boolean.getBoolean("apkrelab.noContainerFieldWriteback");
+
+    /** A field whose declared type is a java.util / android.util / androidx.collection container of the BUILDERS table. */
+    static boolean isCollectionField(String ref) {
+        int c = ref.lastIndexOf(':');
+        if (c < 0) return false;
+        String type = ref.substring(c + 1);
+        return (type.startsWith("Ljava/util/") || type.startsWith("Landroid/util/") || type.startsWith("Landroidx/collection/")) && BUILDERS.contains(type);
+    }
+    static final String WORK_DATA_PREFIX = "work-data:";
+    private static final String WORK_DATA_BUILDER = "Landroidx/work/Data$Builder;";
+    private static final String WORK_DATA_OWNER = "Landroidx/work/Data;";
+    private static final Set<String> WORK_DATA_PUTS = new HashSet<>(Arrays.asList("putString", "putStringArray"));
+    private static final Set<String> WORK_DATA_GETS = new HashSet<>(Arrays.asList("getString", "getStringArray"));
 
     static String unquote(String lit) {
         return lit.length() >= 2 && lit.startsWith("\"") && lit.endsWith("\"") ? lit.substring(1, lit.length() - 1) : lit;
@@ -1431,6 +1459,10 @@ public final class TaintIr {
                 SsaForm.Value x = st.pop();
                 if (!seen.add(x)) continue;
                 raise(x, t);
+                // 2.0.0 step 2 (real-CVE benchmark C01, Nextcloud Talk ConversationsListController: filesToShare.add(intent.getData().toString())):
+                // a collection read from an instance or static field and filled here is the object the field holds, so the field gets the taint
+                if (CONTAINER_FIELD_WRITEBACK && x.def != null && x.def.kind == Insn.Kind.FIELD_GET && x.def.ref != null && isCollectionField(x.def.ref))
+                    run.raiseField(x.def.ref, t, m.key());
                 if (x.phi != null) {
                     for (SsaForm.Value o : x.phi.operands) if (o != null) st.push(o);
                 } else if (x.def != null && (x.def.kind == Insn.Kind.MOVE || x.def.kind == Insn.Kind.CHECK_CAST)) {
@@ -1492,7 +1524,8 @@ public final class TaintIr {
                     }
                     // 2.0.0: a constructor that stores its own parameter into a field of the new object (a Runnable / lambda capturing a value)
                     if (CTOR_CAPTURE && collect && t.params != 0L && "<init>".equals(m.name) && in.op.startsWith("iput") && u.length > vc && isThis(u[vc])
-                            && run.isDeferredTask(m.owner) && !in.ref.endsWith(":Ljava/lang/Object;")) {   // measured (K-9): Object fields are R8-merged / erased: no capture
+                            && (run.isDeferredTask(m.owner) || (CTOR_COLLECTIONS && isCollectionField(in.ref)))   // 2.0.0 step 2: a collection field in any class
+                            && !in.ref.endsWith(":Ljava/lang/Object;")) {   // measured (K-9): Object fields are R8-merged / erased: no capture
                         boolean str = vc == 1 && u.length > 0 && isString(u[0], 0);
                         for (int k = 1; k < 64; k++)
                             if ((t.params & (1L << k)) != 0) sum.ctorFields.computeIfAbsent(k, x -> new java.util.TreeSet<>()).add(in.ref + (str ? "|S" : ""));
@@ -1697,6 +1730,20 @@ public final class TaintIr {
                 if (!val.isNone() && key != null)
                     for (String target : launchedTargetsOf(av[0])) run.raiseField(ICC_EXTRA_PREFIX + target + ":" + unquote(key), val, m.key());
             }
+            // 2.0.0 step 2: WorkManager Data.Builder.putString / putStringArray(literal key, real source)
+            if (WORK_DATA && !isStatic && owner.equals(WORK_DATA_BUILDER) && WORK_DATA_PUTS.contains(name) && t.length >= 3 && av.length >= 3) {
+                Tv val = t[2].realOnly();
+                String key = constString(av[1]);
+                if (!val.isNone() && key != null) run.raiseField(WORK_DATA_PREFIX + unquote(key), val, m.key());
+            }
+            // 2.0.0 step 2: Data.getString / getStringArray(literal key) in a worker: what a putX of the same key stored
+            if (WORK_DATA && !isStatic && owner.equals(WORK_DATA_OWNER) && WORK_DATA_GETS.contains(name) && av.length > 1) {
+                String key = constString(av[1]);
+                if (key != null) {
+                    Tv wd = readHeap(WORK_DATA_PREFIX + unquote(key));
+                    if (wd.level > 0) { for (SsaForm.Value y : d) raise(y, wd); return; }
+                }
+            }
             // 0.67.0: SharedPreferences.Editor.putString(key, value): a REAL source in the value is remembered for that key
             if (!isStatic && owner.equals(EDITOR_OWNER) && PREFS_PUTS.contains(name) && t.length >= 3) {
                 Tv val = t[2].realOnly();
@@ -1750,6 +1797,23 @@ public final class TaintIr {
                         }
                         return;                                                   // followed: not a drop
                     }
+                }
+            }
+            // 2.0.0 step 2 (real-CVE benchmark C05, ownCloud UriUploader.copyThenUpload -> CopyAndUploadContentUrisTask): AsyncTask.execute(params...)
+            // on a task whose class SSA names hands the params array to that class's doInBackground(Object[]) (parameter 1) and the task to "this"
+            if (ASYNC_TASK_ARGS && callees == null && !isStatic && av.length > 1 && (sig.equals(ASYNC_TASK_EXECUTE) || sig.equals(ASYNC_TASK_ON_EXECUTOR))) {
+                String cls = concreteClassOf(av[0], 0);
+                String target = cls == null ? null : run.g.dispatchOf(cls, ASYNC_TASK_BG);
+                if (target != null) {
+                    Summary sc = run.summaries.get(target);
+                    int arr = sig.equals(ASYNC_TASK_EXECUTE) ? 1 : 2;
+                    if (sc != null && collect) {
+                        Map<String, SinkRef> refs = sc.sinkParams.get(1);
+                        if (refs != null && arr < t.length && !t[arr].isNone()) for (SinkRef r : refs.values()) hitVia(r, t[arr]);
+                        Map<String, SinkRef> self = sc.sinkParams.get(0);
+                        if (self != null && !t[0].isNone()) for (SinkRef r : self.values()) hitVia(r, t[0]);
+                    }
+                    return;                                                       // followed: not a drop
                 }
             }
             // 2.0.0: Kotlin FunctionN.invoke on a receiver whose class is known in this method: that class's invoke only (no fan-out over every lambda)
