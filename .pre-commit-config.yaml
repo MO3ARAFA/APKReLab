@@ -1,0 +1,16 @@
+# Repository hygiene: no app binaries, nothing over 1 MB (an APK of a company app was uploaded to main through the GitHub web UI once; .gitignore does not
+# apply to web uploads, so CI runs the same check: .github/workflows/ci.yml). Install: pip install pre-commit && pre-commit install
+# Without pre-commit (phone / Termux): git config core.hooksPath .githooks  (the same rules, no dependency)
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+  - repo: local
+    hooks:
+      - id: no-app-binaries
+        name: no APK / DEX / native libraries
+        entry: "App binaries stay in ./private/ (git-ignored), never in git"
+        language: fail
+        files: '\.(apk|apks|xapk|apkm|aab|dex|odex|vdex|oat|so)$'

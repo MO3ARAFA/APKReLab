@@ -1,0 +1,11 @@
+#!/bin/sh
+# Refuses staged app binaries and files over 1024 KB (same rules as .pre-commit-config.yaml, no dependency). Enable: git config core.hooksPath .githooks
+max=1048576; bad=0
+for f in $(git diff --cached --name-only --diff-filter=AM); do
+  case "$f" in
+    *.apk|*.apks|*.xapk|*.apkm|*.aab|*.dex|*.odex|*.vdex|*.oat|*.so) echo "pre-commit: refusing app binary $f (keep it in ./private/)"; bad=1 ;;
+  esac
+  size=$(git cat-file -s ":$f" 2>/dev/null || echo 0)
+  if [ "$size" -gt "$max" ]; then echo "pre-commit: refusing $f ($size bytes > 1024 KB)"; bad=1; fi
+done
+exit $bad

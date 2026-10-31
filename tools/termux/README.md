@@ -10,7 +10,7 @@ Since 0.101.1 the project is developed by Claude Code running on the owner's pho
 | Gradle build / APK | Code on the Go (the owner) | the only real compile of `MainActivity.kt`, `Ui.kt` |
 | scan speed measurements (`tools/sandbox/MeasureBig.java`, JFR) | a decoded app + `java -Xmx...` | an 18k-class app wants about 1 GB: close other apps, do not run it together with a Gradle build |
 
-## Memory and CPU rules for the agent (measured, see tools/sandbox/PERF.md)
+## Memory and CPU rules for the agent (measured, see docs/internal/PERF.md)
 - The phone is MEMORY-bound, not CPU-bound: at a 1 GB heap about half of a scan was garbage collection and two analysis threads cost more than one. Never add threads or caches without a heap measurement at 1 GB (`java -Xmx1000m`).
 - Claude Code itself uses several hundred MB: a measurement and the agent can compete for RAM. Use `-Xmx` explicitly and run one heavy job at a time.
 - Run-to-run variation of the same scan on the phone is about 36%: judge a speed change by CPU counters, by the identical flow list, and by two device runs, never by one.

@@ -36,4 +36,4 @@ A bigger cap does less repeated work and found the same flows here (the older no
 The table above says "the same 18 flows in every row". Only the COUNT is the same: compared as sets, the 5000-class and the 8000-class runs differ from the 3000-class run by ONE flow
 (+1 / -1: a flow found only with the bigger groups, another found only with the device size). A change of the cap is a change of result, not a pure speed-up, and a bigger cap also
 finds nothing faster on a small heap (5000 classes at 1 GB: 140 s, the same as 3000; 8000 did not finish). Memory is the limit on the phone ("2 group(s) re-run for memory").
-The measurements that include the memory regime, the compact long set and the thread policy are in `tools/sandbox/PERF.md` (use that file; this one keeps the plan-redundancy numbers).
+The measurements that include the memory regime, the compact long set and the thread policy are in `docs/internal/PERF.md` (use that file; this one keeps the plan-redundancy numbers).
