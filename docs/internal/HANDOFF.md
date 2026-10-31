@@ -13,6 +13,14 @@ Owner speaks Egyptian Arabic, wants concise, actionable answers.
 
 ## Current version: 1.2.1
 - **0.104.1 VERIFIED ON THE PHONE (report 9, Axis Pay, second Deep scan without re-picking the app)**: "cache: 25 of 25 groups reused", **groups 8 s instead of 743-752 s** (plan 21 s still runs; the 8 s include the hash pass over the unique classes and reading 25 cache files), GC 0.9 s in 32 collections instead of 447-620 s. The report is identical to the full run's (report 8) except the status line: 80 cards, +16 flows, same loss counters. So the 0.104.0 miss was the workspace wipe, as suspected. Note: the "slowest methods" of a cached run are the CACHED measurements of the run that produced them (their times are not this run's). Still unmeasured: the cold-run overhead of writing the 25 files.
+- 2.0.0 step 1+2 (real-CVE benchmark; PR #2 was merged by the owner at 07dfb57, this work continues on the same branch after a merge of main):
+  - Benchmark: tools/benchmark/cve (protocol + 15 cases + scorer frozen in c237701 before any scan; APKs from f-droid.org with the index SHA-256). Blind run 1
+    (15e3d6d): vulnerable code reported in 7/14 in-scope cases, fix visible in 2/14. Results and per-card reading in docs/VALIDATION.md.
+  - Step 2 fixes (each with test + twin + mutation switch): uri-grant-via-result reflected getIntent() (C09); TaintIr WORK_DATA (WorkManager Data by key),
+    CONTAINER_FIELD_WRITEBACK (this-object collection field filled -> field tainted; limited after K-9 showed +2 LOW flows), ASYNC_TASK_ARGS, CTOR_COLLECTIONS;
+    SsaBridge verif* counts as validation-like. Run 2 (fb7850a, tuning): reported 11/14, fix visible 4/14; self_check and 6-app corpus flow sets unchanged.
+  - Open: C03 Omni-Notes, C04 Tasks (SEND stream copy), C08, C13 OsmAnd deep-link file name; C01 copyFileToCache write; fix differentiation (allow-lists, canonical checks
+    in C02 / C05 / C10 / C14). Version 2.0.0 (230).
 - 2.0.0 (in progress; one branch, PR #2 consolidates everything since 1.2.1: it was fast-forwarded to 6a77647, the tip of #8, and supersedes #3, #4, #5, #6, #7, #8, whose
   own heads all had green CI. The owner merges once instead of retargeting seven branches.)
   - Pillar 3a housekeeping (owner, 3b session): (1) drift.simonbinder.eu on Zulip is recorded as KNOWN NOISE (1 app) and is NOT added to NativeScanner.noiseHosts:

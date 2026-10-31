@@ -65,3 +65,34 @@ This is a fix measured on the app that showed the gap, so it says nothing about 
 - Not measured: whether the phase 3.5 sanitizer fired on these apps (the protocol allows one scan; no second run with the switch off was made).
 - Combined over both rounds: 2 MUST FIX cards judged, 0 TP. Six apps, two cards: too few to state an accuracy with any confidence; the next round should pick apps with known
   attack surface (an index filter on exported providers is not possible; a larger round is).
+
+## Real-CVE benchmark (2.0.0 step 1): THE primary product metric
+Protocol, cases, hashes and scorer frozen in c237701 before any scan (`tools/benchmark/cve/PROTOCOL.md`, `cases.json`, `score.py`): 15 published advisories
+(CVE / GHSA / GHSL) in open-source Android apps, the vulnerable and the fixed release of each from f-droid.org (SHA-256 from the F-Droid index), 14 in scope.
+Reports stay in `./private/cve/` (not tracked); the scores are `tools/benchmark/cve/runs/*.txt`.
+
+### Run 1, blind (scanner 15e3d6d, before any change)
+Automatic score: DETECTED 2, NOT-DIFFERENT 8, MISSED 4 (`runs/run1_blind_15e3d6d.txt`). Every matching card was then read (CLAUDE.md rule 3):
+| case | auto | read | note |
+|---|---|---|---|
+| C02 Home Assistant MyActivity WebView | NOT-DIFFERENT | found | HIGH Intent.getData() -> WebView.loadUrl in MyActivity, the advisory's flow; still HIGH in the fixed build (its check is only "validation-like") |
+| C06 Nextcloud FileContentProvider SQLi | NOT-DIFFERENT | found | HIGH provider parameter -> SQLiteDatabase.delete / update / SQLiteQueryBuilder.query |
+| C07 Nextcloud DiskLru provider | DETECTED | detected | readPermission without writePermission, gone in 3.17.1 |
+| C10 Element intent redirection | NOT-DIFFERENT | found | HIGH getParcelableExtra -> startActivity in MainActivity.startIntentAndFinish; the 1.6.12 allow-list is not recognised |
+| C11 Wikipedia wikipedia:// | DETECTED | detected | custom scheme without host (the advisory's root cause), gone in 50585 |
+| C12 Wikipedia SingleWebViewActivity | NOT-DIFFERENT | partial | right sink (extra -> loadUrl) but "no path from an exported component": the PageActivity forward is not linked |
+| C14 OsmAnd AIDL service | NOT-DIFFERENT | found | exported OsmandAidlServiceV2 without a permission (CWE-926 of the advisory); the code-level caller check of the fix is not seen |
+| C04 Tasks, C08 Nextcloud internal files, C13 OsmAnd open-gpx | NOT-DIFFERENT | missed | the matching card is another flow (onActivityResult / SharedPreferences sources) |
+| C01 Talk, C03 Omni-Notes, C05 ownCloud, C09 News | MISSED | missed | |
+
+**Blind result: the vulnerable code was reported in 7 of 14 in-scope cases (6 exact, 1 partial); the fix was visible (card gone or lower) in 2 of 14.**
+
+### Run 2, after the step-2 fixes (scanner fb7850a; these 14 cases are now a TUNING set, not blind)
+Automatic score: DETECTED 5, NOT-DIFFERENT 8, MISSED 1 (`runs/run2_after_fixes_fb7850a.txt`). Read: C09 (reflected setResult(getIntent())) detected; C06 detected
+(the fixed build's verify* calls lower the cards to MEDIUM); C05 found (Intent stream list -> UriUploader field -> CopyAndUploadContentUrisTask openInputStream /
+FileOutputStream), not differentiated; C01 partial (Talk: Intent.getData() through WorkManager Data to openInputStream in UploadAndShareFilesWorker; the
+traversal write in copyFileToCache itself is still not reported), counted as found, not as detected. Still missed: C03, C04, C08, C13.
+Reported in 11 of 14 (9 exact, 2 partial); fix visible in 4 of 14 (C06, C07, C09, C11).
+Regression checks of the same build: self_check identical to the baseline (Recall line unchanged, SELF-CHECK PASSED); MeasureBig flow sets of K-9 (0), NewPipe (1),
+KeePassDX (9), Paperless (1), Chaka (1), Axis Pay (15) identical to pillar 1 (Axis Pay: 2 LOW flows show a SharedPreferences source label instead of Intent.getExtras()).
+NOT measured: any device run of these builds; apps outside these 14 cases and the 6 corpus apps.
