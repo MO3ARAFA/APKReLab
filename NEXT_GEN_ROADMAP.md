@@ -133,3 +133,6 @@ after in the commit message and `docs/internal/HANDOFF.md`, and a plain list of 
 - **Hybrid code**: Dart (libapp.so) and JavaScript / Hermes code are read as strings only; NOT SEEN says so since 1.2.0. No analysis planned without a measurement of what the strings miss.
 - **MUST FIX ranking ties** (1.2.1 QA, VulnLab): two reachable SQL-injection flows (#55 / #56, confidence MEDIUM, priority 60) lost the third MUST FIX slot to a deep-link WebView card of the same priority on card order. The ground truth rates SQLi 9.8 and the deep link 8.1. A severity-of-impact tiebreak needs a measurement on more apps with ground truth before any change.
 - **VulnLab sections without a HIGH+ card**: 11.2 PendingIntent misuse and 11.5 broadcast receiver hijack. Check at which severity (if any) they are reported before calling them misses.
+
+## From the phase 4 blind run (2026-10-31, docs/VALIDATION.md)
+- Path sanitizer by character allow-list: `String.replaceAll("[^a-zA-Z0-9._]+", "_")` (any class that excludes '/') leaves one path segment; both blind HIGH cards (Chaka viewer #10 / #11) were false because of it. Candidate: treat a replaceAll / replace whose constant pattern is a negated character class without '/' as a basename sanitizer for file sinks. Must be validated on the NEXT blind set (set 8), never on Chaka viewer.
