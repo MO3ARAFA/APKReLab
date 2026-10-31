@@ -63,9 +63,24 @@ public final class TaintIr {
         final String via;      // callee / field the real source came through, or null
         final boolean weak;    // 0.68.5: the real source passed an Object field of an obfuscated (merged) class; a strong path wins in a join
         final boolean internal; // 0.68.6: the Intent was read in a component the manifest does not export (implies weak)
+        final boolean pathSafe; // phase 3.5: every path of this value passed a replace that removes '/' (one path segment): no CWE-22 file sink takes it
 
         Tv(long params, int level, String src, String via) {
             this(params, level, src, via, false, false);
+        }
+
+        Tv(long params, int level, String src, String via, boolean weak, boolean internal, boolean pathSafe) {
+            this.params = params;
+            this.level = level;
+            this.src = level > 0 ? src : null;
+            this.via = level > 0 ? via : null;
+            this.internal = level > 0 && internal;
+            this.weak = level > 0 && (weak || internal);
+            this.pathSafe = pathSafe && (params != 0L || level > 0);
+        }
+
+        Tv withPathSafe(boolean b) {
+            return b == pathSafe || isNone() ? this : new Tv(params, level, src, via, weak, internal, b);
         }
 
         Tv(long params, int level, String src, String via, boolean weak) {
@@ -73,12 +88,7 @@ public final class TaintIr {
         }
 
         Tv(long params, int level, String src, String via, boolean weak, boolean internal) {
-            this.params = params;
-            this.level = level;
-            this.src = level > 0 ? src : null;
-            this.via = level > 0 ? via : null;
-            this.internal = level > 0 && internal;
-            this.weak = level > 0 && (weak || internal);
+            this(params, level, src, via, weak, internal, false);
         }
 
         /** 0.68.5: a strong source of any level beats a weak one; within the same strength the higher level wins. */
@@ -123,16 +133,17 @@ public final class TaintIr {
             if (o == null || o.isNone()) return this;
             if (isNone()) return o;
             long p = params | o.params;
-            if (rank() >= o.rank()) return p == params ? this : new Tv(p, level, src, via, weak, internal);
-            return new Tv(p, o.level, o.src, o.via, o.weak, o.internal);
+            boolean ps = pathSafe && o.pathSafe;                              // phase 3.5: safe only when every joined path is
+            if (rank() >= o.rank()) return p == params && ps == pathSafe ? this : new Tv(p, level, src, via, weak, internal, ps);
+            return new Tv(p, o.level, o.src, o.via, o.weak, o.internal, ps);
         }
 
         boolean covers(Tv o) {
-            return (params & o.params) == o.params && rank() >= o.rank();
+            return (params & o.params) == o.params && rank() >= o.rank() && (!pathSafe || o.pathSafe);
         }
 
         Tv realOnly() {
-            return level > 0 ? new Tv(0L, level, src, via, weak, internal) : NONE;
+            return level > 0 ? new Tv(0L, level, src, via, weak, internal, pathSafe) : NONE;
         }
     }
 
@@ -455,6 +466,8 @@ public final class TaintIr {
         boolean retInternal;
         /** Maturity phase 3: 0 = no path check, 1 = a canonical-path check dominates every reference return (the return is clean), 2 = a check exists but not on every return. */
         int pathSanitizer;
+        /** Phase 3.5: every tainted return value was path-safe (passed a slash-stripping replace); null-like until a tainted return is seen. */
+        boolean retSeen, retPathSafe = true;
         final Map<Integer, Map<String, SinkRef>> sinkParams = new TreeMap<>();
         int refsDropped;      // 0.66.5: sink references not kept because the slot was full (MAX_REFS); measurement only
 
@@ -475,7 +488,7 @@ public final class TaintIr {
 
         String fingerprint() {
             StringBuilder sb = new StringBuilder();
-            sb.append(retParams).append('/').append(retLevel).append('/').append(retSrc).append(retWeak ? "~" : "").append(retInternal ? "!" : "");  // pathSanitizer is structural (the same at every analysis of the method): not part of the fingerprint
+            sb.append(retParams).append('/').append(retLevel).append('/').append(retSrc).append(retWeak ? "~" : "").append(retInternal ? "!" : "").append(retSeen && retPathSafe ? "P" : "");  // pathSanitizer is structural (the same at every analysis of the method): not part of the fingerprint
             for (Map.Entry<Integer, Map<String, SinkRef>> e : sinkParams.entrySet()) {
                 sb.append('|').append(e.getKey()).append(':');
                 for (SinkRef r : e.getValue().values()) sb.append(r.key()).append('#').append(r.chain.size()).append(',');
@@ -1025,7 +1038,7 @@ public final class TaintIr {
             }
             Tv old = heap.get(k);
             if (old != null && old.covers(r)) return;
-            Tv withVia = Tv.real(r.level, r.src, "field " + shortRef(k.field) + " (written in " + shortKey(writer) + ")", r.weak, r.internal);
+            Tv withVia = new Tv(0L, r.level, r.src, "field " + shortRef(k.field) + " (written in " + shortKey(writer) + ")", r.weak, r.internal, r.pathSafe);
             heap.put(k, old == null ? withVia : old.join(withVia));
             Set<String> rd = heapReaders.get(rk);
             if (rd != null) dirtyReaders.addAll(rd);
@@ -1109,6 +1122,62 @@ public final class TaintIr {
      * the result is weak (LOW confidence) with a sentence that says which method to read.
      */
     static boolean PATH_SANITIZER_SUMMARY = !Boolean.getBoolean("apkrelab.noPathSanitizerSummary");
+
+    /**
+     * Phase 3.5 (blind round 1: Chaka viewer stored replaceAll("[^a-zA-Z0-9\\._]+", "_") of a deep-link path and opened File(getExternalFilesDir("bk"), it)): a value
+     * that passed a replace whose CONSTANT pattern removes every '/' is one path segment, so a file sink (CWE-22) does not take it; every other sink still does
+     * (the value can still carry SQL or script). Accepted patterns: one character class (negated or not) or a slash literal, whose replace leaves no '/';
+     * the replacement must be a constant without '/', '$' or '\'. A segment can still be "." or "..", which name directories: open / read / write sinks cannot use them.
+     */
+    static boolean PATH_STRIP_SANITIZER = !Boolean.getBoolean("apkrelab.noPathStripSanitizer");
+
+    /** Unquotes a smali const-string ref ("\"a\\.b\"" -> a\.b); null when it is not a quoted literal. */
+    static String unsmali(String ref) {
+        if (ref == null || ref.length() < 2 || ref.charAt(0) != '"' || ref.charAt(ref.length() - 1) != '"') return null;
+        String b = ref.substring(1, ref.length() - 1);
+        StringBuilder o = new StringBuilder();
+        for (int i = 0; i < b.length(); i++) {
+            char c = b.charAt(i);
+            if (c != '\\' || i + 1 >= b.length()) { o.append(c); continue; }
+            char n = b.charAt(++i);
+            switch (n) {
+                case 'n': o.append('\n'); break;
+                case 't': o.append('\t'); break;
+                case 'r': o.append('\r'); break;
+                case 'u':
+                    if (i + 4 < b.length()) { o.append((char) Integer.parseInt(b.substring(i + 1, i + 5), 16)); i += 4; }
+                    break;
+                default: o.append(n);
+            }
+        }
+        return o.toString();
+    }
+
+
+    /** A literal replace (String.replace(CharSequence, CharSequence), Kotlin replace(String, String)): the target is exactly "/". */
+    static boolean literalStripsSlash(String target, String repl) {
+        return "/".equals(target) && repl != null && repl.indexOf('/') < 0;
+    }
+
+    /**
+     * A regex replace-all whose pattern removes every '/'. The SHAPE must be one the rule reads: a single character class, negated or not, with an optional + / *
+     * ([^a-zA-Z0-9._]+, [/\\\\]+), or a slash literal (/, \\/, /+, \\/+); lookarounds, groups and alternations are not read. For those shapes a match does not depend on
+     * the characters around it, so running the replace on probe strings ("/", "a/b", "../../x", ...) decides the question: no '/' may be left.
+     */
+    static boolean stripsSlash(String regex, String repl) {
+        if (regex == null || repl == null) return false;          // a replacement that puts '/' back ("/", "$0") fails the probe below
+        boolean structural = regex.matches("\\[\\^?[^\\[\\]&]+\\][+*]?") || regex.equals("/") || regex.equals("\\/") || regex.equals("/+") || regex.equals("\\/+");
+        if (!structural) return false;
+        try {
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(regex);
+            for (String probe : new String[]{"/", "a/b", "../../x", "..//..", "/a/./b/", "\\/"})
+                if (p.matcher(probe).replaceAll(repl).indexOf('/') >= 0) return false;
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     static final String SANITIZER_PARTIAL_MARK = "pathcheck-partial:";
 
     static int pathSanitizerKind(MethodIr m, Cfg cfg) {
@@ -1407,6 +1476,7 @@ public final class TaintIr {
                 case RETURN:
                     if (collect && u.length > 0) {
                         Tv t = joinAll(u, 0, u.length);
+                        if (!t.isNone()) { sum.retSeen = true; sum.retPathSafe &= t.pathSafe; }
                         sum.retParams |= t.params;
                         if (t.rank() > Tv.rankOf(sum.retLevel, sum.retWeak)) {
                             sum.retLevel = t.level;
@@ -1562,12 +1632,31 @@ public final class TaintIr {
             // reach the sinks of EVERY target: only the returned taint is weakened.
             if (callees != null && callees.size() >= FANOUT_WEAK && !res.isNone() && !res.weak)
                 res = new Tv(res.params, res.level, res.src, FANOUT_MARK + (res.via == null ? "" : res.via), true, res.internal);
+            // phase 3.5: every app callee returns only path-safe values (each body strips '/' before every tainted return)
+            if (PATH_STRIP_SANITIZER && callees != null && !callees.isEmpty() && !res.isNone()) {
+                boolean allSafe = true;
+                for (String c : callees) { Summary sc = run.summaries.get(c); if (sc == null || !sc.retSeen || !sc.retPathSafe) { allSafe = false; break; } }
+                if (allSafe) res = res.withPathSafe(true);
+            }
             if (app) {
                 for (SsaForm.Value y : d) raise(y, res);
                 return;
             }
             // framework / unresolved callee
             if (isSanitizer(owner, name)) return;
+            // phase 3.5 (blind round 1, Chaka viewer: replaceAll("[^a-zA-Z0-9\\._]+", "_") before File(dir, name)): a replace whose constant pattern removes every '/'
+            if (PATH_STRIP_SANITIZER) {
+                if (owner.equals("Lkotlin/text/Regex;") && name.equals("<init>") && av.length > 1) {
+                    String p = unsmali(constString(av[1]));
+                    if (p != null) regexOf.put(av[0], p);
+                }
+                int input = slashStripInput(owner, name, sig, av);
+                if (input >= 0 && input < t.length) {
+                    Tv r = t[input].withPathSafe(true);
+                    for (SsaForm.Value y : d) raise(y, r);
+                    return;
+                }
+            }
             // 1.1.0: Kotlin's substringAfterLast with a constant '/' keeps only the last path segment: a bare file name (the same as File.getName above)
             if (BASENAME_SANITIZER && owner.startsWith("Lkotlin/text/StringsKt") && name.startsWith("substringAfterLast") && av.length > 1) {
                 Long sep = MergeTags.constOf(av[1]);
@@ -1610,6 +1699,39 @@ public final class TaintIr {
         }
 
         /** 0.67.0: the string literal an SSA value holds (const-string, followed through moves), with its quotes, or null. */
+        /** Phase 3.5: kotlin.text.Regex objects built in this method from a constant pattern. */
+        final Map<SsaForm.Value, String> regexOf = new IdentityHashMap<>();
+
+        /**
+         * Phase 3.5: index (in t / av) of the string a slash-stripping replace cleans, or -1. Java String.replaceAll(regex, repl) / replaceFirst is NOT one (it
+         * replaces once); String.replace(CharSequence, CharSequence) and replace(char, char) of '/'; Kotlin StringsKt.replace (String or char forms, $default too);
+         * kotlin.text.Regex.replace(input, repl) on a Regex built here from a constant. The pattern and the replacement must be constants.
+         */
+        int slashStripInput(String owner, String name, String sig, SsaForm.Value[] av) {
+            if (owner.equals("Ljava/lang/String;") && av.length >= 3) {
+                if (name.equals("replaceAll")) return stripsSlash(unsmali(constString(av[1])), unsmali(constString(av[2]))) ? 0 : -1;
+                if (name.equals("replace") && sig.startsWith("replace(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)"))
+                    return literalStripsSlash(unsmali(constString(av[1])), unsmali(constString(av[2]))) ? 0 : -1;
+                if (name.equals("replace") && sig.startsWith("replace(CC)")) return charStripsSlash(av[1], av[2]) ? 0 : -1;
+                return -1;
+            }
+            // replaceFirst replaces once; replaceAfter / replaceBefore keep the delimiter; replaceIndent* re-indent lines: none of them removes every '/'
+            if (owner.startsWith("Lkotlin/text/StringsKt") && name.startsWith("replace") && !name.startsWith("replaceFirst")
+                    && !name.startsWith("replaceAfter") && !name.startsWith("replaceBefore") && !name.startsWith("replaceIndent") && av.length >= 3) {
+                if (sig.contains("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;")) return literalStripsSlash(unsmali(constString(av[1])), unsmali(constString(av[2]))) ? 0 : -1;
+                if (sig.contains("(Ljava/lang/String;CC")) return charStripsSlash(av[1], av[2]) ? 0 : -1;
+                return -1;
+            }
+            if (owner.equals("Lkotlin/text/Regex;") && name.equals("replace") && sig.startsWith("replace(Ljava/lang/CharSequence;Ljava/lang/String;)") && av.length >= 3)
+                return stripsSlash(regexOf.get(av[0]), unsmali(constString(av[2]))) ? 1 : -1;
+            return -1;
+        }
+
+        boolean charStripsSlash(SsaForm.Value from, SsaForm.Value to) {
+            Long a = MergeTags.constOf(from), b = MergeTags.constOf(to);
+            return a != null && b != null && a == '/' && b != '/';
+        }
+
         String constString(SsaForm.Value v) {
             for (int i = 0; i < 8; i++) {
                 if (v == null || v.entry || v.phi != null || v.def == null) return null;
@@ -1802,6 +1924,7 @@ public final class TaintIr {
         }
 
         void hit(Sink s, Insn in, Tv tt) {
+            if (PATH_STRIP_SANITIZER && tt.pathSafe && T_FILE.equals(s.title)) return;     // phase 3.5: one path segment cannot leave the directory
             String api = shortKey(s.owner + "->" + s.name);
             SinkRef r = new SinkRef(m.key(), in.index, api, s.title, s.sev, s.cwe, Collections.singletonList(m.key()));
             for (int k = 0; k < 64; k++) if ((tt.params & (1L << k)) != 0) sum.addSink(k, r);
@@ -1811,6 +1934,7 @@ public final class TaintIr {
         /** A callee sends its parameter to a sink; the value held here is {@code tt}. */
         void hitVia(SinkRef r, Tv tt) {
             if (r.chain.size() + 1 > MAX_DEPTH) return;
+            if (PATH_STRIP_SANITIZER && tt.pathSafe && T_FILE.equals(r.title)) return;
             List<String> chain = new ArrayList<>(r.chain.size() + 1);
             chain.add(m.key());
             chain.addAll(r.chain);
