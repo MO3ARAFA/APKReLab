@@ -42,3 +42,8 @@ All three APKs matched the index hash; none was replaced.
 Chaka viewer is a tuning app from here on. Phase 3.5 (TaintIr PATH_STRIP_SANITIZER) treats a replace whose constant pattern removes every '/' as clean for
 file sinks only; re-scanned with it, Chaka viewer has 0 HIGH+ cards and an empty MUST FIX (2 HIGH with the switch off: ./private/qa120/chaka_p35_on.md / _off.md).
 This is a fix measured on the app that showed the gap, so it says nothing about blind accuracy; round 2 below is the next blind number.
+
+## Blind Holdout Round 2: protocol (frozen in this commit, before any round 2 APK was downloaded)
+- Scanner: this commit's parent, beef59e (phase 3.5), built fresh, run with SandboxScan exactly as in round 1. This commit changes only this file and the selection script (new optional arguments; round 1's defaults reproduce round 1's three apps).
+- Selection: the same F-Droid index (SHA-256 dd2a1f62...cf03); exclusion list `./private/blind/excluded_packages_round2.txt` (4,775 names: round 1's list plus every package named since, round 1's three apps and Paperless included), SHA-256 `aadc5907f122e763c181660ba66a29c48a1250901ecb67bdf77972f975c6fdf5`; latest APK 5-40 MB and declaring android.permission.INTERNET (apps that talk to a network: the owner asked for apps likely to produce cards; this is the only filter, read from the index before any download); seed **20261101**; the first three, taken as they come.
+- Integrity, one scan, report hashes before reading, judgement and accuracy: exactly as in round 1 (steps 3 to 5 above). Round 1's results above are not edited.
