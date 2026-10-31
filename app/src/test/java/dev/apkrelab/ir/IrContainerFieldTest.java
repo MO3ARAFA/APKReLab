@@ -50,6 +50,11 @@ public class IrContainerFieldTest {
     // twin: a field of an app type is not a container of the table (no write-back through an arbitrary object)
     @Test public void twinAnAppTypedFieldIsNotWrittenBack() { assertFalse(TaintIr.isCollectionField("Lt/A;->files:Lt/Holder;")); }
 
+    // twin (measured on K-9: jsoup node lists): the same field read through ANOTHER object is not written back (no object sensitivity, so only "this")
+    @Test public void twinAFieldOfAnotherObjectIsNotWrittenBack() {
+        assertFalse(flowInOnResume(cls("Ljava/util/ArrayList;", true).replace("iget-object v1, p0, Lt/A;->files", "iget-object v1, p1, Lt/A;->files")));
+    }
+
     @Test public void mutantNoWriteback() {
         boolean was = TaintIr.CONTAINER_FIELD_WRITEBACK;
         TaintIr.CONTAINER_FIELD_WRITEBACK = false;

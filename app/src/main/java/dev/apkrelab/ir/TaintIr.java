@@ -1461,8 +1461,13 @@ public final class TaintIr {
                 raise(x, t);
                 // 2.0.0 step 2 (real-CVE benchmark C01, Nextcloud Talk ConversationsListController: filesToShare.add(intent.getData().toString())):
                 // a collection read from an instance or static field and filled here is the object the field holds, so the field gets the taint
-                if (CONTAINER_FIELD_WRITEBACK && x.def != null && x.def.kind == Insn.Kind.FIELD_GET && x.def.ref != null && isCollectionField(x.def.ref))
-                    run.raiseField(x.def.ref, t, m.key());
+                // measured (K-9: +2 LOW-confidence flows through jsoup's node lists when any field read qualified): only this object's own field, read
+                // through "this" in a method of the class that declares it (Talk filesToShare, ownCloud mStreamsToUpload)
+                if (CONTAINER_FIELD_WRITEBACK && x.def != null && x.def.kind == Insn.Kind.FIELD_GET && x.def.ref != null && x.def.op.startsWith("iget")
+                        && x.def.ref.startsWith(m.owner + "->") && isCollectionField(x.def.ref)) {
+                    SsaForm.Value[] us = ssa.usesOf(x.def);
+                    if (us.length > 0 && isThis(us[0])) run.raiseField(x.def.ref, t, m.key());
+                }
                 if (x.phi != null) {
                     for (SsaForm.Value o : x.phi.operands) if (o != null) st.push(o);
                 } else if (x.def != null && (x.def.kind == Insn.Kind.MOVE || x.def.kind == Insn.Kind.CHECK_CAST)) {
