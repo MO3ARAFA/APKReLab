@@ -1,0 +1,17 @@
+# Second run (AFTER step-2 fixes, tuning set: NOT a blind number): build fb7850a, SandboxScan, 2026-10-31. Auto score (score.py):
+C01 CVE-2023-39957  DETECTED      before: MEDIUM taint-flow                        after: -
+C02 CVE-2023-41898  NOT-DIFFERENT before: HIGH taint-flow                          after: HIGH taint-flow
+C03 CVE-2023-33188  MISSED        before: -                                        after: -
+C04 CVE-2022-39349  NOT-DIFFERENT before: MEDIUM taint-flow                        after: MEDIUM taint-flow
+C05 CVE-2023-24804  NOT-DIFFERENT before: HIGH taint-flow                          after: HIGH taint-flow
+C06 CVE-2021-43863  DETECTED      before: HIGH taint-flow                          after: MEDIUM sql-concat
+C07 CVE-2021-41166  DETECTED      before: MEDIUM manifest-provider-partial-permission after: -
+C08 CVE-2022-39210  NOT-DIFFERENT before: MEDIUM taint-flow                        after: MEDIUM taint-flow
+C09 CVE-2021-41256  DETECTED      before: MEDIUM uri-grant-via-result              after: -
+C10 CVE-2024-26131  NOT-DIFFERENT before: HIGH taint-flow                          after: HIGH taint-flow
+C11 CVE-2026-65993  DETECTED      before: MEDIUM manifest-deep-links               after: -
+C12 CVE-2026-65994  NOT-DIFFERENT before: MEDIUM taint-flow                        after: MEDIUM taint-flow
+C13 CVE-2026-65996  NOT-DIFFERENT before: MEDIUM taint-flow                        after: MEDIUM taint-flow
+C14 CVE-2026-65995  NOT-DIFFERENT before: MEDIUM manifest-exported-components      after: MEDIUM manifest-exported-components
+C15 CVE-2026-65997  OUT-OF-SCOPE  before:                                          after: 
+in scope: 14  DETECTED: 5  NOT-DIFFERENT: 8  LOW-ONLY: 0  MISSED: 1  NOT-SCANNED: 0

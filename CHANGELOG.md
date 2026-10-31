@@ -2,6 +2,14 @@
 
 Release notes in short. The full record (measurements, what was not measured, every decision) is `docs/internal/HANDOFF.md`; numbers are in `docs/internal/PERF.md`.
 
+## 2.0.0 (versionCode 230)
+- Engine: async dispatch to Runnable / Callable / AsyncTask, constructor capture (deferred tasks, collection fields), Kotlin FunctionN devirtualisation,
+  explicit-Intent extras and WorkManager Data linked by key, collection fields filled through "this".
+- Rules: setResult(getIntent()) reflected to the caller (uri-grant-via-result); verify* calls count as validation-like.
+- Hybrid apps: Flutter / React Native / Cordova-Capacitor payload inventory (hosts, endpoints, config files, credential-format count) and a precise NOT SEEN line.
+- Primary metric, real-CVE benchmark (docs/VALIDATION.md): blind, the vulnerable code was reported in 7 of 14 published advisories in scope and the fix was
+  visible in 2; after this release's fixes (tuning, not blind) 11 of 14 and 4.
+
 ## Maturity protocol (after 1.2.1, versionCode unchanged)
 - Phase 0: repository hygiene (binary guards, docs). Phase 1: CI (hygiene, ir tests, Gradle unit tests + lint).
 - Phase 2: four-condition MUST FIX gate (high-impact sink, exported entry without a signature-level guard, no validation seen, traced proof); hash-locked self-check with top3_accuracy.

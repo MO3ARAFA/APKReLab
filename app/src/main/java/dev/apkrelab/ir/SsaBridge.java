@@ -70,7 +70,8 @@ public final class SsaBridge {
             "Ljava/lang/String;->(startsWith|endsWith|matches|contains)\\(|Ljava/util/(List|Set|Collection|ArrayList|HashSet);->contains\\(|"
                     + "->(getHost|getScheme|getAuthority|getCanonicalPath|getCanonicalFile|normalize|sqlEscapeString|isDigitsOnly|isHttpsUrl|isValidUrl)\\(|"
                     // 0.83.0 (FairEmail Helper.sanitizeFilename before the File is built): a call to an app method whose NAME says it cleans or checks a value
-                    + "->[A-Za-z0-9_$]*(?i:sanitiz|sanitis|normaliz|canonical|escape|validat|isSafe|isValid|checkPath|safeName)[A-Za-z0-9_$]*\\(|"
+                    // 2.0.0 step 2 (real-CVE benchmark C06: Nextcloud 3.18.1 FileContentProvider$VerificationUtils.verifyWhere(selection) before the query): verify* too
+                    + "->[A-Za-z0-9_$]*(?i:sanitiz|sanitis|normaliz|canonical|escape|validat|verif|isSafe|isValid|checkPath|safeName)[A-Za-z0-9_$]*\\(|"
                     + "Ljava/util/regex/|const-string [vp]\\d+, \"\\.\\.\"");
 
     private static final Map<String, String> FIX = new HashMap<>();

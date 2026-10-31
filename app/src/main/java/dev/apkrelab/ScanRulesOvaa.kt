@@ -361,9 +361,13 @@ object UriGrantViaResultRule : ScanRule {
             val forwards = rx("\\sonActivityResult\\(IILandroid/content/Intent;\\)V").containsMatchIn(m.header) &&
                 rx("invoke-virtual(?:/range)?\\s*\\{p0,\\s*\\w+,\\s*p3\\}[^\\n]*->setResult\\(ILandroid/content/Intent;\\)V").containsMatchIn(m.body) &&
                 !rx("Landroid/content/Intent;->(?:setFlags|removeFlags)\\(").containsMatchIn(m.body)
-            if (!direct && !forwards && !(grantFlag && external)) continue
+            // 2.0.0 (real-CVE benchmark C09, CVE-2021-41256, Nextcloud News SettingsActivity.onStart): setResult(code, getIntent()) hands the
+            // caller's OWN Intent back to it; the caller set the data Uri and FLAG_GRANT_*_URI_PERMISSION, so it gets access to this app's providers
+            val reflected = REFLECT_RESULT && reflectsIncomingIntent(m.body)
+            if (!direct && !forwards && !reflected && !(grantFlag && external)) continue
             out.add(ctx.finding(Severity.MEDIUM, title,
-                if (forwards) "onActivityResult() passes the result Intent it received (from an activity chosen by an implicit Intent) straight to setResult(). That Intent can carry FLAG_GRANT_READ/WRITE_URI_PERMISSION and a content:// Uri of this app's own providers (including ones that are not exported but declare grantUriPermissions=true), so whoever started this activity, and the app that answered, gets access to that data"
+                if (reflected && !direct && !forwards) "setResult() returns the Intent this activity was started with (getIntent()). The app that started it chose that Intent's data Uri and its FLAG_GRANT_READ/WRITE_URI_PERMISSION flags, so when the result comes back the system grants it access to the content:// Uri it named, including this app's providers that are not exported but declare grantUriPermissions=\"true\""
+                else if (forwards) "onActivityResult() passes the result Intent it received (from an activity chosen by an implicit Intent) straight to setResult(). That Intent can carry FLAG_GRANT_READ/WRITE_URI_PERMISSION and a content:// Uri of this app's own providers (including ones that are not exported but declare grantUriPermissions=true), so whoever started this activity, and the app that answered, gets access to that data"
                 else "The method returns an Intent through setResult()" + (if (direct) " after grantUriPermission()" else " that carries FLAG_GRANT_*_URI_PERMISSION") +
                     (if (external) " and the Uri comes from outside data" else "") +
                     ". The app that started this activity receives temporary access to the content:// Uri, including providers that are not exported but declare grantUriPermissions=\"true\".",
@@ -371,6 +375,41 @@ object UriGrantViaResultRule : ScanRule {
                 m.start + res.range.first, "CWE-284"))
         }
         return out
+    }
+
+    /** Switch for the mutation check of the reflected-Intent case. */
+    @JvmField var REFLECT_RESULT = !java.lang.Boolean.getBoolean("apkrelab.noReflectResult")
+
+    private val setResultCall = rx("invoke-virtual\\s*\\{p0,\\s*[vp]\\d+,\\s*([vp]\\d+)\\},\\s*L[^;]+;->setResult\\(ILandroid/content/Intent;\\)V")
+
+    /** True when a setResult(int, Intent) call of the method passes the value of getIntent(): walking back from the call in straight-line code
+     *  (a label = a merge point stops the walk, no match), through move-object copies and check-cast, to move-result-object right after getIntent(). */
+    internal fun reflectsIncomingIntent(body: String): Boolean {
+        val lines = body.lines()
+        for ((i, line) in lines.withIndex()) {
+            var reg = setResultCall.find(line)?.groupValues?.get(1) ?: continue
+            var j = i - 1
+            while (j >= 0) {
+                val t = lines[j].trim()
+                j--
+                if (t.isEmpty() || t.startsWith(".")) continue
+                if (t.startsWith(":")) break
+                val op = t.substringBefore(' ')
+                val first = t.substringAfter(' ', "").substringBefore(',').trim().removePrefix("{").removeSuffix("}")
+                if (op.startsWith("invoke") || op.startsWith("if-") || op.startsWith("iput") || op.startsWith("sput") || op.startsWith("aput") ||
+                    op.startsWith("return") || op.startsWith("throw") || op.startsWith("monitor") || op.startsWith("goto")) continue
+                if (first != reg) continue
+                if (op == "check-cast") continue
+                if (op.startsWith("move-object")) { reg = t.substringAfter(',').trim(); continue }
+                if (op == "move-result-object") {
+                    var k = j
+                    while (k >= 0 && (lines[k].isBlank() || lines[k].trim().startsWith("."))) k--
+                    if (k >= 0 && lines[k].contains("->getIntent()Landroid/content/Intent;")) return true
+                }
+                break
+            }
+        }
+        return false
     }
 }
 
