@@ -2,6 +2,13 @@
 
 Release notes in short. The full record (measurements, what was not measured, every decision) is `docs/internal/HANDOFF.md`; numbers are in `docs/internal/PERF.md`.
 
+## Maturity protocol (after 1.2.1, versionCode unchanged)
+- Phase 0: repository hygiene (binary guards, docs). Phase 1: CI (hygiene, ir tests, Gradle unit tests + lint).
+- Phase 2: four-condition MUST FIX gate (high-impact sink, exported entry without a signature-level guard, no validation seen, traced proof); hash-locked self-check with top3_accuracy.
+- Phase 3: context model (caller checks in provider code, provider permission context, interprocedural path-sanitizer summary).
+- Phase 3.5: slash-stripping path sanitizer (file sinks only).
+- Phase 4: blind validation, rounds 1 and 2 (docs/VALIDATION.md): 2 MUST FIX cards judged, 0 TP.
+
 ## 1.2.1 (versionCode 225)
 - MUST FIX and CRITICAL PATH cards say what to open to confirm them ("→ to verify") and how strong their evidence is; "CHECK FIRST" below 0.9.
 - QA: 11 of 12 benchmark / test APKs obtained from their projects' own repositories; self-check before / after identical on six benchmark apps; two Verdict wording bugs fixed.

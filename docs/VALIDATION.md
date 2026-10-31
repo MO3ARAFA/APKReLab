@@ -47,3 +47,21 @@ This is a fix measured on the app that showed the gap, so it says nothing about 
 - Scanner: this commit's parent, beef59e (phase 3.5), built fresh, run with SandboxScan exactly as in round 1. This commit changes only this file and the selection script (new optional arguments; round 1's defaults reproduce round 1's three apps).
 - Selection: the same F-Droid index (SHA-256 dd2a1f62...cf03); exclusion list `./private/blind/excluded_packages_round2.txt` (4,775 names: round 1's list plus every package named since, round 1's three apps and Paperless included), SHA-256 `aadc5907f122e763c181660ba66a29c48a1250901ecb67bdf77972f975c6fdf5`; latest APK 5-40 MB and declaring android.permission.INTERNET (apps that talk to a network: the owner asked for apps likely to produce cards; this is the only filter, read from the index before any download); seed **20261101**; the first three, taken as they come.
 - Integrity, one scan, report hashes before reading, judgement and accuracy: exactly as in round 1 (steps 3 to 5 above). Round 1's results above are not edited.
+
+## Blind Holdout Round 2: results (2026-10-31, scanner beef59e, protocol 83a5fb9)
+1,258 candidates; all three APKs matched the index hash; none was replaced.
+
+| app (package, versionName) | APK SHA-256 | report SHA-256 (hashed before it was opened) | classes | cards (LOW / MEDIUM / HIGH+) | MUST FIX |
+|---|---|---|---|---|---|
+| ArchForums `com.kanedias.archforums` 1.2.8 | 513bc911a1e3904cf3a54fa04fbf630f1ab69bcbc7e188529f1e420460a5c9f6 | efaa76688ac5e9794d1186cff9430f60bd72bf0e80f50ff9561682650f4b0ec7 | 7,195 | 4 / 5 / 0 | empty |
+| QED `eu.jonahbauer.qed.fdroid` 3.1.4+fdroid | 70044b88ef0cb1650560d657848bf9fa6a470b8854bcf1c72336eb4455e16399 | 2a00c562aa803d5615cf9aa75098f0ad4b1048cd19fddb15c8f06fca33aea663 | 6,037 | 13 / 6 / 0 | empty |
+| NFC Radio `com.trapplab.nfc_radio` 1.0.0-fdroid | ea5e877b64972a10294654390f7a5c5044527ccebb722f7edaef74a499fc36a4 | 82abab7e662f784eba3bf4f4990019c30ee9b526bdaf5cc914954e85fe67066e | 724 | 10 / 5 / 0 | empty |
+
+### Blind top-3 accuracy, round 2
+- **MUST FIX: no card to judge (n/a).** All three apps had an empty MUST FIX and no HIGH+ card, so round 2 gives no accuracy number; it is not a 100%.
+- Secondary (three highest-priority HIGH+ cards per app): none, n/a.
+- What it does say: on three more untouched network apps the scanner raised no HIGH card and put nothing in MUST FIX, so it did not repeat round 1's two false MUST FIX cards. Whether
+  it MISSED a real issue is not measured: these apps have no expected list (recall unknown), and MEDIUM / LOW cards were not judged.
+- Not measured: whether the phase 3.5 sanitizer fired on these apps (the protocol allows one scan; no second run with the switch off was made).
+- Combined over both rounds: 2 MUST FIX cards judged, 0 TP. Six apps, two cards: too few to state an accuracy with any confidence; the next round should pick apps with known
+  attack surface (an index filter on exported providers is not possible; a larger round is).

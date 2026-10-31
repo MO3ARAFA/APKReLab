@@ -2,7 +2,7 @@
 
 An Android app that analyses other Android apps' APKs **on the phone itself**: static application security testing (SAST) with an inter-procedural data-flow engine, manifest and resource checks, native-library and SBOM / SCA inspection, MASVS coverage, and a report that says what to fix first and what the scan could not see.
 
-Current version: **1.2.1** (versionCode 225). Package `dev.apkrelab`, minSdk 26, targetSdk 36.
+Current version: **1.2.1** (versionCode 225); maturity protocol phases 0-4 and 3.5 on top (see CHANGELOG). Package `dev.apkrelab`, minSdk 26, targetSdk 36.
 
 ## What it does
 - Decodes the APK (baksmali), parses Dalvik bytecode into an IR (CFG + SSA), builds a call graph and runs an inter-procedural taint analysis (sources: Intents, deep links, providers, JavaScript bridges, preferences ...; sinks: WebView, files, SQL, shell, reflection ...). Big apps are analysed in groups that fit a 256-512 MB heap.
