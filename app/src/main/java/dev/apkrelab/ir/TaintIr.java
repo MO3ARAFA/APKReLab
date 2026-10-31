@@ -468,6 +468,8 @@ public final class TaintIr {
         int pathSanitizer;
         /** Phase 3.5: every tainted return value was path-safe (passed a slash-stripping replace); null-like until a tainted return is seen. */
         boolean retSeen, retPathSafe = true;
+        /** 2.0.0: a constructor stores parameter slot k into these fields of the new object ("ref|S" when the value was a String). */
+        final Map<Integer, Set<String>> ctorFields = new TreeMap<>();
         final Map<Integer, Map<String, SinkRef>> sinkParams = new TreeMap<>();
         int refsDropped;      // 0.66.5: sink references not kept because the slot was full (MAX_REFS); measurement only
 
@@ -489,6 +491,7 @@ public final class TaintIr {
         String fingerprint() {
             StringBuilder sb = new StringBuilder();
             sb.append(retParams).append('/').append(retLevel).append('/').append(retSrc).append(retWeak ? "~" : "").append(retInternal ? "!" : "").append(retSeen && retPathSafe ? "P" : "");  // pathSanitizer is structural (the same at every analysis of the method): not part of the fingerprint
+            if (!ctorFields.isEmpty()) sb.append("|cf").append(ctorFields);
             for (Map.Entry<Integer, Map<String, SinkRef>> e : sinkParams.entrySet()) {
                 sb.append('|').append(e.getKey()).append(':');
                 for (SinkRef r : e.getValue().values()) sb.append(r.key()).append('#').append(r.chain.size()).append(',');
@@ -1044,6 +1047,19 @@ public final class TaintIr {
             if (rd != null) dirtyReaders.addAll(rd);
         }
 
+        /**
+         * 2.0.0: a class whose instances are handed over to run later: it implements Runnable, Callable or a Kotlin FunctionN (a lambda). Only their constructors' field
+         * captures are summarised (measured: capturing in every class added 14 LOW-confidence flows in R8-merged classes on Axis Pay and nothing else).
+         */
+        private final Map<String, Boolean> deferredMemo = new HashMap<>();
+        boolean isDeferredTask(String type) {
+            return deferredMemo.computeIfAbsent(type, t -> {
+                for (String s : g.supers(t))
+                    if (s.equals("Ljava/lang/Runnable;") || s.equals("Ljava/util/concurrent/Callable;") || s.startsWith("Lkotlin/jvm/functions/Function")) return true;
+                return false;
+            });
+        }
+
         /** 0.69.0: registers the reader for re-queueing and returns the stored value (null when nothing was written). */
         Tv readHeap(HeapKey k, String reader) {
             heapReaders.computeIfAbsent(k, x -> new HashSet<>()).add(reader);
@@ -1121,6 +1137,24 @@ public final class TaintIr {
      * its failing side (one return path, or every path to a return passes the check; the failing side throws). Then its returned value carries no taint. When the check is there but some return does not pass it, the taint is KEPT and
      * the result is weak (LOW confidence) with a sentence that says which method to read.
      */
+    /** 2.0.0 pillar 1.1 switches (mutation checks): constructor field capture, async dispatch to the concrete Runnable, FunctionN devirtualisation. */
+    static boolean CTOR_CAPTURE = !Boolean.getBoolean("apkrelab.noCtorCapture");
+    static boolean ASYNC_DISPATCH = !Boolean.getBoolean("apkrelab.noAsyncDispatch");
+    static boolean LAMBDA_DEVIRT = !Boolean.getBoolean("apkrelab.noLambdaDevirt");
+
+    /** 2.0.0: switch for the mutation check of the explicit-Intent extra link; heap pseudo-field "icc-extra:<target type>:<key>". */
+    static boolean ICC_EXTRAS = !Boolean.getBoolean("apkrelab.noIccExtras");
+    static final String ICC_EXTRA_PREFIX = "icc-extra:";
+
+    static String unquote(String lit) {
+        return lit.length() >= 2 && lit.startsWith("\"") && lit.endsWith("\"") ? lit.substring(1, lit.length() - 1) : lit;
+    }
+
+    static String outerOfType(String type) {
+        int d = type.indexOf('$');
+        return d < 0 ? type : type.substring(0, d) + ";";
+    }
+
     static boolean PATH_SANITIZER_SUMMARY = !Boolean.getBoolean("apkrelab.noPathSanitizerSummary");
 
     /**
@@ -1300,6 +1334,7 @@ public final class TaintIr {
         final int[] regToSlot;
         final Map<SsaForm.Value, Tv> tv = new IdentityHashMap<>();
         final Map<Integer, List<String>> calleesAt = new HashMap<>();
+        final Map<Integer, List<String>> asyncAt = new HashMap<>();       // 2.0.0: "async" edges (Executor / Handler / runOnUiThread) per call site
         final Summary sum = new Summary();
         final List<Flow> flows = new ArrayList<>();
         final Map<String, Flow> flowByKey = new HashMap<>();
@@ -1334,6 +1369,7 @@ public final class TaintIr {
             seedSlot = seed;
             seedInternal = seed != null && run.g.hasComponentList() && !run.g.isExportedEntry(m.owner);
             for (CallGraph.Edge e : run.g.taintEdgesFrom(m.key())) {
+                if ("async".equals(e.kind)) { asyncAt.computeIfAbsent(e.insn, k -> new ArrayList<>()).add(e.callee); continue; }
                 // 0.68.0: the "~" kinds (CHA fallback for a call site RTA left without a target) carry arguments too, at most MAX_APPROX_TARGETS per site
                 boolean approx = e.kind.endsWith("~");
                 if (e.external || !INVOKE_KINDS.contains(approx ? e.kind.substring(0, e.kind.length() - 1) : e.kind)) continue;
@@ -1454,6 +1490,13 @@ public final class TaintIr {
                         if (tag == MergeTags.UNKNOWN) run.raiseField(in.ref, t, m.key(), str);
                         else run.raiseHeap(new HeapKey(TAG_SPACE + tag, in.ref), t, m.key(), str);
                     }
+                    // 2.0.0: a constructor that stores its own parameter into a field of the new object (a Runnable / lambda capturing a value)
+                    if (CTOR_CAPTURE && collect && t.params != 0L && "<init>".equals(m.name) && in.op.startsWith("iput") && u.length > vc && isThis(u[vc])
+                            && run.isDeferredTask(m.owner) && !in.ref.endsWith(":Ljava/lang/Object;")) {   // measured (K-9): Object fields are R8-merged / erased: no capture
+                        boolean str = vc == 1 && u.length > 0 && isString(u[0], 0);
+                        for (int k = 1; k < 64; k++)
+                            if ((t.params & (1L << k)) != 0) sum.ctorFields.computeIfAbsent(k, x -> new java.util.TreeSet<>()).add(in.ref + (str ? "|S" : ""));
+                    }
                     break;
                 }
                 case ARRAY_GET:
@@ -1502,6 +1545,93 @@ public final class TaintIr {
             // (int requestCode, int resultCode, Intent data) is the shape of an activity answer whatever the method is called
             boolean helper = m.desc.contains("IILandroid/content/Intent;)");
             return (m.name.equals("onActivityResult") || helper) && viaIntentParam(v, 0);
+        }
+
+        /** 2.0.0: the value behind moves / casts. */
+        private SsaForm.Value rootOf(SsaForm.Value v) {
+            for (int i = 0; v != null && i < 8 && v.def != null && (v.def.kind == Insn.Kind.MOVE || v.def.kind == Insn.Kind.CHECK_CAST); i++) {
+                SsaForm.Value[] us = ssa.usesOf(v.def);
+                if (us.length == 0) break;
+                v = us[0];
+            }
+            return v;
+        }
+
+        /**
+         * 2.0.0: the in-app components this method names as the explicit target of [intent] (Intent(Context, Class), setClass, setClassName, setComponent(new
+         * ComponentName(..)) on that same object), when the same object is also passed to startActivity / startService / sendBroadcast / bindService here.
+         */
+        List<String> launchedTargetsOf(SsaForm.Value intent) {
+            SsaForm.Value root = rootOf(intent);
+            if (root == null) return Collections.emptyList();
+            List<String> targets = new ArrayList<>();
+            boolean launched = false;
+            Map<SsaForm.Value, String> componentNames = new IdentityHashMap<>();
+            for (Insn in : m.insns) {
+                if (in.kind != Insn.Kind.INVOKE) continue;
+                String o = in.targetOwner(), n = in.targetName(), sg = in.targetSig();
+                SsaForm.Value[] us = ssa.usesOf(in);
+                if (us.length == 0) continue;
+                if (o.equals("Landroid/content/ComponentName;") && n.equals("<init>") && us.length >= 3) {
+                    String tt = targetOfArg(us[2]);
+                    if (tt != null) componentNames.put(rootOf(us[0]), tt);
+                    continue;
+                }
+                boolean onIntent = rootOf(us[0]) == root;
+                if (onIntent && o.equals("Landroid/content/Intent;") && us.length >= 3 && (n.equals("<init>") || n.equals("setClass") || n.equals("setClassName"))) {
+                    String tt = targetOfArg(us[us.length - 1]);
+                    if (tt != null) targets.add(tt);
+                } else if (onIntent && o.equals("Landroid/content/Intent;") && n.equals("setComponent") && us.length >= 2) {
+                    String tt = componentNames.get(rootOf(us[1]));
+                    if (tt != null) targets.add(tt);
+                } else if (REDIRECT_NAMES.contains(n) && sg.contains("(Landroid/content/Intent;") && us.length >= 2 && rootOf(us[1]) == root) launched = true;
+            }
+            return launched ? targets : Collections.emptyList();
+        }
+
+        /** 2.0.0: an app component named by a const-class, or by a const-string class name. */
+        private String targetOfArg(SsaForm.Value v) {
+            v = rootOf(v);
+            if (v == null || v.def == null || v.def.kind != Insn.Kind.CONST) return null;
+            String t = v.def.op.equals("const-class") ? v.def.ref : v.def.op.startsWith("const-string") ? CallGraph.classTypeOfName(v.def.ref) : "";
+            return run.g.classIr(t) != null ? t : null;
+        }
+
+        /** 2.0.0: v is the "this" parameter of an instance method. */
+        private boolean isThis(SsaForm.Value v) {
+            return v != null && v.entry && v.param && !m.isStatic && v.reg < regToSlot.length && regToSlot[v.reg] == 0;
+        }
+
+        /**
+         * 2.0.0: the one concrete app class of v: a new-instance, a check-cast to a concrete leaf class, a field whose declared type is a concrete leaf class,
+         * a move of one, or a phi whose operands all resolve to the same class. Null when unknown (a parameter, a call result, two different classes).
+         */
+        String concreteClassOf(SsaForm.Value v, int depth) {
+            if (v == null || depth > 8 || v.entry) return null;
+            if (v.phi != null) {
+                String c = null;
+                for (SsaForm.Value o : v.phi.operands) {
+                    String x = concreteClassOf(o, depth + 1);
+                    if (x == null || (c != null && !c.equals(x))) return null;
+                    c = x;
+                }
+                return c;
+            }
+            Insn d = v.def;
+            if (d == null) return null;
+            switch (d.kind) {
+                case NEW_INSTANCE: return run.g.classIr(d.ref) != null ? d.ref : null;
+                case CHECK_CAST: return run.g.isConcreteLeaf(d.ref) ? d.ref : null;
+                case FIELD_GET: {
+                    String ft = d.ref.contains(":") ? d.ref.substring(d.ref.lastIndexOf(':') + 1) : "";
+                    return run.g.isConcreteLeaf(ft) ? ft : null;
+                }
+                case MOVE: {
+                    SsaForm.Value[] us = ssa.usesOf(d);
+                    return us.length > 0 ? concreteClassOf(us[0], depth + 1) : null;
+                }
+                default: return null;
+            }
         }
 
         private boolean viaIntentParam(SsaForm.Value v, int depth) { return viaParamOfType(v, depth, "Landroid/content/Intent;"); }
@@ -1560,6 +1690,13 @@ public final class TaintIr {
             // 0.74.0: intent redirection (see REDIRECT_NAMES): the Intent object itself came from the caller
             if (collect && !isStatic && REDIRECT_NAMES.contains(name) && call.desc.startsWith("(Landroid/content/Intent;") && t.length > 1 && !t[1].isNone()
                     && !owner.startsWith("Landroid/content/Intent;")) hit(REDIRECT_SINKS.get(name), in, t[1]);
+            // 2.0.0: putExtra(literal key, real source) on an Intent this method builds for an in-app component and launches: remembered for that component + key
+            if (ICC_EXTRAS && !isStatic && owner.equals("Landroid/content/Intent;") && name.equals("putExtra") && t.length >= 3 && av.length >= 3) {
+                Tv val = t[2].realOnly();
+                String key = constString(av[1]);
+                if (!val.isNone() && key != null)
+                    for (String target : launchedTargetsOf(av[0])) run.raiseField(ICC_EXTRA_PREFIX + target + ":" + unquote(key), val, m.key());
+            }
             // 0.67.0: SharedPreferences.Editor.putString(key, value): a REAL source in the value is remembered for that key
             if (!isStatic && owner.equals(EDITOR_OWNER) && PREFS_PUTS.contains(name) && t.length >= 3) {
                 Tv val = t[2].realOnly();
@@ -1574,6 +1711,14 @@ public final class TaintIr {
             Tv src = sourceOf(owner, name);
             if (src != null && owner.equals("Landroid/content/Intent;") && run.g.isInternalComponent(classOf(m.key())))
                 src = Tv.internalSource(src.level, src.src, src.via);                 // 0.68.6: read in a component that is not exported
+            // 2.0.0: an extra another component of this app put under the same literal key into an Intent it launched at this class
+            if (ICC_EXTRAS && src != null && owner.equals("Landroid/content/Intent;") && name.endsWith("Extra") && av.length > 1) {
+                String key = constString(av[1]);
+                if (key != null) {
+                    Tv fw = readHeap(ICC_EXTRA_PREFIX + outerOfType(classOf(m.key())) + ":" + unquote(key));
+                    if (fw.level > 0) src = fw.join(src);
+                }
+            }
             // 0.70.0: the Intent handed to onActivityResult is the ANSWER of an activity this app started (file picker, camera, its own
             // screens), not an input another app sends to one of our components. It is attacker data only when that activity can be
             // hijacked (implicit Intent) or is untrusted, so it is a weak lead, never a strong source. Only the method's own Intent
@@ -1591,6 +1736,28 @@ public final class TaintIr {
             }
             // app callees (RTA edges of this call site)
             List<String> callees = calleesAt.get(in.index);
+            // 2.0.0: async dispatch to the concrete Runnable / Callable: its run() / call() gets the Runnable as "this"
+            if (ASYNC_DISPATCH && callees == null) {
+                List<String> as = asyncAt.get(in.index);
+                if (as != null && av.length > 1) {
+                    String cls = concreteClassOf(av[1], 0);
+                    String target = cls == null ? null : run.g.dispatchOf(cls, CallGraph.ASYNC_SIGS.getOrDefault(sig, "run()V"));
+                    if (target != null) {                                         // the site has an async edge (as != null); SSA names the one target
+                        Summary sc = run.summaries.get(target);
+                        if (sc != null && collect && !t[1].isNone()) {
+                            Map<String, SinkRef> refs = sc.sinkParams.get(0);
+                            if (refs != null) for (SinkRef r : refs.values()) hitVia(r, t[1]);
+                        }
+                        return;                                                   // followed: not a drop
+                    }
+                }
+            }
+            // 2.0.0: Kotlin FunctionN.invoke on a receiver whose class is known in this method: that class's invoke only (no fan-out over every lambda)
+            if (LAMBDA_DEVIRT && callees != null && callees.size() > 1 && owner.startsWith("Lkotlin/jvm/functions/Function") && "invoke".equals(name) && av.length > 0) {
+                String cls = concreteClassOf(av[0], 0);
+                String one = cls == null ? null : run.g.dispatchOf(cls, sig);
+                if (one != null && callees.contains(one)) callees = Collections.singletonList(one);
+            }
             Tv res = Tv.NONE;
             boolean app = false;
             // 1.1.0: an erased generic callback (every parameter Object, result Object or none: Function.invoke, a coroutine's invokeSuspend / resumeWith) that
@@ -1614,6 +1781,14 @@ public final class TaintIr {
                         if (collect) {
                             Map<String, SinkRef> refs = sc.sinkParams.get(k);
                             if (refs != null) for (SinkRef r : refs.values()) hitVia(r, t[k]);
+                        }
+                        // 2.0.0: the constructor keeps this argument in a field: the caller's real taint goes to that field's heap slot
+                        if (CTOR_CAPTURE && t[k].level > 0) {
+                            Set<String> fs = sc.ctorFields.get(k);
+                            if (fs != null) for (String f : fs) {
+                                boolean str = f.endsWith("|S");
+                                run.raiseField(str ? f.substring(0, f.length() - 2) : f, t[k], m.key(), str);
+                            }
                         }
                         if (k < 64 && (sc.retParams & (1L << k)) != 0 && !(PATH_SANITIZER_SUMMARY && sc.pathSanitizer == 1)) {
                             Tv r1 = t[k];

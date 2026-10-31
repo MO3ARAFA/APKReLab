@@ -13,6 +13,31 @@ Owner speaks Egyptian Arabic, wants concise, actionable answers.
 
 ## Current version: 1.2.1
 - **0.104.1 VERIFIED ON THE PHONE (report 9, Axis Pay, second Deep scan without re-picking the app)**: "cache: 25 of 25 groups reused", **groups 8 s instead of 743-752 s** (plan 21 s still runs; the 8 s include the hash pass over the unique classes and reading 25 cache files), GC 0.9 s in 32 collections instead of 447-620 s. The report is identical to the full run's (report 8) except the status line: 80 cards, +16 flows, same loss counters. So the 0.104.0 miss was the workspace wipe, as suspected. Note: the "slowest methods" of a cached run are the CACHED measurements of the run that produced them (their times are not this run's). Still unmeasured: the cold-run overhead of writing the 25 files.
+- 2.0.0 (in progress; one branch, PR #2 consolidates everything since 1.2.1: it was fast-forwarded to 6a77647, the tip of #8, and supersedes #3, #4, #5, #6, #7, #8, whose
+  own heads all had green CI. The owner merges once instead of retargeting seven branches.)
+  - Pillar 1.1 (async dispatch, measured first): before, on Axis Pay 3.0.1 with MeasureBig (the device's grouped pipeline, -Xmx2g, 2 threads), real-source drops at
+    java/util/concurrent/Executor 97, ExecutorService 72, android/os/Handler 44, 15 flows; and the engine lost a value captured by a Runnable's constructor even on a
+    direct run() call (test directRunCallCarriesTheCapturedField failed before). Built: (a) CTOR_CAPTURE: the summary of a constructor of a Runnable / Callable /
+    kotlin FunctionN class records "parameter k stored into field F of this"; the caller writes its REAL taint into F's heap slot (fields typed java/lang/Object are
+    skipped: measured on K-9, capturing them added 3 LOW flows through R8-merged / erased fields, and capturing in every class added 14 LOW flows on Axis Pay);
+    (b) CallGraph "async" edges from Executor.execute / ExecutorService.submit / Handler.post / postDelayed / postAtFrontOfQueue / runOnUiThread to run() / call() of
+    the candidate class of the Runnable argument (new-instance, check-cast or field type within 12 instructions, through moves), which also makes run() REACHABLE
+    from the dispatching entry; TaintIr follows the edge only when the SSA value resolves to ONE concrete class (new-instance, a cast to or a field of a leaf
+    class, moves, a phi of one class) and then counts no drop; (c) LAMBDA_DEVIRT: FunctionN.invoke on a receiver of one known class goes to that class only.
+    After (same tool, same APKs; ./private/2.0.0_pillar1_corpus.txt): Axis Pay Executor + ExecutorService + ThreadPoolExecutor real drops 169 -> 62 (Executor 97 -> 0), all real
+    library drops 4,340 -> 4,244, flows 15 -> 15; K-9 0 -> 0, NewPipe 1 -> 1, KeePassDX 9 -> 9, Paperless 1 -> 1, Chaka 1 -> 1 flows. So: drops recovered, no new card on
+    this corpus (no new TP either: none of these apps has a captured-source flow that reaches a sink). The 62 left are ExecutorService.submit sites whose Runnable
+    class is not resolved (a call result or another group's class).
+  - Pillar 1.2: explicit-Intent targets named by a String (Intent.setClassName, ComponentName(..., String)) are icc targets now (reachability); and
+    putExtra(literal key, real source) on an Intent this method builds for an in-app component AND launches is stored under heap key "icc-extra:<target>:<key>",
+    read by get*Extra(same key) in that component: the card names the extra and the method that set it. A new heap key, measured: no flow count changed on the corpus.
+    Before this, a const-class launch from an exported component already made the target attacker-reachable (strong source), so the link adds provenance, not new cards.
+  - Tests: IrAsyncDispatchTest 24, IrIccExtrasTest 8 (positives + twins: constant capture, unknown / interface / non-leaf / two-class phi Runnable, app override of
+    execute, definition beyond the window, ordinary class, write into another object, Object field, app interface not devirtualised, other key, Intent not launched).
+    Mutants 30 / 30 killed (two pieces of logic were removed instead: an `as.contains(target)` check the SSA and the linear search always agreed on, and the
+    first test set's drop assertions, vacuous because an app constructor does not taint its object; replaced by a Runnable that is itself a tainted Parcelable).
+    ir 397 / 397, Kotlin 439 / 439, Gradle 836 tests / 0 failures; self_check identical to phase 3.5 (tools/benchmark/runs/self_check_2.0.0_pillar1.txt).
+  - NOT measured: the device (only the sandbox's MeasureBig); a Runnable built in another group; Handler.sendMessage / Message.obj (not a Runnable).
 - Maturity protocol (after 1.2.1; one PR per phase, each stacked on the previous one while it waits for the owner's merge):
   - Phase 0 (PR #2): company APK deleted from main's tree (history kept, owner's choice); binary guards (.gitignore, .pre-commit-config.yaml, .githooks/pre-commit); HANDOFF.md and PERF.md moved to docs/internal/; README, docs/ARCHITECTURE.md, CHANGELOG, CONTRIBUTING, LICENSE (proprietary).
   - Phase 1: `.github/workflows/ci.yml` (hygiene job `tools/ci/hygiene_check.sh` first; then the `ir` tests with javac and the JUnit stub, and `gradle :app:testDebugUnitTest :app:lintDebug --no-daemon` with Gradle 9.8.2 from gradle/actions/setup-gradle@v4 and Temurin 21: there is no ./gradlew in the repository). Verified locally: hygiene OK on 477 files and fails on a .so and on an 1,100,000-byte file (a 1,048,576-byte file passes); ir 330/330; Gradle 751 tests / 0 failures, lint OK. NOT verified locally: the workflow itself (actionlint was not run: its download was refused by the session's safety check); the first CI run is its test. typecheck_app.sh is not in CI (it needs the local ~/tc toolchain).
