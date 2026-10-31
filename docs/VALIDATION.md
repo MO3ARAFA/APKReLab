@@ -37,3 +37,8 @@ All three APKs matched the index hash; none was replaced.
 - Secondary (three highest-priority HIGH+ cards per app): the same two cards, 0 / 2. No other app had a HIGH+ card.
 - What this says, plainly: on these three untouched apps the scanner raised two HIGH cards and both were false; the Verdict put both in MUST FIX. The cause is one gap: a `replaceAll` with a character allow-list that drops `/` is not recognised as a path sanitizer. Per the protocol no rule is changed because of this result; the gap is recorded in NEXT_GEN_ROADMAP.md and a fix must be measured on the NEXT blind set, not on these apps (they are tuning apps from now on).
 - Not measured here: recall (the apps have no expected list, so a missed issue cannot be counted); MEDIUM and lower cards (not judged); anything a device run would add (reach labels on rule cards).
+
+### After round 1 (tuning, NOT a blind number)
+Chaka viewer is a tuning app from here on. Phase 3.5 (TaintIr PATH_STRIP_SANITIZER) treats a replace whose constant pattern removes every '/' as clean for
+file sinks only; re-scanned with it, Chaka viewer has 0 HIGH+ cards and an empty MUST FIX (2 HIGH with the switch off: ./private/qa120/chaka_p35_on.md / _off.md).
+This is a fix measured on the app that showed the gap, so it says nothing about blind accuracy; round 2 below is the next blind number.
