@@ -1,0 +1,520 @@
+[
+ {
+  "id": "C01",
+  "cve": "CVE-2023-39957",
+  "advisory": "GHSA-36f7-93f3-mcfj",
+  "scope": "in",
+  "vuln": "path traversal: a file name from an unprotected Intent builds a path outside the cache directory",
+  "rule_family": "taint / path from Intent to a File (PathFlow, taint-flow file sinks)",
+  "before": {
+   "package": "com.nextcloud.talk2",
+   "versionName": "13.0.0",
+   "versionCode": 130000090,
+   "apkName": "com.nextcloud.talk2_130000090.apk",
+   "sha256": "62e9179bceee580148ae9a14cc66aa9bcdf7e623efbe3125f6a4202fc5c989a6",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "com.nextcloud.talk2",
+   "versionName": "17.0.0",
+   "versionCode": 170000090,
+   "apkName": "com.nextcloud.talk2_170000090.apk",
+   "sha256": "1ac843002e57adb40ac1d617704edc2ec36dd119c724dbd127162e4553c365c9",
+   "repo": "archive"
+  },
+  "anchors": [
+   "FileUtils",
+   "copyFileToCache",
+   "UploadAndShareFilesWorker"
+  ],
+  "rules": [
+   "taint-flow",
+   "taint-ssa",
+   "taint-xclass",
+   "ssa-group-*",
+   "zip-slip",
+   "pick-result-file"
+  ]
+ },
+ {
+  "id": "C02",
+  "cve": "CVE-2023-41898",
+  "advisory": "GHSA-jvpm-q3hq-86rg",
+  "scope": "in",
+  "vuln": "exported MyActivity loads an Intent URL in a JavaScript-enabled WebView (launch.my.MyActivity)",
+  "rule_family": "webview-intent-url / taint Intent -> WebView.loadUrl",
+  "before": {
+   "package": "io.homeassistant.companion.android.minimal",
+   "versionName": "2023.8.2-minimal",
+   "versionCode": 10992,
+   "apkName": "io.homeassistant.companion.android.minimal_10992.apk",
+   "sha256": "f3b66cf4652b821d8486c8ea71705daee2b376002a7f4faa370fee81c9de7d58",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "io.homeassistant.companion.android.minimal",
+   "versionName": "2023.9.2-minimal",
+   "versionCode": 11226,
+   "apkName": "io.homeassistant.companion.android.minimal_11226.apk",
+   "sha256": "965a614b98cb2bc9dcbd5e5cdd7a582ec821c4b88255374980f7064a27117144",
+   "repo": "archive"
+  },
+  "anchors": [
+   "MyActivity"
+  ],
+  "rules": [
+   "webview-intent-url",
+   "intent-redirection",
+   "taint-flow",
+   "taint-ssa",
+   "taint-xclass",
+   "ssa-group-*"
+  ]
+ },
+ {
+  "id": "C03",
+  "cve": "CVE-2023-33188",
+  "advisory": "GHSA-g38r-4cf6-3v32",
+  "scope": "in",
+  "vuln": "SEND stream URI opened with ContentResolver.openInputStream and copied to external storage (DetailFragment / StorageHelper)",
+  "rule_family": "taint Intent URI -> openInputStream -> external file",
+  "before": {
+   "package": "it.feio.android.omninotes.foss",
+   "versionName": "6.2.6",
+   "versionCode": 321,
+   "apkName": "it.feio.android.omninotes.foss_321.apk",
+   "sha256": "0b0e06c2c50f3d2beda740beeab7be26567c7e4840ef4b2c31923b4f73a8db41",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "it.feio.android.omninotes.foss",
+   "versionName": "6.2.8",
+   "versionCode": 323,
+   "apkName": "it.feio.android.omninotes.foss_323.apk",
+   "sha256": "7189373746334e1f0083d2aff1efc1ddce91445f746cb6748b2aaa3bd91c8ba9",
+   "repo": "archive"
+  },
+  "anchors": [
+   "DetailFragment",
+   "StorageHelper",
+   "AttachmentTask"
+  ],
+  "rules": [
+   "taint-flow",
+   "taint-ssa",
+   "taint-xclass",
+   "ssa-group-*",
+   "pick-result-file"
+  ]
+ },
+ {
+  "id": "C04",
+  "cve": "CVE-2022-39349",
+  "advisory": "GHSA-8x58-cg74-8jg8",
+  "scope": "in",
+  "vuln": "SEND stream URI copied from internal storage to external storage (ShareLinkActivity / FileHelper.copyStream)",
+  "rule_family": "taint Intent URI -> openInputStream -> external file",
+  "before": {
+   "package": "org.tasks",
+   "versionName": "12.7",
+   "versionCode": 120700,
+   "apkName": "org.tasks_120700.apk",
+   "sha256": "d0b380652470f44503e5474b8720b7d2685cf87a575c4429031cf6e48cad481d",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "org.tasks",
+   "versionName": "12.7.1",
+   "versionCode": 120701,
+   "apkName": "org.tasks_120701.apk",
+   "sha256": "c32ad4d567c17a3d0825b60ec9d29c23df14f65a6603512ac6c6df385fbf4ae1",
+   "repo": "archive"
+  },
+  "anchors": [
+   "ShareLinkActivity",
+   "FileHelper"
+  ],
+  "rules": [
+   "taint-flow",
+   "taint-ssa",
+   "taint-xclass",
+   "ssa-group-*",
+   "pick-result-file"
+  ]
+ },
+ {
+  "id": "C05",
+  "cve": "CVE-2023-24804",
+  "advisory": "GHSL-2022-060",
+  "scope": "in",
+  "vuln": "path traversal in ReceiveExternalFilesActivity (stream check bypass, savePlainTextToFile file name)",
+  "rule_family": "taint Intent -> File path",
+  "before": {
+   "package": "com.owncloud.android",
+   "versionName": "2.21.2",
+   "versionCode": 22100200,
+   "apkName": "com.owncloud.android_22100200.apk",
+   "sha256": "9e90de8439e760c74fa7013a49fe9fd13fbf1d01f926d5314ef6f342ff469732",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "com.owncloud.android",
+   "versionName": "3.0",
+   "versionCode": 30000000,
+   "apkName": "com.owncloud.android_30000000.apk",
+   "sha256": "35083fb31a7c4314fc3e2a8c6637c95a382b19364bd04a2cb911c4c9cb918476",
+   "repo": "archive"
+  },
+  "anchors": [
+   "ReceiveExternalFilesActivity"
+  ],
+  "rules": [
+   "taint-flow",
+   "taint-ssa",
+   "taint-xclass",
+   "ssa-group-*",
+   "zip-slip",
+   "pick-result-file"
+  ]
+ },
+ {
+  "id": "C06",
+  "cve": "CVE-2021-43863",
+  "advisory": "GHSA-vjp2-f63v-w479",
+  "scope": "in",
+  "vuln": "SQL injection in the exported FileContentProvider (selection / sortOrder / where reach SQLite)",
+  "rule_family": "provider-sql-injection",
+  "before": {
+   "package": "com.nextcloud.client",
+   "versionName": "3.18.0",
+   "versionCode": 30180090,
+   "apkName": "com.nextcloud.client_30180090.apk",
+   "sha256": "9ad9902cedce19bf6c09ce8fd561c5e3d222636608465a4dc1f6bebd946dbd22",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "com.nextcloud.client",
+   "versionName": "3.18.1",
+   "versionCode": 30180190,
+   "apkName": "com.nextcloud.client_30180190.apk",
+   "sha256": "8247a05724968045e4a00466a95a9eeb3aa8ed1a9022400b49ea1e1536407e8d",
+   "repo": "archive"
+  },
+  "anchors": [
+   "FileContentProvider"
+  ],
+  "rules": [
+   "provider-sql-injection",
+   "sql-concat",
+   "taint-flow",
+   "taint-ssa",
+   "taint-xclass",
+   "ssa-group-*"
+  ]
+ },
+ {
+  "id": "C07",
+  "cve": "CVE-2021-41166",
+  "advisory": "GHSA-wrwg-jwpg-r3c4",
+  "scope": "in",
+  "vuln": "DiskLruImageCacheFileProvider: readPermission only, openFile ignores mode (no writePermission)",
+  "rule_family": "manifest-provider-partial-permission / provider-openfile-segment",
+  "before": {
+   "package": "com.nextcloud.client",
+   "versionName": "3.17.0",
+   "versionCode": 30170090,
+   "apkName": "com.nextcloud.client_30170090.apk",
+   "sha256": "8d2ed6c796174afa46a5aab9ee3f33c26f22c101022c73e3029c5a28edbde581",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "com.nextcloud.client",
+   "versionName": "3.17.1",
+   "versionCode": 30170190,
+   "apkName": "com.nextcloud.client_30170190.apk",
+   "sha256": "4af951376baf86882779a8ed6b3e47881be3c9eeb417b4c7bfcae1cf1423153c",
+   "repo": "archive"
+  },
+  "anchors": [
+   "DiskLruImageCacheFileProvider",
+   "imageCache.provider"
+  ],
+  "rules": [
+   "manifest-provider-partial-permission",
+   "provider-openfile-segment",
+   "provider-code-permission",
+   "manifest-permission-protection",
+   "manifest-exported-components"
+  ]
+ },
+ {
+  "id": "C08",
+  "cve": "CVE-2022-39210",
+  "advisory": "GHSA-vw2w-gpcv-v39f",
+  "scope": "in",
+  "vuln": "internal app files reachable through the upload/share entry (internal paths not protected)",
+  "rule_family": "taint Intent URI -> file read of internal storage",
+  "before": {
+   "package": "com.nextcloud.client",
+   "versionName": "3.20.3",
+   "versionCode": 30200390,
+   "apkName": "com.nextcloud.client_30200390.apk",
+   "sha256": "7c09f2daa792b3e10118b2781f42cac2d9a2e9e513724f28078e087b269784e8",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "com.nextcloud.client",
+   "versionName": "3.21.0",
+   "versionCode": 30210090,
+   "apkName": "com.nextcloud.client_30210090.apk",
+   "sha256": "defa5ba4d500c53842285fbf9399df564a20200fa3ce2d5fcb90fbb89c3e8c4a",
+   "repo": "archive"
+  },
+  "anchors": [
+   "UriUploader",
+   "ReceiveExternalFilesActivity",
+   "FileUploader"
+  ],
+  "rules": [
+   "taint-flow",
+   "taint-ssa",
+   "taint-xclass",
+   "ssa-group-*",
+   "pick-result-file"
+  ]
+ },
+ {
+  "id": "C09",
+  "cve": "CVE-2021-41256",
+  "advisory": "GHSA-2q9v-q3cc-h9f3",
+  "scope": "in",
+  "vuln": "exported SettingsActivity reflects the caller's Intent with setResult (URI grant to a non-exported FileProvider)",
+  "rule_family": "uri-grant-via-result",
+  "before": {
+   "package": "de.luhmer.owncloudnewsreader",
+   "versionName": "0.9.9.62",
+   "versionCode": 165,
+   "apkName": "de.luhmer.owncloudnewsreader_165.apk",
+   "sha256": "6fc631462b466cae7d552d97cbe0e796f5cb0ee84205f4f6f2417282cd562a10",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "de.luhmer.owncloudnewsreader",
+   "versionName": "0.9.9.63",
+   "versionCode": 166,
+   "apkName": "de.luhmer.owncloudnewsreader_166.apk",
+   "sha256": "38eed4afbe365c23ddcdbcfc3c6297055401cdc56ed9f9e67d6035e8f56cbf2d",
+   "repo": "archive"
+  },
+  "anchors": [
+   "SettingsActivity"
+  ],
+  "rules": [
+   "uri-grant-via-result",
+   "intent-redirection"
+  ]
+ },
+ {
+  "id": "C10",
+  "cve": "CVE-2024-26131",
+  "advisory": "GHSA-j6pr-fpc8-q9vm",
+  "scope": "in",
+  "vuln": "intent redirection: an extra Intent from an exported activity is started",
+  "rule_family": "intent-redirection",
+  "before": {
+   "package": "im.vector.app",
+   "versionName": "1.6.10",
+   "versionCode": 40106102,
+   "apkName": "im.vector.app_40106102.apk",
+   "sha256": "d5cf8077a0dc6e732469cea8f3417db7f93c151dcb92d66057a5c8b77856371a",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "im.vector.app",
+   "versionName": "1.6.12",
+   "versionCode": 40106122,
+   "apkName": "im.vector.app_40106122.apk",
+   "sha256": "1c0fa4e40cc85ab9c452c6639dc6a4ba61ff0fae1bb4689c452315862cdf8140",
+   "repo": "archive"
+  },
+  "anchors": [
+   "features.MainActivity",
+   "features/MainActivity"
+  ],
+  "rules": [
+   "intent-redirection",
+   "taint-flow",
+   "taint-ssa",
+   "taint-xclass",
+   "ssa-group-*"
+  ]
+ },
+ {
+  "id": "C11",
+  "cve": "CVE-2026-65993",
+  "advisory": "GHSL-2026-101",
+  "scope": "in",
+  "vuln": "wikipedia:// deep link without host restriction; authority checked with endsWith (MainActivity.handleIntent)",
+  "rule_family": "deeplink-host-validation / manifest-deep-links",
+  "before": {
+   "package": "org.wikipedia",
+   "versionName": "r/50575-r-2026-03-26",
+   "versionCode": 50575,
+   "apkName": "org.wikipedia_50575.apk",
+   "sha256": "6b5cd05f850f99d3ca45270e3fd943a627d592ec2fec449462bf5510bf29c9e8",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "org.wikipedia",
+   "versionName": "r/50585-r-2026-05-06",
+   "versionCode": 50585,
+   "apkName": "org.wikipedia_50585.apk",
+   "sha256": "f2f57cd8d5f823e4386046dcd5a3c53eed96555cc27653621985a66e0b4e544b",
+   "repo": "archive"
+  },
+  "anchors": [
+   "main.MainActivity",
+   "main/MainActivity",
+   "wikipedia://"
+  ],
+  "rules": [
+   "deeplink-host-validation",
+   "manifest-deep-links",
+   "deeplink-config-poisoning"
+  ]
+ },
+ {
+  "id": "C12",
+  "cve": "CVE-2026-65994",
+  "advisory": "GHSL-2026-103",
+  "scope": "in",
+  "vuln": "exported PageActivity forwards an attacker URL to a JavaScript WebView (SingleWebViewActivity)",
+  "rule_family": "webview-intent-url / intent-redirection",
+  "before": {
+   "package": "org.wikipedia",
+   "versionName": "r/50575-r-2026-03-26",
+   "versionCode": 50575,
+   "apkName": "org.wikipedia_50575.apk",
+   "sha256": "6b5cd05f850f99d3ca45270e3fd943a627d592ec2fec449462bf5510bf29c9e8",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "org.wikipedia",
+   "versionName": "r/50585-r-2026-05-06",
+   "versionCode": 50585,
+   "apkName": "org.wikipedia_50585.apk",
+   "sha256": "f2f57cd8d5f823e4386046dcd5a3c53eed96555cc27653621985a66e0b4e544b",
+   "repo": "archive"
+  },
+  "anchors": [
+   "PageActivity",
+   "SingleWebViewActivity"
+  ],
+  "rules": [
+   "webview-intent-url",
+   "intent-redirection",
+   "taint-flow",
+   "taint-ssa",
+   "taint-xclass",
+   "ssa-group-*"
+  ]
+ },
+ {
+  "id": "C13",
+  "cve": "CVE-2026-65996",
+  "advisory": "GHSL-2026-106",
+  "scope": "in",
+  "vuln": "deep link parameter name used as an output file name (IntentHelper.parseOpenGpxIntent) -> path traversal",
+  "rule_family": "taint deep-link Uri -> File path",
+  "before": {
+   "package": "net.osmand.plus",
+   "versionName": "5.3.10",
+   "versionCode": 531003,
+   "apkName": "net.osmand.plus_531003.apk",
+   "sha256": "27f1eb82d288a9939b7c0bdd0fb94f78749824ffc753d32d421e01cbe487e5e0",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "net.osmand.plus",
+   "versionName": "5.4.4",
+   "versionCode": 540403,
+   "apkName": "net.osmand.plus_540403.apk",
+   "sha256": "0239f0b09e1bf7e22a468b881a0a744c1a19ca72b8daf068ac3ac1b5b240e4b6",
+   "repo": "archive"
+  },
+  "anchors": [
+   "IntentHelper",
+   "parseOpenGpxIntent",
+   "open-gpx"
+  ],
+  "rules": [
+   "taint-flow",
+   "taint-ssa",
+   "taint-xclass",
+   "ssa-group-*",
+   "zip-slip"
+  ]
+ },
+ {
+  "id": "C14",
+  "cve": "CVE-2026-65995",
+  "advisory": "GHSL-2026-109",
+  "scope": "in",
+  "vuln": "OsmandAidlServiceV2 exported without a permission; copyFile path traversal",
+  "rule_family": "manifest-exported-components / manifest-permission-protection + taint to File path",
+  "before": {
+   "package": "net.osmand.plus",
+   "versionName": "5.3.10",
+   "versionCode": 531003,
+   "apkName": "net.osmand.plus_531003.apk",
+   "sha256": "27f1eb82d288a9939b7c0bdd0fb94f78749824ffc753d32d421e01cbe487e5e0",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "net.osmand.plus",
+   "versionName": "5.4.4",
+   "versionCode": 540403,
+   "apkName": "net.osmand.plus_540403.apk",
+   "sha256": "0239f0b09e1bf7e22a468b881a0a744c1a19ca72b8daf068ac3ac1b5b240e4b6",
+   "repo": "archive"
+  },
+  "anchors": [
+   "OsmandAidlServiceV2",
+   "OsmandAidlService"
+  ],
+  "rules": [
+   "manifest-exported-components",
+   "manifest-permission-protection",
+   "taint-flow",
+   "taint-ssa",
+   "taint-xclass",
+   "ssa-group-*"
+  ]
+ },
+ {
+  "id": "C15",
+  "cve": "CVE-2026-65997",
+  "advisory": "GHSL-2026-108",
+  "scope": "out",
+  "vuln": "exported MapActivity imports a settings file that the AIDL path would gate (authorization logic)",
+  "rule_family": "no rule models 'privileged action reachable from an exported entry' outside FinTech; logic flaw",
+  "before": {
+   "package": "net.osmand.plus",
+   "versionName": "5.3.10",
+   "versionCode": 531003,
+   "apkName": "net.osmand.plus_531003.apk",
+   "sha256": "27f1eb82d288a9939b7c0bdd0fb94f78749824ffc753d32d421e01cbe487e5e0",
+   "repo": "archive"
+  },
+  "after": {
+   "package": "net.osmand.plus",
+   "versionName": "5.4.4",
+   "versionCode": 540403,
+   "apkName": "net.osmand.plus_540403.apk",
+   "sha256": "0239f0b09e1bf7e22a468b881a0a744c1a19ca72b8daf068ac3ac1b5b240e4b6",
+   "repo": "archive"
+  },
+  "anchors": [],
+  "rules": []
+ }
+]
