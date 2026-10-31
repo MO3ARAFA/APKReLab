@@ -20,7 +20,7 @@ fun main(args: Array<String>) {
     // 0.86.2: like the device (MainActivity: SecurityScanner.codePackage(...)): the code package, not the manifest package. Quillpad's code is in
     // org.qosp.notes while the manifest says io.github.quillpad; with the manifest package an app-bound renamed class looked like a library.
     val pkg = SecurityScanner.codePackage(texts.map { it.first }, manifestPkg, mc.componentTypes(manifestPkg), mc.launcherTypes(manifestPkg))   // 0.106.0: like the app
-    DynamicReceivers.clear(); NativeBridge.clear(); NativeBridge.clearApk(); PostureScanner.clear()
+    DynamicReceivers.clear(); HybridInspector.clear(); NativeBridge.clear(); NativeBridge.clearApk(); PostureScanner.clear()
     for ((i, p) in texts.withIndex()) {
         all.addAll(SecurityScanner.scanSmali(p.first, i, p.second, pkg))
         DynamicReceivers.observe(p.second)                       // 1.1.0: like the app's scan loop
@@ -48,6 +48,7 @@ fun main(args: Array<String>) {
     val final = SecurityScanner.dedupe(all)
     FindingPolish.lowerNonExportedReceivers(final, FindingPolish.nonExportedReceiversAndServices(mc))   // 0.80.0, like MainActivity.reachPass
     FindingPolish.lowerSeparateProcessDialogs(final, FindingPolish.separateProcessActivities(mc))        // 0.81.0
+    FindingPolish.lowerGuardedProviderFlows(final, mc, PermissionGuard(mc))                              // phase 3, like MainActivity (no device resolver)
     // 1.1.0, like MainActivity: receivers registered only with a signature permission (or NOT_EXPORTED and minSdk 33+); no device here, so platform levels come from ReportBuilder.defaultLevel
     val minSdk = Regex("minSdkVersion\\s*=\\s*\"?(\\d+)").find(manifest)?.groupValues?.get(1)?.toIntOrNull() ?: 1
     DynamicReceivers.lower(final, DynamicReceivers.protectedReceivers(minSdk) { p -> mc.declaredPerms[p]?.let { PermissionGuard.isSignatureLevel(it) } ?: ((ReportBuilder.defaultLevel(p) ?: 0) >= 2) })
@@ -58,9 +59,9 @@ fun main(args: Array<String>) {
     val vt0 = System.nanoTime()
     val verdict = Verdict.build(cards, try { AttackScenarios.build(final, mc, pkg) } catch (_: Throwable) { emptyList() },
         Verdict.Coverage(deepScan = true, classesScanned = texts.size, nativeMethods = NativeBridge.bindings().size, nativeLibs = NativeBridge.libs.size,
-            decryptorCalls = PostureScanner.decryptorCallCount()), pkg, final)
+            decryptorCalls = PostureScanner.decryptorCallCount(), hybridKinds = HybridInspector.current?.kinds ?: emptyList()), pkg, final, guard = PermissionGuard(mc))   // phase 2: MUST FIX gate (no device resolver: BIND_* / platform levels from ReportBuilder.defaultLevel)
     val vtEnd = System.nanoTime()
-    outMd.writeText("# APK ReLab report: $pkg\n\n(sandbox scan, no AI triage)\n\n" + Verdict.markdown(verdict) + "## Security scan\n\n" + ReportBuilder.securitySection(final, 400, pkg) + "\n")
+    outMd.writeText("# APK ReLab report: $pkg\n\n(sandbox scan, no AI triage)\n\n" + Verdict.markdown(verdict) + "## Security scan\n\n" + ReportBuilder.securitySection(final, 400, pkg) + HybridInspector.markdown(HybridInspector.current) + "\n")
     println("pkg=$pkg exported=${entries.size} findings=${final.size} ssaItems=${items.size} classes=${texts.size} scanMs=${(System.nanoTime() - t0) / 1_000_000} verdictMs=${(vtEnd - vt0) / 1_000_000.0}")
     final.filter { it.severity != SecurityScanner.Severity.INFO }.sortedBy { it.severity.rank }.forEach {
         println("  [${it.severity}] ${it.ruleId} | ${it.title} | ${it.classType ?: it.file}")

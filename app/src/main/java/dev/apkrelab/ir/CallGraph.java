@@ -177,6 +177,7 @@ public final class CallGraph {
         g.run(components == null ? Collections.<String>emptyList() : components, extraEntries);
         g.addTaintOnlyEdges();
         g.addLazyEdges();
+        if (ASYNC_EDGES) g.addAsyncEdges();
         java.util.function.Consumer<CallGraph> hook = buildHook;
         if (hook != null) hook.accept(g);
         return g;
@@ -512,8 +513,20 @@ public final class CallGraph {
             "onHandleIntent", "onHandleWork", "onReceive"));
 
     /** Intent / ComponentName builders that take an explicit target class: {@code new Intent(ctx, X.class)}, setClass, ComponentName. */
+    /** 2.0.0: switch for the mutation check of class-name string targets (Intent.setClassName, ComponentName(..., String)). */
+    public static boolean ICC_BY_NAME = !Boolean.getBoolean("apkrelab.noIccByName");
+
+    /** 2.0.0: a builder that names its target class by a String: Intent.setClassName(Context | String, String), ComponentName(Context | String, String). */
+    static boolean isNamedTargetCall(Insn in) {
+        String o = in.targetOwner(), n = in.targetName(), sig = in.targetSig();
+        if (!sig.endsWith("Ljava/lang/String;)Landroid/content/Intent;") && !sig.endsWith("Ljava/lang/String;)V")) return false;
+        if (o.equals("Landroid/content/Intent;")) return n.equals("setClassName");
+        return o.equals("Landroid/content/ComponentName;") && n.equals("<init>") && !sig.startsWith("<init>(Landroid/os/Parcel;");
+    }
+
     private static boolean isExplicitTargetCall(Insn in) {
         String o = in.targetOwner(), n = in.targetName(), sig = in.targetSig();
+        if (ICC_BY_NAME && isNamedTargetCall(in)) return true;
         if (!sig.contains("Ljava/lang/Class;")) return false;
         if (o.equals("Landroid/content/Intent;")) return n.equals("<init>") || n.equals("setClass");
         return o.equals("Landroid/content/ComponentName;") && n.equals("<init>");
@@ -531,6 +544,9 @@ public final class CallGraph {
             if (in.kind == Insn.Kind.CONST && in.op.equals("const-class") && classes.containsKey(in.ref)) {
                 if (targets == null) targets = new LinkedHashSet<>();
                 targets.add(in.ref);
+            } else if (ICC_BY_NAME && in.kind == Insn.Kind.CONST && in.op.startsWith("const-string") && classes.containsKey(classTypeOfName(in.ref))) {
+                if (targets == null) targets = new LinkedHashSet<>();
+                targets.add(classTypeOfName(in.ref));                        // 2.0.0: "com.x.B" names an app class
             } else if (in.kind == Insn.Kind.INVOKE && isExplicitTargetCall(in)) {
                 if (builders == null) builders = new ArrayList<>();
                 builders.add(in);
@@ -545,6 +561,13 @@ public final class CallGraph {
             instantiate(t);
             for (Insn b : builders) for (String k : keys) addEdge(caller, b.index, k, "icc");
         }
+    }
+
+    /** 2.0.0: "\"com.x.B\"" (a const-string literal, quotes kept) -> "Lcom/x/B;"; "" when it is not a dotted class name. */
+    static String classTypeOfName(String lit) {
+        String v = lit.length() >= 2 && lit.startsWith("\"") && lit.endsWith("\"") ? lit.substring(1, lit.length() - 1) : lit;
+        if (v.isEmpty() || !v.contains(".") || v.contains("/") || v.contains(" ")) return "";
+        return "L" + v.replace('.', '/') + ";";
     }
 
     private void drain() {
@@ -589,6 +612,16 @@ public final class CallGraph {
         String owner = in.targetOwner(), sig = in.targetSig(), kind = in.invokeKind();
         if (owner.isEmpty() || owner.charAt(0) == '[') return;
         String caller = m.key();
+        if (ASYNC_EDGES) {                                                     // 2.0.0: the dispatched Runnable runs: its run() is reached through this site
+            String at = asyncTarget(m, in);
+            if (at != null && newEdge(caller, in.index, at)) {
+                Edge e = new Edge(caller, in.index, at, "async", false);
+                out.computeIfAbsent(caller, k -> new ArrayList<>()).add(e);
+                in_(at).add(e);
+                reach(at);
+                asyncEdges++;
+            }
+        }
         switch (kind) {
             case "static":
                 classInit(caller, in.index, owner);
@@ -794,6 +827,77 @@ public final class CallGraph {
                 lazyEdges++;
             }
         }
+    }
+
+    /** 2.0.0: switch for the mutation check of the async dispatch edges. */
+    public static boolean ASYNC_EDGES = !Boolean.getBoolean("apkrelab.noAsyncEdges");
+    public int asyncEdges;
+    /** Framework dispatch methods that run their Runnable / Callable argument later (name + descriptor; the owner is any framework or inherited type). */
+    static final Map<String, String> ASYNC_SIGS = new HashMap<>();
+    static {
+        ASYNC_SIGS.put("execute(Ljava/lang/Runnable;)V", "run()V");
+        ASYNC_SIGS.put("submit(Ljava/lang/Runnable;)Ljava/util/concurrent/Future;", "run()V");
+        ASYNC_SIGS.put("submit(Ljava/util/concurrent/Callable;)Ljava/util/concurrent/Future;", "call()Ljava/lang/Object;");
+        ASYNC_SIGS.put("post(Ljava/lang/Runnable;)Z", "run()V");
+        ASYNC_SIGS.put("postDelayed(Ljava/lang/Runnable;J)Z", "run()V");
+        ASYNC_SIGS.put("postAtFrontOfQueue(Ljava/lang/Runnable;)Z", "run()V");
+        ASYNC_SIGS.put("runOnUiThread(Ljava/lang/Runnable;)V", "run()V");
+    }
+
+    /**
+     * 2.0.0 (Axis Pay: java.util.concurrent.Executor was among the top owners of real taint drops): a call to a framework dispatch method of {@link #ASYNC_SIGS}
+     * gets an "async" edge to run() / call() of each CANDIDATE class of its Runnable argument: the type of the new-instance, check-cast or field read that
+     * last defines that register within 12 instructions. The candidate is only a candidate: the taint engine follows the edge only when the SSA value
+     * resolves to that one concrete class (TaintIr.concreteClassOf). Reachability is not changed.
+     */
+    private void addAsyncEdges() {
+        for (MethodIr m : methods.values()) {
+            if (m.insns.isEmpty() || reachable.contains(m.key())) continue;      // reached callers got theirs in invoke() (and made the target reachable)
+            String caller = m.key();
+            for (Insn in : m.insns) {
+                String callee = asyncTarget(m, in);
+                if (callee == null) continue;
+                Edge e = new Edge(caller, in.index, callee, "async", false);
+                taintOut.computeIfAbsent(caller, k -> new ArrayList<>()).add(e);
+                taintIn.computeIfAbsent(callee, k -> new ArrayList<>()).add(e);
+                asyncEdges++;
+            }
+        }
+    }
+
+    /** 2.0.0: run() / call() of the candidate class of a dispatch call's Runnable argument (see addAsyncEdges), or null. */
+    private String asyncTarget(MethodIr m, Insn in) {
+        if (in.kind != Insn.Kind.INVOKE || in.uses.length < 2) return null;
+        String sig = in.targetSig(), target = ASYNC_SIGS.get(sig);
+        if (target == null || methods.containsKey(dispatch(in.targetOwner(), sig))) return null;   // an app override is an ordinary call
+        int argReg = in.uses[1];
+        String type = null;
+        for (int i = in.index - 1, n = 0; i >= 0 && n < 12; i--, n++) {
+            Insn d = m.insns.get(i);
+            boolean defines = false;
+            for (int r : d.defs) if (r == argReg) { defines = true; break; }
+            if (!defines) continue;
+            if (d.kind == Insn.Kind.MOVE && d.uses.length > 0) { argReg = d.uses[0]; continue; }      // follow a move to its source register
+            if (d.kind == Insn.Kind.NEW_INSTANCE || d.kind == Insn.Kind.CHECK_CAST) type = d.ref;
+            else if (d.kind == Insn.Kind.FIELD_GET && d.ref.contains(":")) type = d.ref.substring(d.ref.lastIndexOf(':') + 1);
+            break;
+        }
+        if (type == null || !classes.containsKey(type)) return null;
+        String callee = dispatch(type, target);
+        return methods.containsKey(callee) ? callee : null;
+    }
+
+    /** 2.0.0: the method key a call with [sig] reaches on a receiver of exactly [type] (TaintIr's devirtualisation of async / lambda calls). */
+    String dispatchOf(String type, String sig) {
+        return dispatch(type, sig);
+    }
+
+    /** 2.0.0: an app class that is neither an interface nor abstract and that no other app class extends or implements. */
+    boolean isConcreteLeaf(String type) {
+        ClassIr c = classes.get(type);
+        if (c == null || c.isInterface() || c.isAbstract()) return false;
+        List<String> subs = subsAll.get(type);
+        return subs == null || subs.size() <= 1 && (subs.isEmpty() || subs.get(0).equals(type));
     }
 
     private List<Edge> in_(String callee) {

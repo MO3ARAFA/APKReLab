@@ -63,9 +63,24 @@ public final class TaintIr {
         final String via;      // callee / field the real source came through, or null
         final boolean weak;    // 0.68.5: the real source passed an Object field of an obfuscated (merged) class; a strong path wins in a join
         final boolean internal; // 0.68.6: the Intent was read in a component the manifest does not export (implies weak)
+        final boolean pathSafe; // phase 3.5: every path of this value passed a replace that removes '/' (one path segment): no CWE-22 file sink takes it
 
         Tv(long params, int level, String src, String via) {
             this(params, level, src, via, false, false);
+        }
+
+        Tv(long params, int level, String src, String via, boolean weak, boolean internal, boolean pathSafe) {
+            this.params = params;
+            this.level = level;
+            this.src = level > 0 ? src : null;
+            this.via = level > 0 ? via : null;
+            this.internal = level > 0 && internal;
+            this.weak = level > 0 && (weak || internal);
+            this.pathSafe = pathSafe && (params != 0L || level > 0);
+        }
+
+        Tv withPathSafe(boolean b) {
+            return b == pathSafe || isNone() ? this : new Tv(params, level, src, via, weak, internal, b);
         }
 
         Tv(long params, int level, String src, String via, boolean weak) {
@@ -73,12 +88,7 @@ public final class TaintIr {
         }
 
         Tv(long params, int level, String src, String via, boolean weak, boolean internal) {
-            this.params = params;
-            this.level = level;
-            this.src = level > 0 ? src : null;
-            this.via = level > 0 ? via : null;
-            this.internal = level > 0 && internal;
-            this.weak = level > 0 && (weak || internal);
+            this(params, level, src, via, weak, internal, false);
         }
 
         /** 0.68.5: a strong source of any level beats a weak one; within the same strength the higher level wins. */
@@ -123,16 +133,17 @@ public final class TaintIr {
             if (o == null || o.isNone()) return this;
             if (isNone()) return o;
             long p = params | o.params;
-            if (rank() >= o.rank()) return p == params ? this : new Tv(p, level, src, via, weak, internal);
-            return new Tv(p, o.level, o.src, o.via, o.weak, o.internal);
+            boolean ps = pathSafe && o.pathSafe;                              // phase 3.5: safe only when every joined path is
+            if (rank() >= o.rank()) return p == params && ps == pathSafe ? this : new Tv(p, level, src, via, weak, internal, ps);
+            return new Tv(p, o.level, o.src, o.via, o.weak, o.internal, ps);
         }
 
         boolean covers(Tv o) {
-            return (params & o.params) == o.params && rank() >= o.rank();
+            return (params & o.params) == o.params && rank() >= o.rank() && (!pathSafe || o.pathSafe);
         }
 
         Tv realOnly() {
-            return level > 0 ? new Tv(0L, level, src, via, weak, internal) : NONE;
+            return level > 0 ? new Tv(0L, level, src, via, weak, internal, pathSafe) : NONE;
         }
     }
 
@@ -453,6 +464,12 @@ public final class TaintIr {
         String retSrc;
         boolean retWeak;
         boolean retInternal;
+        /** Maturity phase 3: 0 = no path check, 1 = a canonical-path check dominates every reference return (the return is clean), 2 = a check exists but not on every return. */
+        int pathSanitizer;
+        /** Phase 3.5: every tainted return value was path-safe (passed a slash-stripping replace); null-like until a tainted return is seen. */
+        boolean retSeen, retPathSafe = true;
+        /** 2.0.0: a constructor stores parameter slot k into these fields of the new object ("ref|S" when the value was a String). */
+        final Map<Integer, Set<String>> ctorFields = new TreeMap<>();
         final Map<Integer, Map<String, SinkRef>> sinkParams = new TreeMap<>();
         int refsDropped;      // 0.66.5: sink references not kept because the slot was full (MAX_REFS); measurement only
 
@@ -473,7 +490,8 @@ public final class TaintIr {
 
         String fingerprint() {
             StringBuilder sb = new StringBuilder();
-            sb.append(retParams).append('/').append(retLevel).append('/').append(retSrc).append(retWeak ? "~" : "").append(retInternal ? "!" : "");
+            sb.append(retParams).append('/').append(retLevel).append('/').append(retSrc).append(retWeak ? "~" : "").append(retInternal ? "!" : "").append(retSeen && retPathSafe ? "P" : "");  // pathSanitizer is structural (the same at every analysis of the method): not part of the fingerprint
+            if (!ctorFields.isEmpty()) sb.append("|cf").append(ctorFields);
             for (Map.Entry<Integer, Map<String, SinkRef>> e : sinkParams.entrySet()) {
                 sb.append('|').append(e.getKey()).append(':');
                 for (SinkRef r : e.getValue().values()) sb.append(r.key()).append('#').append(r.chain.size()).append(',');
@@ -1023,10 +1041,23 @@ public final class TaintIr {
             }
             Tv old = heap.get(k);
             if (old != null && old.covers(r)) return;
-            Tv withVia = Tv.real(r.level, r.src, "field " + shortRef(k.field) + " (written in " + shortKey(writer) + ")", r.weak, r.internal);
+            Tv withVia = new Tv(0L, r.level, r.src, "field " + shortRef(k.field) + " (written in " + shortKey(writer) + ")", r.weak, r.internal, r.pathSafe);
             heap.put(k, old == null ? withVia : old.join(withVia));
             Set<String> rd = heapReaders.get(rk);
             if (rd != null) dirtyReaders.addAll(rd);
+        }
+
+        /**
+         * 2.0.0: a class whose instances are handed over to run later: it implements Runnable, Callable or a Kotlin FunctionN (a lambda). Only their constructors' field
+         * captures are summarised (measured: capturing in every class added 14 LOW-confidence flows in R8-merged classes on Axis Pay and nothing else).
+         */
+        private final Map<String, Boolean> deferredMemo = new HashMap<>();
+        boolean isDeferredTask(String type) {
+            return deferredMemo.computeIfAbsent(type, t -> {
+                for (String s : g.supers(t))
+                    if (s.equals("Ljava/lang/Runnable;") || s.equals("Ljava/util/concurrent/Callable;") || s.startsWith("Lkotlin/jvm/functions/Function")) return true;
+                return false;
+            });
         }
 
         /** 0.69.0: registers the reader for re-queueing and returns the stored value (null when nothing was written). */
@@ -1040,6 +1071,7 @@ public final class TaintIr {
             Intra in = new Intra(this, m);
             in.solve();
             Summary s = in.finish();
+            if (PATH_SANITIZER_SUMMARY) s.pathSanitizer = pathSanitizerKind(m, in.ssa.cfg);
             summaries.put(m.key(), s);
             fingerprints.remove(m.key());
             flowsOf.put(m.key(), in.flows);
@@ -1088,6 +1120,7 @@ public final class TaintIr {
     static String shortRef(String ref) {
         if (ref != null && ref.startsWith(FANOUT_MARK)) ref = ref.substring(FANOUT_MARK.length());
         if (ref != null && ref.startsWith(ERASED_MARK)) ref = ref.substring(ERASED_MARK.length());
+        if (ref != null && ref.startsWith(SANITIZER_PARTIAL_MARK)) ref = ref.substring(SANITIZER_PARTIAL_MARK.length());
         if (ref != null && ref.startsWith(PARCEL_HELD_MARK)) ref = ref.substring(PARCEL_HELD_MARK.length());
         return ref == null || ref.isEmpty() ? "" : shortKey(ref);
     }
@@ -1096,6 +1129,149 @@ public final class TaintIr {
 
     /** 0.83.0: a call site that resolves to at least this many targets returns a weak taint (polymorphic fan-out). */
     static final int FANOUT_WEAK = 8;
+    /**
+     * Maturity phase 3 (Paperless ClipboardFileProvider: openFile hands the Uri to a path strategy, ClipboardFileProvider$c.a, which builds File(root, path), calls
+     * getCanonicalFile and throws SecurityException unless the result still starts with the root; the File it returns reached ParcelFileDescriptor.open and was a HIGH card):
+     * an interprocedural sanitizer summary. A callee counts as a path sanitizer ONLY when a canonicalisation (File.getCanonicalPath / getCanonicalFile, Path.normalize /
+     * toRealPath) is followed by a startsWith check that an if-eqz / if-nez tests, and EVERY reference return is dominated by the PASSING side of that test and none by
+     * its failing side (one return path, or every path to a return passes the check; the failing side throws). Then its returned value carries no taint. When the check is there but some return does not pass it, the taint is KEPT and
+     * the result is weak (LOW confidence) with a sentence that says which method to read.
+     */
+    /** 2.0.0 pillar 1.1 switches (mutation checks): constructor field capture, async dispatch to the concrete Runnable, FunctionN devirtualisation. */
+    static boolean CTOR_CAPTURE = !Boolean.getBoolean("apkrelab.noCtorCapture");
+    static boolean ASYNC_DISPATCH = !Boolean.getBoolean("apkrelab.noAsyncDispatch");
+    static boolean LAMBDA_DEVIRT = !Boolean.getBoolean("apkrelab.noLambdaDevirt");
+
+    /** 2.0.0: switch for the mutation check of the explicit-Intent extra link; heap pseudo-field "icc-extra:<target type>:<key>". */
+    static boolean ICC_EXTRAS = !Boolean.getBoolean("apkrelab.noIccExtras");
+    static final String ICC_EXTRA_PREFIX = "icc-extra:";
+
+    static String unquote(String lit) {
+        return lit.length() >= 2 && lit.startsWith("\"") && lit.endsWith("\"") ? lit.substring(1, lit.length() - 1) : lit;
+    }
+
+    static String outerOfType(String type) {
+        int d = type.indexOf('$');
+        return d < 0 ? type : type.substring(0, d) + ";";
+    }
+
+    static boolean PATH_SANITIZER_SUMMARY = !Boolean.getBoolean("apkrelab.noPathSanitizerSummary");
+
+    /**
+     * Phase 3.5 (blind round 1: Chaka viewer stored replaceAll("[^a-zA-Z0-9\\._]+", "_") of a deep-link path and opened File(getExternalFilesDir("bk"), it)): a value
+     * that passed a replace whose CONSTANT pattern removes every '/' is one path segment, so a file sink (CWE-22) does not take it; every other sink still does
+     * (the value can still carry SQL or script). Accepted patterns: one character class (negated or not) or a slash literal, whose replace leaves no '/';
+     * the replacement must be a constant without '/', '$' or '\'. A segment can still be "." or "..", which name directories: open / read / write sinks cannot use them.
+     */
+    static boolean PATH_STRIP_SANITIZER = !Boolean.getBoolean("apkrelab.noPathStripSanitizer");
+
+    /** Unquotes a smali const-string ref ("\"a\\.b\"" -> a\.b); null when it is not a quoted literal. */
+    static String unsmali(String ref) {
+        if (ref == null || ref.length() < 2 || ref.charAt(0) != '"' || ref.charAt(ref.length() - 1) != '"') return null;
+        String b = ref.substring(1, ref.length() - 1);
+        StringBuilder o = new StringBuilder();
+        for (int i = 0; i < b.length(); i++) {
+            char c = b.charAt(i);
+            if (c != '\\' || i + 1 >= b.length()) { o.append(c); continue; }
+            char n = b.charAt(++i);
+            switch (n) {
+                case 'n': o.append('\n'); break;
+                case 't': o.append('\t'); break;
+                case 'r': o.append('\r'); break;
+                case 'u':
+                    if (i + 4 < b.length()) { o.append((char) Integer.parseInt(b.substring(i + 1, i + 5), 16)); i += 4; }
+                    break;
+                default: o.append(n);
+            }
+        }
+        return o.toString();
+    }
+
+
+    /** A literal replace (String.replace(CharSequence, CharSequence), Kotlin replace(String, String)): the target is exactly "/". */
+    static boolean literalStripsSlash(String target, String repl) {
+        return "/".equals(target) && repl != null && repl.indexOf('/') < 0;
+    }
+
+    /**
+     * A regex replace-all whose pattern removes every '/'. The SHAPE must be one the rule reads: a single character class, negated or not, with an optional + / *
+     * ([^a-zA-Z0-9._]+, [/\\\\]+), or a slash literal (/, \\/, /+, \\/+); lookarounds, groups and alternations are not read. For those shapes a match does not depend on
+     * the characters around it, so running the replace on probe strings ("/", "a/b", "../../x", ...) decides the question: no '/' may be left.
+     */
+    static boolean stripsSlash(String regex, String repl) {
+        if (regex == null || repl == null) return false;          // a replacement that puts '/' back ("/", "$0") fails the probe below
+        boolean structural = regex.matches("\\[\\^?[^\\[\\]&]+\\][+*]?") || regex.equals("/") || regex.equals("\\/") || regex.equals("/+") || regex.equals("\\/+");
+        if (!structural) return false;
+        try {
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(regex);
+            for (String probe : new String[]{"/", "a/b", "../../x", "..//..", "/a/./b/", "\\/"})
+                if (p.matcher(probe).replaceAll(repl).indexOf('/') >= 0) return false;
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    static final String SANITIZER_PARTIAL_MARK = "pathcheck-partial:";
+
+    static int pathSanitizerKind(MethodIr m, Cfg cfg) {
+        int canon = -1, check = -1, test = -1, result = -1, canonReg = -1;
+        List<Integer> rets = new ArrayList<>();
+        for (Insn in : m.insns) {
+            if (in.kind == Insn.Kind.INVOKE) {
+                String o = in.targetOwner(), n = in.targetName();
+                boolean canonical = ("Ljava/io/File;".equals(o) && (n.equals("getCanonicalPath") || n.equals("getCanonicalFile")))
+                        || ("Ljava/nio/file/Path;".equals(o) && (n.equals("normalize") || n.equals("toRealPath")));
+                if (canonical) { if (canon < 0) { canon = in.index; canonReg = in.defs.length > 0 ? in.defs[0] : -1; } }
+                else if (canon >= 0 && check < 0 && isContainmentCheck(in, canonReg)) {
+                    check = in.index;
+                    if (in.defs.length > 0) result = in.defs[0];               // the parser folds move-result into the invoke's defs
+                }
+            }
+            // the IF that tests the startsWith result itself (its first register is the result register)
+            else if (in.kind == Insn.Kind.IF && result >= 0 && test < 0 && in.uses.length > 0 && in.uses[0] == result) test = in.index;
+            else if (in.kind == Insn.Kind.RETURN && in.op.startsWith("return-object")) rets.add(in.index);
+        }
+        if (canon < 0 || check < 0 || test < 0 || rets.isEmpty() || cfg == null) return 0;
+        Insn ifi = m.insns.get(test);
+        boolean jumpFails;                                                   // which side of the boolean test is "startsWith == false"
+        if (ifi.op.startsWith("if-eqz")) jumpFails = true;
+        else if (ifi.op.startsWith("if-nez")) jumpFails = false;
+        else return 2;                                                       // a two-register compare: the side is not known from the opcode
+        if (ifi.labels.length == 0) return 2;
+        int jump = m.labelIndex(ifi.labels[0]);
+        Cfg.BasicBlock kb = cfg.blockOfInsn(canon), cb = cfg.blockOfInsn(check), ib = cfg.blockOfInsn(test);
+        Cfg.BasicBlock jb = cfg.blockOfInsn(jump), fb = cfg.blockOfInsn(test + 1);
+        if (kb == null || cb == null || ib == null || jb == null || fb == null) return 2;
+        Cfg.BasicBlock pass = jumpFails ? fb : jb;
+        if (!cfg.dominates(kb.id, cb.id) || !cfg.dominates(cb.id, ib.id) || !cfg.dominates(ib.id, pass.id)) return 2;
+        for (int r : rets) {
+            Cfg.BasicBlock rb = cfg.blockOfInsn(r);
+            // every reference return is on the passing side of the check (then none is on the failing side, which ends in a throw or loops)
+            if (rb == null || !cfg.dominates(pass.id, rb.id)) return 2;
+        }
+        return 1;
+    }
+
+    private static final Set<String> PATH_TYPES = new HashSet<>(Arrays.asList("Ljava/io/File;", "Ljava/lang/String;", "Ljava/nio/file/Path;"));
+
+    /**
+     * The confinement test on the canonical value. A framework API is trusted by its name (String / Path startsWith, Kotlin's StringsKt.startsWith / FilesKt.startsWith,
+     * equals); a renamed library helper (R8: Paperless calls kotlin.io.FilesKt.startsWith(File, File) as LH5/j;->p) by its SHAPE only: a static method returning boolean whose
+     * first two parameters are the same path type (File, String or Path) and that takes the canonical value itself. Contains / endsWith / exists are not confinement.
+     */
+    static boolean isContainmentCheck(Insn in, int canonReg) {
+        String o = in.targetOwner(), n = in.targetName(), sig = in.targetSig();
+        if (!sig.endsWith(")Z")) return false;
+        boolean framework = o.startsWith("Ljava/") || o.startsWith("Landroid/") || o.startsWith("Lkotlin/");
+        if (framework) return n.startsWith("startsWith") || n.equals("equals") && !o.equals("Ljava/lang/Object;");
+        if (!in.op.startsWith("invoke-static")) return false;
+        List<String> ps = allParams(sig);
+        if (ps.size() < 2 || !ps.get(0).equals(ps.get(1)) || !PATH_TYPES.contains(ps.get(0))) return false;
+        for (int u : in.uses) if (u == canonReg) return true;
+        return false;
+    }
+
     /** 1.1.0: switch for the mutation check of the substringAfterLast('/') sanitizer. */
     static boolean BASENAME_SANITIZER = !Boolean.getBoolean("apkrelab.noBasenameSanitizer");
     /** 1.1.0: switch for the mutation check of the erased-callback rule (Intra.invoke); false = 1.0.0 behaviour. */
@@ -1158,6 +1334,7 @@ public final class TaintIr {
         final int[] regToSlot;
         final Map<SsaForm.Value, Tv> tv = new IdentityHashMap<>();
         final Map<Integer, List<String>> calleesAt = new HashMap<>();
+        final Map<Integer, List<String>> asyncAt = new HashMap<>();       // 2.0.0: "async" edges (Executor / Handler / runOnUiThread) per call site
         final Summary sum = new Summary();
         final List<Flow> flows = new ArrayList<>();
         final Map<String, Flow> flowByKey = new HashMap<>();
@@ -1192,6 +1369,7 @@ public final class TaintIr {
             seedSlot = seed;
             seedInternal = seed != null && run.g.hasComponentList() && !run.g.isExportedEntry(m.owner);
             for (CallGraph.Edge e : run.g.taintEdgesFrom(m.key())) {
+                if ("async".equals(e.kind)) { asyncAt.computeIfAbsent(e.insn, k -> new ArrayList<>()).add(e.callee); continue; }
                 // 0.68.0: the "~" kinds (CHA fallback for a call site RTA left without a target) carry arguments too, at most MAX_APPROX_TARGETS per site
                 boolean approx = e.kind.endsWith("~");
                 if (e.external || !INVOKE_KINDS.contains(approx ? e.kind.substring(0, e.kind.length() - 1) : e.kind)) continue;
@@ -1312,6 +1490,13 @@ public final class TaintIr {
                         if (tag == MergeTags.UNKNOWN) run.raiseField(in.ref, t, m.key(), str);
                         else run.raiseHeap(new HeapKey(TAG_SPACE + tag, in.ref), t, m.key(), str);
                     }
+                    // 2.0.0: a constructor that stores its own parameter into a field of the new object (a Runnable / lambda capturing a value)
+                    if (CTOR_CAPTURE && collect && t.params != 0L && "<init>".equals(m.name) && in.op.startsWith("iput") && u.length > vc && isThis(u[vc])
+                            && run.isDeferredTask(m.owner) && !in.ref.endsWith(":Ljava/lang/Object;")) {   // measured (K-9): Object fields are R8-merged / erased: no capture
+                        boolean str = vc == 1 && u.length > 0 && isString(u[0], 0);
+                        for (int k = 1; k < 64; k++)
+                            if ((t.params & (1L << k)) != 0) sum.ctorFields.computeIfAbsent(k, x -> new java.util.TreeSet<>()).add(in.ref + (str ? "|S" : ""));
+                    }
                     break;
                 }
                 case ARRAY_GET:
@@ -1334,6 +1519,7 @@ public final class TaintIr {
                 case RETURN:
                     if (collect && u.length > 0) {
                         Tv t = joinAll(u, 0, u.length);
+                        if (!t.isNone()) { sum.retSeen = true; sum.retPathSafe &= t.pathSafe; }
                         sum.retParams |= t.params;
                         if (t.rank() > Tv.rankOf(sum.retLevel, sum.retWeak)) {
                             sum.retLevel = t.level;
@@ -1359,6 +1545,93 @@ public final class TaintIr {
             // (int requestCode, int resultCode, Intent data) is the shape of an activity answer whatever the method is called
             boolean helper = m.desc.contains("IILandroid/content/Intent;)");
             return (m.name.equals("onActivityResult") || helper) && viaIntentParam(v, 0);
+        }
+
+        /** 2.0.0: the value behind moves / casts. */
+        private SsaForm.Value rootOf(SsaForm.Value v) {
+            for (int i = 0; v != null && i < 8 && v.def != null && (v.def.kind == Insn.Kind.MOVE || v.def.kind == Insn.Kind.CHECK_CAST); i++) {
+                SsaForm.Value[] us = ssa.usesOf(v.def);
+                if (us.length == 0) break;
+                v = us[0];
+            }
+            return v;
+        }
+
+        /**
+         * 2.0.0: the in-app components this method names as the explicit target of [intent] (Intent(Context, Class), setClass, setClassName, setComponent(new
+         * ComponentName(..)) on that same object), when the same object is also passed to startActivity / startService / sendBroadcast / bindService here.
+         */
+        List<String> launchedTargetsOf(SsaForm.Value intent) {
+            SsaForm.Value root = rootOf(intent);
+            if (root == null) return Collections.emptyList();
+            List<String> targets = new ArrayList<>();
+            boolean launched = false;
+            Map<SsaForm.Value, String> componentNames = new IdentityHashMap<>();
+            for (Insn in : m.insns) {
+                if (in.kind != Insn.Kind.INVOKE) continue;
+                String o = in.targetOwner(), n = in.targetName(), sg = in.targetSig();
+                SsaForm.Value[] us = ssa.usesOf(in);
+                if (us.length == 0) continue;
+                if (o.equals("Landroid/content/ComponentName;") && n.equals("<init>") && us.length >= 3) {
+                    String tt = targetOfArg(us[2]);
+                    if (tt != null) componentNames.put(rootOf(us[0]), tt);
+                    continue;
+                }
+                boolean onIntent = rootOf(us[0]) == root;
+                if (onIntent && o.equals("Landroid/content/Intent;") && us.length >= 3 && (n.equals("<init>") || n.equals("setClass") || n.equals("setClassName"))) {
+                    String tt = targetOfArg(us[us.length - 1]);
+                    if (tt != null) targets.add(tt);
+                } else if (onIntent && o.equals("Landroid/content/Intent;") && n.equals("setComponent") && us.length >= 2) {
+                    String tt = componentNames.get(rootOf(us[1]));
+                    if (tt != null) targets.add(tt);
+                } else if (REDIRECT_NAMES.contains(n) && sg.contains("(Landroid/content/Intent;") && us.length >= 2 && rootOf(us[1]) == root) launched = true;
+            }
+            return launched ? targets : Collections.emptyList();
+        }
+
+        /** 2.0.0: an app component named by a const-class, or by a const-string class name. */
+        private String targetOfArg(SsaForm.Value v) {
+            v = rootOf(v);
+            if (v == null || v.def == null || v.def.kind != Insn.Kind.CONST) return null;
+            String t = v.def.op.equals("const-class") ? v.def.ref : v.def.op.startsWith("const-string") ? CallGraph.classTypeOfName(v.def.ref) : "";
+            return run.g.classIr(t) != null ? t : null;
+        }
+
+        /** 2.0.0: v is the "this" parameter of an instance method. */
+        private boolean isThis(SsaForm.Value v) {
+            return v != null && v.entry && v.param && !m.isStatic && v.reg < regToSlot.length && regToSlot[v.reg] == 0;
+        }
+
+        /**
+         * 2.0.0: the one concrete app class of v: a new-instance, a check-cast to a concrete leaf class, a field whose declared type is a concrete leaf class,
+         * a move of one, or a phi whose operands all resolve to the same class. Null when unknown (a parameter, a call result, two different classes).
+         */
+        String concreteClassOf(SsaForm.Value v, int depth) {
+            if (v == null || depth > 8 || v.entry) return null;
+            if (v.phi != null) {
+                String c = null;
+                for (SsaForm.Value o : v.phi.operands) {
+                    String x = concreteClassOf(o, depth + 1);
+                    if (x == null || (c != null && !c.equals(x))) return null;
+                    c = x;
+                }
+                return c;
+            }
+            Insn d = v.def;
+            if (d == null) return null;
+            switch (d.kind) {
+                case NEW_INSTANCE: return run.g.classIr(d.ref) != null ? d.ref : null;
+                case CHECK_CAST: return run.g.isConcreteLeaf(d.ref) ? d.ref : null;
+                case FIELD_GET: {
+                    String ft = d.ref.contains(":") ? d.ref.substring(d.ref.lastIndexOf(':') + 1) : "";
+                    return run.g.isConcreteLeaf(ft) ? ft : null;
+                }
+                case MOVE: {
+                    SsaForm.Value[] us = ssa.usesOf(d);
+                    return us.length > 0 ? concreteClassOf(us[0], depth + 1) : null;
+                }
+                default: return null;
+            }
         }
 
         private boolean viaIntentParam(SsaForm.Value v, int depth) { return viaParamOfType(v, depth, "Landroid/content/Intent;"); }
@@ -1417,6 +1690,13 @@ public final class TaintIr {
             // 0.74.0: intent redirection (see REDIRECT_NAMES): the Intent object itself came from the caller
             if (collect && !isStatic && REDIRECT_NAMES.contains(name) && call.desc.startsWith("(Landroid/content/Intent;") && t.length > 1 && !t[1].isNone()
                     && !owner.startsWith("Landroid/content/Intent;")) hit(REDIRECT_SINKS.get(name), in, t[1]);
+            // 2.0.0: putExtra(literal key, real source) on an Intent this method builds for an in-app component and launches: remembered for that component + key
+            if (ICC_EXTRAS && !isStatic && owner.equals("Landroid/content/Intent;") && name.equals("putExtra") && t.length >= 3 && av.length >= 3) {
+                Tv val = t[2].realOnly();
+                String key = constString(av[1]);
+                if (!val.isNone() && key != null)
+                    for (String target : launchedTargetsOf(av[0])) run.raiseField(ICC_EXTRA_PREFIX + target + ":" + unquote(key), val, m.key());
+            }
             // 0.67.0: SharedPreferences.Editor.putString(key, value): a REAL source in the value is remembered for that key
             if (!isStatic && owner.equals(EDITOR_OWNER) && PREFS_PUTS.contains(name) && t.length >= 3) {
                 Tv val = t[2].realOnly();
@@ -1431,6 +1711,14 @@ public final class TaintIr {
             Tv src = sourceOf(owner, name);
             if (src != null && owner.equals("Landroid/content/Intent;") && run.g.isInternalComponent(classOf(m.key())))
                 src = Tv.internalSource(src.level, src.src, src.via);                 // 0.68.6: read in a component that is not exported
+            // 2.0.0: an extra another component of this app put under the same literal key into an Intent it launched at this class
+            if (ICC_EXTRAS && src != null && owner.equals("Landroid/content/Intent;") && name.endsWith("Extra") && av.length > 1) {
+                String key = constString(av[1]);
+                if (key != null) {
+                    Tv fw = readHeap(ICC_EXTRA_PREFIX + outerOfType(classOf(m.key())) + ":" + unquote(key));
+                    if (fw.level > 0) src = fw.join(src);
+                }
+            }
             // 0.70.0: the Intent handed to onActivityResult is the ANSWER of an activity this app started (file picker, camera, its own
             // screens), not an input another app sends to one of our components. It is attacker data only when that activity can be
             // hijacked (implicit Intent) or is untrusted, so it is a weak lead, never a strong source. Only the method's own Intent
@@ -1448,6 +1736,28 @@ public final class TaintIr {
             }
             // app callees (RTA edges of this call site)
             List<String> callees = calleesAt.get(in.index);
+            // 2.0.0: async dispatch to the concrete Runnable / Callable: its run() / call() gets the Runnable as "this"
+            if (ASYNC_DISPATCH && callees == null) {
+                List<String> as = asyncAt.get(in.index);
+                if (as != null && av.length > 1) {
+                    String cls = concreteClassOf(av[1], 0);
+                    String target = cls == null ? null : run.g.dispatchOf(cls, CallGraph.ASYNC_SIGS.getOrDefault(sig, "run()V"));
+                    if (target != null) {                                         // the site has an async edge (as != null); SSA names the one target
+                        Summary sc = run.summaries.get(target);
+                        if (sc != null && collect && !t[1].isNone()) {
+                            Map<String, SinkRef> refs = sc.sinkParams.get(0);
+                            if (refs != null) for (SinkRef r : refs.values()) hitVia(r, t[1]);
+                        }
+                        return;                                                   // followed: not a drop
+                    }
+                }
+            }
+            // 2.0.0: Kotlin FunctionN.invoke on a receiver whose class is known in this method: that class's invoke only (no fan-out over every lambda)
+            if (LAMBDA_DEVIRT && callees != null && callees.size() > 1 && owner.startsWith("Lkotlin/jvm/functions/Function") && "invoke".equals(name) && av.length > 0) {
+                String cls = concreteClassOf(av[0], 0);
+                String one = cls == null ? null : run.g.dispatchOf(cls, sig);
+                if (one != null && callees.contains(one)) callees = Collections.singletonList(one);
+            }
             Tv res = Tv.NONE;
             boolean app = false;
             // 1.1.0: an erased generic callback (every parameter Object, result Object or none: Function.invoke, a coroutine's invokeSuspend / resumeWith) that
@@ -1472,9 +1782,23 @@ public final class TaintIr {
                             Map<String, SinkRef> refs = sc.sinkParams.get(k);
                             if (refs != null) for (SinkRef r : refs.values()) hitVia(r, t[k]);
                         }
-                        if (k < 64 && (sc.retParams & (1L << k)) != 0) res = res.join(t[k]);
+                        // 2.0.0: the constructor keeps this argument in a field: the caller's real taint goes to that field's heap slot
+                        if (CTOR_CAPTURE && t[k].level > 0) {
+                            Set<String> fs = sc.ctorFields.get(k);
+                            if (fs != null) for (String f : fs) {
+                                boolean str = f.endsWith("|S");
+                                run.raiseField(str ? f.substring(0, f.length() - 2) : f, t[k], m.key(), str);
+                            }
+                        }
+                        if (k < 64 && (sc.retParams & (1L << k)) != 0 && !(PATH_SANITIZER_SUMMARY && sc.pathSanitizer == 1)) {
+                            Tv r1 = t[k];
+                            if (PATH_SANITIZER_SUMMARY && sc.pathSanitizer == 2 && r1.level > 0 && !r1.weak)
+                                r1 = new Tv(r1.params, r1.level, r1.src, SANITIZER_PARTIAL_MARK + shortKey(c), true, r1.internal);
+                            res = res.join(r1);
+                        }
                     }
-                    if (sc.retLevel > 0 && !megamorphicGeneric) res = res.join(Tv.real(sc.retLevel, sc.retSrc, shortKey(c), sc.retWeak, sc.retInternal));
+                    if (sc.retLevel > 0 && !megamorphicGeneric && !(PATH_SANITIZER_SUMMARY && sc.pathSanitizer == 1))
+                        res = res.join(Tv.real(sc.retLevel, sc.retSrc, shortKey(c), sc.retWeak || (PATH_SANITIZER_SUMMARY && sc.pathSanitizer == 2), sc.retInternal));
                 }
             }
             // 0.83.0 (FairEmail SimpleTask: `data = onExecute(...)` resolves to every task subclass, so ONE shared result field carried the
@@ -1483,12 +1807,31 @@ public final class TaintIr {
             // reach the sinks of EVERY target: only the returned taint is weakened.
             if (callees != null && callees.size() >= FANOUT_WEAK && !res.isNone() && !res.weak)
                 res = new Tv(res.params, res.level, res.src, FANOUT_MARK + (res.via == null ? "" : res.via), true, res.internal);
+            // phase 3.5: every app callee returns only path-safe values (each body strips '/' before every tainted return)
+            if (PATH_STRIP_SANITIZER && callees != null && !callees.isEmpty() && !res.isNone()) {
+                boolean allSafe = true;
+                for (String c : callees) { Summary sc = run.summaries.get(c); if (sc == null || !sc.retSeen || !sc.retPathSafe) { allSafe = false; break; } }
+                if (allSafe) res = res.withPathSafe(true);
+            }
             if (app) {
                 for (SsaForm.Value y : d) raise(y, res);
                 return;
             }
             // framework / unresolved callee
             if (isSanitizer(owner, name)) return;
+            // phase 3.5 (blind round 1, Chaka viewer: replaceAll("[^a-zA-Z0-9\\._]+", "_") before File(dir, name)): a replace whose constant pattern removes every '/'
+            if (PATH_STRIP_SANITIZER) {
+                if (owner.equals("Lkotlin/text/Regex;") && name.equals("<init>") && av.length > 1) {
+                    String p = unsmali(constString(av[1]));
+                    if (p != null) regexOf.put(av[0], p);
+                }
+                int input = slashStripInput(owner, name, sig, av);
+                if (input >= 0 && input < t.length) {
+                    Tv r = t[input].withPathSafe(true);
+                    for (SsaForm.Value y : d) raise(y, r);
+                    return;
+                }
+            }
             // 1.1.0: Kotlin's substringAfterLast with a constant '/' keeps only the last path segment: a bare file name (the same as File.getName above)
             if (BASENAME_SANITIZER && owner.startsWith("Lkotlin/text/StringsKt") && name.startsWith("substringAfterLast") && av.length > 1) {
                 Long sep = MergeTags.constOf(av[1]);
@@ -1531,6 +1874,39 @@ public final class TaintIr {
         }
 
         /** 0.67.0: the string literal an SSA value holds (const-string, followed through moves), with its quotes, or null. */
+        /** Phase 3.5: kotlin.text.Regex objects built in this method from a constant pattern. */
+        final Map<SsaForm.Value, String> regexOf = new IdentityHashMap<>();
+
+        /**
+         * Phase 3.5: index (in t / av) of the string a slash-stripping replace cleans, or -1. Java String.replaceAll(regex, repl) / replaceFirst is NOT one (it
+         * replaces once); String.replace(CharSequence, CharSequence) and replace(char, char) of '/'; Kotlin StringsKt.replace (String or char forms, $default too);
+         * kotlin.text.Regex.replace(input, repl) on a Regex built here from a constant. The pattern and the replacement must be constants.
+         */
+        int slashStripInput(String owner, String name, String sig, SsaForm.Value[] av) {
+            if (owner.equals("Ljava/lang/String;") && av.length >= 3) {
+                if (name.equals("replaceAll")) return stripsSlash(unsmali(constString(av[1])), unsmali(constString(av[2]))) ? 0 : -1;
+                if (name.equals("replace") && sig.startsWith("replace(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)"))
+                    return literalStripsSlash(unsmali(constString(av[1])), unsmali(constString(av[2]))) ? 0 : -1;
+                if (name.equals("replace") && sig.startsWith("replace(CC)")) return charStripsSlash(av[1], av[2]) ? 0 : -1;
+                return -1;
+            }
+            // replaceFirst replaces once; replaceAfter / replaceBefore keep the delimiter; replaceIndent* re-indent lines: none of them removes every '/'
+            if (owner.startsWith("Lkotlin/text/StringsKt") && name.startsWith("replace") && !name.startsWith("replaceFirst")
+                    && !name.startsWith("replaceAfter") && !name.startsWith("replaceBefore") && !name.startsWith("replaceIndent") && av.length >= 3) {
+                if (sig.contains("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;")) return literalStripsSlash(unsmali(constString(av[1])), unsmali(constString(av[2]))) ? 0 : -1;
+                if (sig.contains("(Ljava/lang/String;CC")) return charStripsSlash(av[1], av[2]) ? 0 : -1;
+                return -1;
+            }
+            if (owner.equals("Lkotlin/text/Regex;") && name.equals("replace") && sig.startsWith("replace(Ljava/lang/CharSequence;Ljava/lang/String;)") && av.length >= 3)
+                return stripsSlash(regexOf.get(av[0]), unsmali(constString(av[2]))) ? 1 : -1;
+            return -1;
+        }
+
+        boolean charStripsSlash(SsaForm.Value from, SsaForm.Value to) {
+            Long a = MergeTags.constOf(from), b = MergeTags.constOf(to);
+            return a != null && b != null && a == '/' && b != '/';
+        }
+
         String constString(SsaForm.Value v) {
             for (int i = 0; i < 8; i++) {
                 if (v == null || v.entry || v.phi != null || v.def == null) return null;
@@ -1723,6 +2099,7 @@ public final class TaintIr {
         }
 
         void hit(Sink s, Insn in, Tv tt) {
+            if (PATH_STRIP_SANITIZER && tt.pathSafe && T_FILE.equals(s.title)) return;     // phase 3.5: one path segment cannot leave the directory
             String api = shortKey(s.owner + "->" + s.name);
             SinkRef r = new SinkRef(m.key(), in.index, api, s.title, s.sev, s.cwe, Collections.singletonList(m.key()));
             for (int k = 0; k < 64; k++) if ((tt.params & (1L << k)) != 0) sum.addSink(k, r);
@@ -1732,6 +2109,7 @@ public final class TaintIr {
         /** A callee sends its parameter to a sink; the value held here is {@code tt}. */
         void hitVia(SinkRef r, Tv tt) {
             if (r.chain.size() + 1 > MAX_DEPTH) return;
+            if (PATH_STRIP_SANITIZER && tt.pathSafe && T_FILE.equals(r.title)) return;
             List<String> chain = new ArrayList<>(r.chain.size() + 1);
             chain.add(m.key());
             chain.addAll(r.chain);

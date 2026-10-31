@@ -255,8 +255,8 @@ Then wait for the owner's confirmation before moving on.
 |---|---|
 | 2026-10-06 | Blueprint created (architecture, pipeline, AI prompts, editor/rebuild, UI). No code written yet. |
 | 2026-10-06 | 0.1-0.6.1 built in Code On the Go: import/unzip, manifest XML, file tree, class index (16,649 classes), baksmali viewer + highlighting, Gemini explain (Egyptian Arabic) with 503 retry/fallback and markdown rendering. Verified through 0.6.0. |
-| 2026-10-06 | 0.7.0: editable Smali with save/diff/revert/backup (Phase 2 "Editor with save/diff/backup"). Next: 0.8.0 rebuild + sign + install. See HANDOFF.md. |
-| 2026-10-06 | 0.8.0: Build tab (assemble edited smali -> merge dex -> repack/align -> apksig sign -> verify -> PackageInstaller install, export). Signing key lives in Android Keystore (deviation from BouncyCastle, fewer deps). Unverified on device. See HANDOFF.md. |
+| 2026-10-06 | 0.7.0: editable Smali with save/diff/revert/backup (Phase 2 "Editor with save/diff/backup"). Next: 0.8.0 rebuild + sign + install. See docs/internal/HANDOFF.md. |
+| 2026-10-06 | 0.8.0: Build tab (assemble edited smali -> merge dex -> repack/align -> apksig sign -> verify -> PackageInstaller install, export). Signing key lives in Android Keystore (deviation from BouncyCastle, fewer deps). Unverified on device. See docs/internal/HANDOFF.md. |
 | 2026-10-06 | 0.8.2 verified end-to-end (edit -> build -> sign -> install, split app). 0.9.0: AI Suggest (Template C) with JSON validation, diff, Apply/Reject. Unverified. |
 | 2026-10-06 | 0.9.1 verified (AI Suggest -> Apply -> Build -> Install works). 0.10.0: exportable signing key (PKCS12 file, hand-built self-signed cert) with Export/Import/New key buttons; replaces the non-exportable Keystore key. Unverified. |
 | 2026-10-06 | 0.10.1 verified (key export/import, same fingerprint, install OK). 0.11.0: Foreground Service for Build with progress notification. Unverified. |
@@ -265,7 +265,7 @@ Then wait for the owner's confirmation before moving on.
 | 2026-10-06 | 0.12.2: Rename prompt lists declared names; empty answers not cached and show the model footer. Unverified. |
 | 2026-10-06 | 0.12.3: full code review; fixes only (fallback answers not cached, back button on Android 16, rotation, confirm before wiping edits, split reuse, install-session cleanup). Next: global search, then template B. Unverified. |
 | 2026-10-06 | 0.12.4: second review; foreground-service stop race fixed, signing.p12 written atomically. Next: global search, then template B. Unverified. |
-| 2026-10-06 | 0.13.0: global code search across all classes (streamed baksmali, jump-to-line). Owner-accepted known limits recorded in HANDOFF.md (dex >= 040 untested, no edge-to-edge insets, AI cache is FIFO). Next: template B, Markdown report. Unverified. |
+| 2026-10-06 | 0.13.0: global code search across all classes (streamed baksmali, jump-to-line). Owner-accepted known limits recorded in docs/internal/HANDOFF.md (dex >= 040 untested, no edge-to-edge insets, AI cache is FIFO). Next: template B, Markdown report. Unverified. |
 | 2026-10-07 | 0.14.0: template B (design patterns) via "Patterns (AI)" button. Next: Markdown report export, streaming, jadx view, Sora Editor, package rename. Unverified. |
 | 2026-10-07 | 0.13.0 and 0.14.0 verified on device. 0.15.0: Markdown report export (app info, manifest, edited-class diffs, AI notes). Next: streaming, jadx view, Sora Editor, package rename. Unverified. |
 | 2026-10-07 | 0.15.0 verified (report export). 0.16.0: SSE streaming for free-text AI answers (Explain/Patterns/Manifest review). Next: jadx view, Sora Editor, package rename. Unverified. |

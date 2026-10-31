@@ -1826,7 +1826,8 @@ class MainActivity : Activity() {
                 RuleRegistry.noteError("sca-package")
             }
             synchronized(LibraryScanner) { if (apkModule === module) LibraryScanner.inventory = inv }   // 0.103.2: the one publication
-            AndroGoatChecks.resStats = res.stats + "; SCA: " + scaStats
+            AndroGoatChecks.resStats = res.stats + "; SCA: " + scaStats +
+                HybridInspector.summaryLine(HybridInspector.current).let { if (it.isEmpty()) "" else "\n$it" }   // 2.0.0 pillar 3a: one UI line
             runOnUiThread {
                 if (apkModule !== module) return@runOnUiThread   // another APK was loaded meanwhile
                 val resMerged = try { SecurityScanner.aggregate(res.findings) } catch (_: Throwable) { res.findings }
@@ -2431,6 +2432,7 @@ class MainActivity : Activity() {
         PostureScanner.clear()   // 0.91.0
         DynamicReceivers.clear()   // 1.1.0
         NativeBridge.clear()   // 1.1.0
+        HybridInspector.clear()   // 2.0.0
         if (!SecretFormats.loaded()) try {   // 0.89.0: vendor token formats (assets/secret_formats.json)
             SecretFormats.load(assets.open("secret_formats.json").use { it.readBytes() }.toString(Charsets.UTF_8))
         } catch (_: Throwable) { RuleRegistry.noteError("secret-formats") }
@@ -3493,6 +3495,7 @@ class MainActivity : Activity() {
                 FindingPolish.lowerNonExportedReceivers(secFindings, FindingPolish.nonExportedReceiversAndServices(mc))   // 0.80.0
                 FindingPolish.lowerSeparateProcessDialogs(secFindings, FindingPolish.separateProcessActivities(mc))       // 0.81.0
                 FindingPolish.lowerConstantFedActivities(secFindings, FindingPolish.nonExportedActivities(mc))            // 0.108.0
+                FindingPolish.lowerGuardedProviderFlows(secFindings, mc, PermissionGuard(mc, PermissionGuard.systemResolver(this)))   // phase 3
                 // 1.1.0: receivers registered at run time with a signature permission (or RECEIVER_NOT_EXPORTED and minSdk 33+): their Intent comes from the app or the system
                 val sys = PermissionGuard.systemResolver(this)
                 val minSdk = Regex("minSdkVersion\\s*=\\s*\"?(\\d+)").find(manifestFull)?.groupValues?.get(1)?.toIntOrNull() ?: 1
@@ -3539,6 +3542,7 @@ class MainActivity : Activity() {
         } else {
             if (lastScanNote.isNotEmpty()) sb.append("Deep scan status: ").append(lastScanNote).append("\n\n")
             sb.append(ReportBuilder.securitySection(secFindings, 400, packageNameOrNull() ?: ""))
+            sb.append(HybridInspector.markdown(HybridInspector.current))   // 2.0.0 pillar 3a
             sb.append(try { ReportBuilder.scaSection(LibraryScanner.inventory) } catch (_: Throwable) { LibraryScanner.sbomMarkdown() })
             try { sb.append(PostureScanner.section()) } catch (_: Throwable) { RuleRegistry.noteError("posture") }   // 0.91.0
             try { sb.append(AttackScenarios.section(secFindings, ManifestContext(manifestFull), packageNameOrNull() ?: "")) } catch (_: Throwable) { RuleRegistry.noteError("scenarios") }   // 0.93.0
@@ -3590,7 +3594,8 @@ class MainActivity : Activity() {
         val natives = try { NativeBridge.bindings().size } catch (_: Throwable) { 0 }
         Verdict.build(cards, sc, Verdict.Coverage(deepScan = lastScanNote.isNotEmpty(), classesScanned = read, groups = groups, groupsCapped = capped, timeUp = ssaTimeUp,
             nativeMethods = natives, nativeLibs = NativeBridge.libs.size, decryptorCalls = PostureScanner.decryptorCallCount(), decrypted = StringOverlay.current?.replaced,
-            splits = NativeScanner.extraArchives.size), pkg, secFindings)
+            splits = NativeScanner.extraArchives.size, hybridKinds = HybridInspector.current?.kinds ?: emptyList()), pkg, secFindings,
+            guard = try { PermissionGuard(ManifestContext(manifestFull), PermissionGuard.systemResolver(this)) } catch (_: Throwable) { null })   // phase 2: MUST FIX gate
     } catch (_: Throwable) { null }
 
     /** 0.40.0: [format] "md" or "html"; empty = ask the user (the Report chip). The AI Hub tool passes "md". */
@@ -4488,7 +4493,8 @@ class MainActivity : Activity() {
                 mc.exportedComponents.filter { pg.guardFor(mc.smaliTypeOf(it)) == PermissionGuard.Guard.NONE }.map { it.name + " (" + it.tag + ")" }.distinct()
             } catch (_: Throwable) { emptyList() }
             val links = try { DeepLinks.brief(DeepLinks.parse(manifestFull, packageNameOrNull() ?: "")) + NativeBridge.brief(packageNameOrNull() ?: "") } catch (_: Throwable) { "" }   // 1.1.0
-            return AuditBrief.build(packageNameOrNull() ?: "", cards, PostureScanner.rows(), lastScanNote, reported, open) + links
+            val hybrid = HybridInspector.briefLines(HybridInspector.current).joinToString("") { "\n$it" }   // 2.0.0 pillar 3b: one line per framework
+            return AuditBrief.build(packageNameOrNull() ?: "", cards, PostureScanner.rows(), lastScanNote, reported, open) + links + hybrid
         }
         override fun listEdits() = agentListEdits()
         override fun openClass(cls: String) = agentOpenClass(cls)

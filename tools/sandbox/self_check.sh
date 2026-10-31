@@ -11,11 +11,19 @@ R=$(cd "$(dirname "$0")/../.." && pwd)
 LIBS=${LIBS:-$HOME/tc/libs}; STD=${STD:-$HOME/tc/kotlinc/lib/kotlin-stdlib.jar}; JSON=${JSON:-$HOME/tc/deb/x/usr/share/java/json-android.jar}; STUBS=${STUBS:-$HOME/tc/stubs_out}
 W=$(mktemp -d "${TMPDIR:-/tmp}/selfcheck.XXXXXX"); trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/reports"
-for pkg in $(python3 -c "import json;print(' '.join(a['package'] for a in json.load(open('$R/tools/benchmark/self_check_apps.json'))))"); do
+# Phase 2 (maturity protocol): every APK is hash-locked in self_check_apps.json (sha256, package, versionName); a different file is not scanned and fails the run
+HASHFAIL=0
+while read -r pkg want ver; do
   apk="$BENCH_APKS/$pkg.apk"
   [ -f "$apk" ] || { echo "missing $apk"; continue; }
+  got=$(sha256sum "$apk" | cut -c1-64)
+  if [ "$got" != "$want" ]; then echo "HASH MISMATCH $pkg $ver: $got (locked: $want); not scanned"; HASHFAIL=1; continue; fi
+  echo "hash OK $pkg $ver $got"
   mkdir -p "$W/$pkg/dex" && unzip -q -o "$apk" 'classes*.dex' -d "$W/$pkg/dex"
   for d in "$W/$pkg"/dex/classes*.dex; do java -cp "$(ls $LIBS/*.jar | tr '\n' ':')" com.android.tools.smali.baksmali.Main d "$d" -o "$W/$pkg/smali" >/dev/null 2>&1; done
   java -Xmx2g -cp "$SS:$KOUT:$IRK:$STUBS:$STD:$JSON" SandboxScanKt "$W/$pkg/smali" "$apk" "$W/reports/$pkg.md" > "$W/$pkg.log" 2>&1 || echo "scan failed: $pkg (see the log in the run's output above)"
-done
-python3 "$R/tools/sandbox/self_check.py" --reports "$W/reports" "$@"
+done < <(python3 -c "import json
+for a in json.load(open('$R/tools/benchmark/self_check_apps.json')): print(a['package'], a['sha256'], a['versionName'])")
+python3 "$R/tools/sandbox/self_check.py" --reports "$W/reports" "$@"; RC=$?
+[ $HASHFAIL = 0 ] || { echo "SELF-CHECK FAILED: an APK does not match its locked SHA-256"; exit 1; }
+exit $RC

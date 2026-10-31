@@ -1114,6 +1114,8 @@ object ResourceScanner {
                     val nat = NativeScanner.scan(zip, manText)
                     if (nat.isNotEmpty()) found.addAll(nat) else nativeCoverageFinding(zip, manText)?.let { found.add(it) }
                 } catch (_: Throwable) { RuleRegistry.noteError("res-native") }
+                // 2.0.0 pillar 3a: what a hybrid-framework payload ships (strings and files only), for the report's Hybrid framework analysis section
+                try { HybridInspector.current = HybridInspector.inspect(zip) } catch (_: Throwable) { RuleRegistry.noteError("res-hybrid") }
                 for (e in zip.entries()) {
                     val name = e.name
                     if (name == "resources.arsc" && e.size < MAX_ARSC) {

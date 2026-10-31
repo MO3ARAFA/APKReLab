@@ -2,7 +2,7 @@
 
 A plan, not a promise. Every item names the evidence it rests on, the measurement that has to come first, and the test that says "done". The rules of
 `CLAUDE.md` apply to every line: measure before building, compare the flow SET (not the count), negative twins, mutation checks, no tuning to app names,
-measure at `-Xmx1000m` before holding more in memory. Sources read for this plan: `BLUEPRINT.md`, `HANDOFF.md`, `tools/sandbox/PERF.md`, the `ir` package
+measure at `-Xmx1000m` before holding more in memory. Sources read for this plan: `BLUEPRINT.md`, `docs/internal/HANDOFF.md`, `docs/internal/PERF.md`, the `ir` package
 (`TaintIr`, `ScopePlanner`, `CallSkeleton`, `SsaGroups`, `CallGraph`), `Agent.kt`, `NativeScanner.kt`, `ScanRulesResources.kt`.
 
 ## 0. Corrections to the brief this plan was asked from (checked against the code and the logs)
@@ -11,13 +11,13 @@ measure at `-Xmx1000m` before holding more in memory. Sources read for this plan
 |---|---|---|
 | "Parcel cross-class taint is missing" | `Parcel.read*` has been a taint source since 0.74.0 inside unmarshalling methods (`TaintIr` ~l.272-279, ~l.1309); a value read in one method and used in another is deliberately WEAK since 0.83.0 (FairEmail: 9 HIGH false positives from Parcelables that only travel inside the app). | Not a gap to "implement". The open question is narrower: Parcelables that DO cross a process boundary (exported components) - see B2. |
 | "`Method.invoke` propagation is missing" | True: `TaintIr` states "no reflection". But the 6,424 real taint drops on Axis Pay have renamed classes as top owners; nobody has shown one hidden flow behind reflection (HANDOFF 0.100.0). | Measure first (B3). |
-| "80k+ classes cause OOMs" | The recorded OOM was in the sandbox harness `SandboxScanReach` that holds every class; the device path already reads class text on demand and keeps parsed IR behind soft references (`SsaGroups`, PERF.md "Streaming"). No 80k-class device run is recorded. | "On-demand streaming" exists. What is missing is a device measurement of a big app and the cost of re-parsing when soft references are cleared (A2). |
+| "80k+ classes cause OOMs" | The recorded OOM was in the sandbox harness `SandboxScanReach` that holds every class; the device path already reads class text on demand and keeps parsed IR behind soft references (`SsaGroups`, docs/internal/PERF.md "Streaming"). No 80k-class device run is recorded. | "On-demand streaming" exists. What is missing is a device measurement of a big app and the cost of re-parsing when soft references are cleared (A2). |
 | "cross-group method summary caching" | Measured in 0.101.1 (`MeasureReuse`): 64% of method instances repeat, but weighted by call-graph edges only 17% do. The call graph is 45% of CPU, so the ceiling is about 8% of total time. Not built for that reason. | Not in this plan unless a new idea changes the measurement. A1 is a different cache (whole-group results across scans). |
 | "20 minutes down to 3 minutes" | The 20 minutes (Axis Pay, 1,185 s, 2 threads, 0.99.0) predate 0.101.x (sandbox -28% to -43%; device not re-timed). Device timings vary about 36% run to run. GC was 43-47% of a 1 GB run. | No number is promised. Target metric: device wall time of two Deep-scan runs, before and after each step. |
 | "string decryption overlay (Frida)" | Done in 0.102.0 (`StringOverlay`), tested on synthetic smali only. | B1 is its validation on a real dump. |
 | "Dagger/Hilt fan-out hubs are unchecked" | `ScopePlanner.HUB_CALLEES = 100` (0.101.1): flow sets identical on 5 apps, analysis CPU -10% to -20%. `CallSkeleton.MAX_DESCENDANTS = 64`. | Done. |
 
-## 1. Where the engine stands (measured, from PERF.md / HANDOFF)
+## 1. Where the engine stands (measured, from docs/internal/PERF.md / HANDOFF)
 
 - Pipeline: smali text -> `SmaliParser` -> CFG -> SSA -> per-group RTA call graph -> inter-procedural taint with method summaries, field-based heap
   (`HeapKey` already has an object slot, always `GLOBAL` today), SharedPreferences keys, depth 6.
@@ -42,7 +42,7 @@ Expected effect: an identical re-scan skips every group (plan only); a strings o
 class text (already read by the planner). Risk: a stale key. Test: change one class -> only its groups re-run; flip the engine version -> nothing is reused;
 mutation: drop the entry set from the key -> a test that changes entries must fail.
 
-**A2. Less garbage in the parser.** (0.103.0: hand-written scanner; 0.104.3: instruction strings shared, edge / phi lists compact: peak live -19..-27%, see PERF.md.) 57% of allocation sits under regex in `SmaliParser` / `CallSkeleton`. A hand-written line scanner for the hot patterns
+**A2. Less garbage in the parser.** (0.103.0: hand-written scanner; 0.104.3: instruction strings shared, edge / phi lists compact: peak live -19..-27%, see docs/internal/PERF.md.) 57% of allocation sits under regex in `SmaliParser` / `CallSkeleton`. A hand-written line scanner for the hot patterns
 (invoke, const-string, field refs) plus interning of type / method descriptors. Measure first: JFR allocation profile at `-Xmx1000m` on Axis Pay; target
 metric = GC time and full GCs, then wall time. Same output required byte for byte: `ClassIr` dump of 1,000 classes before / after.
 
@@ -125,7 +125,7 @@ specific decoding (blutter-style) is version-locked and heavy: only after D3's f
 4. B2, B3, B4, D4: only after their census shows candidates.
 
 "Done" for any item: tests with negative twins, a mutation check for engine changes, flow set identical where nothing should change, numbers before and
-after in the commit message and `HANDOFF.md`, and a plain list of what was not measured.
+after in the commit message and `docs/internal/HANDOFF.md`, and a plain list of what was not measured.
 
 ## Recorded by the 1.2.0 QA round (not built; each needs its own measurement first)
 - **Sanitizer in a callee reached through an interface** (Paperless 244, expo ClipboardFileProvider): openFile hands the Uri to a path strategy (`ClipboardFileProvider$b.a`, implemented by `$c.a`) that does File(root, path) -> getCanonicalFile -> "still under root" else SecurityException. The SSA flow to ParcelFileDescriptor.open is reported (HIGH, MUST FIX, CRITICAL PATH) although the traversal is blocked; the chain's validation sentence is not added either (the check is not in a method of the reported path). Census first: how many provider / file flows in the corpus pass a getCanonicalFile + startsWith + throw in a callee.
@@ -133,3 +133,6 @@ after in the commit message and `HANDOFF.md`, and a plain list of what was not m
 - **Hybrid code**: Dart (libapp.so) and JavaScript / Hermes code are read as strings only; NOT SEEN says so since 1.2.0. No analysis planned without a measurement of what the strings miss.
 - **MUST FIX ranking ties** (1.2.1 QA, VulnLab): two reachable SQL-injection flows (#55 / #56, confidence MEDIUM, priority 60) lost the third MUST FIX slot to a deep-link WebView card of the same priority on card order. The ground truth rates SQLi 9.8 and the deep link 8.1. A severity-of-impact tiebreak needs a measurement on more apps with ground truth before any change.
 - **VulnLab sections without a HIGH+ card**: 11.2 PendingIntent misuse and 11.5 broadcast receiver hijack. Check at which severity (if any) they are reported before calling them misses.
+
+## From the phase 4 blind run (2026-10-31, docs/VALIDATION.md)
+- Path sanitizer by character allow-list: `String.replaceAll("[^a-zA-Z0-9._]+", "_")` (any class that excludes '/') leaves one path segment; both blind HIGH cards (Chaka viewer #10 / #11) were false because of it. Candidate: treat a replaceAll / replace whose constant pattern is a negated character class without '/' as a basename sanitizer for file sinks. Must be validated on the NEXT blind set (set 8), never on Chaka viewer. BUILT in phase 3.5 (TaintIr PATH_STRIP_SANITIZER); its blind measurement is round 2 in docs/VALIDATION.md.

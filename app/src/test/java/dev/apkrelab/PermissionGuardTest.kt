@@ -46,7 +46,9 @@ class PermissionGuardTest {
 
     @Test fun systemPermissionUsesResolver() {
         assertEquals(Guard.SIGNATURE, g.guardFor("Lcom/example/app/SysService;"))
-        assertEquals(Guard.WEAK, PermissionGuard(ctx).guardFor("Lcom/example/app/SysService;"))   // unresolved: never downgrade
+        // phase 2: a platform BIND_* service permission is a guard even unresolved (ReportBuilder.defaultLevel); an unknown permission still never downgrades
+        assertEquals(Guard.SIGNATURE, PermissionGuard(ctx).guardFor("Lcom/example/app/SysService;"))
+        assertEquals(Guard.WEAK, PermissionGuard(ctx).strengthOf("com.other.UNKNOWN"))
     }
 
     @Test fun providerReadAndWriteAreIndependent() {

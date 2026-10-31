@@ -1,10 +1,10 @@
-# CLAUDE.md - APK ReLab (read this first, then HANDOFF.md and BLUEPRINT.md)
+# CLAUDE.md - APK ReLab (read this first, then docs/internal/HANDOFF.md and BLUEPRINT.md)
 
 On-device Android SAST app (Kotlin + a Java `ir` package: Dalvik -> IR -> SSA -> call graph -> inter-procedural taint). Owner: an Arabic speaker (Egyptian), builds on a PHONE with Code On the Go; wants short, actionable answers, in Egyptian Arabic when chatting. Code, comments and docs stay in English.
 
 ## Environment since 0.101.1 (READ FIRST): you run on the owner's PHONE
 - You are Claude Code CLI inside **Termux / proot-distro Ubuntu** on the owner's Android phone. There is no PC, no Mac, no adb cable. The app is built by the owner in Code on the Go; you cannot compile Android code, so every `MainActivity.kt` / `Ui.kt` edit is "parse-checked only" until the owner's next build says otherwise (so far every such edit compiled: say it only when it did).
-- Mobile limits are the main engineering constraint: RAM (the phone is memory-bound: GC took about half of a scan at a 1 GB heap), heat (device timings vary about 36% between identical runs), battery. Before any change that holds more in memory, adds threads or a cache, measure at `-Xmx1000m` and keep the flows identical. `tools/sandbox/PERF.md` has the method and the numbers; `tools/termux/README.md` has what runs on a phone.
+- Mobile limits are the main engineering constraint: RAM (the phone is memory-bound: GC took about half of a scan at a 1 GB heap), heat (device timings vary about 36% between identical runs), battery. Before any change that holds more in memory, adds threads or a cache, measure at `-Xmx1000m` and keep the flows identical. `docs/internal/PERF.md` has the method and the numbers; `tools/termux/README.md` has what runs on a phone.
 - Keep the empirical workflow of the rules below: numbers before and after, negative twins, mutation checks, read the smali of every HIGH, held-out discipline, honest "not measured".
 - ONE agent at a time on the repository: two sessions on the same working tree already produced a duplicate commit, a wrong note and a collision in the recall kit's work directory. `git log` and `git status` first; private temp directories (`RECALL_WORK=...`); never `pkill` by process name.
 - Company apps (see tools/company/): reports, APKs and decoded folders stay in `./private/` (git-ignored). The repository is PRIVATE and must stay so. Never paste a token or an API key in a file, a commit message or a chat.
@@ -20,7 +20,7 @@ On-device Android SAST app (Kotlin + a Java `ir` package: Dalvik -> IR -> SSA ->
 4. **No tuning to names.** No package-name lists, no per-app exceptions (a proposal to lower network cards by "jellyfin / nextcloud" names was rejected). Prefer evidence in the code.
 5. **Every new rule gets a negative twin test** and, for engine changes, a mutation check (turn the feature off, the positive test must fail).
 6. **Tell the truth about provenance.** If something is already in the tree and you did not write it, say so (this happened twice: the MD5 hash-helper rule in 0.74.0 and the first half of 0.82.0).
-7. **Do not delete or rewrite files to tidy up**; keep HANDOFF.md (it is the log) and add to it. Memory-bank style files other than HANDOFF/BLUEPRINT do not exist.
+7. **Do not delete or rewrite files to tidy up**; keep docs/internal/HANDOFF.md (it is the log) and add to it. Memory-bank style files other than HANDOFF/BLUEPRINT do not exist.
 8. The owner's own product (JustMarkets) was read with its APK: "0 HIGH" was honest for 6.15.1. It is a tuning app.
 
 ## Build and test (what exists, what does not)

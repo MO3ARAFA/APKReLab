@@ -12,7 +12,7 @@ class Verify121Test {
     private val ssaTail = ". Found by the SSA data-flow engine, which follows values through registers, fields and calls between methods and classes."
     private fun flow(src: String, sink: String, method: String = "A.run", title: String = "Untrusted input is used as a file path") =
         Finding(Severity.HIGH, title, "Data from $src reaches $sink() in method $method(Ljava/lang/String;)V$ssaTail", "Fix it. More.", "Lcom/x/A;", 1, 40, "CWE-22")
-            .also { it.ruleId = "taint-flow"; it.reach = "YES"; it.confidence = "HIGH"; it.scope = SecurityScanner.Scope.APP }
+            .also { it.ruleId = "taint-flow"; it.reach = "YES"; it.confidence = "HIGH"; it.scope = SecurityScanner.Scope.APP; it.chain = "Entry: exported activity com.x.A\nPath: com.x.A.run()" }
 
     @Test fun paperless32ShowsTheCanonicalPathCheck() {              // the 1.2.0 QA false positive: the check is in the provider's path strategy
         val f = Finding(Severity.HIGH, "Untrusted input is used as a file path",
@@ -95,15 +95,17 @@ class Verify121Test {
         assertTrue(m, m.startsWith("CHECK FIRST: #1 ") && m.endsWith("Evidence: 0.8 (source only: a flow inside one class)"))
     }
 
-    @Test fun validationOnThePathIsCheckFirst() {
+    @Test fun validationOnThePathIsNoLongerAMustFix() {     // phase 2: condition (c) of MustFixGate (1.2.1 showed it as "CHECK FIRST ... 0.3")
         val f = flow("Intent.getStringExtra()", "FileOutputStream.<init>").also { it.detail += " The chain also contains validation-like calls (startsWith ...)." }
-        val m = must(f).single()
-        assertTrue(m, m.startsWith("CHECK FIRST: ") && m.endsWith("Evidence: 0.3 (validation-like calls on the path)"))
+        assertFalse(must(f).single().startsWith("#1 "))
+        assertFalse(must(f).single().startsWith("CHECK FIRST: "))
     }
 
     @Test fun onlyTheWeakCardIsFlagged() {                                          // two cards, two evidences
         val strong = flow("Intent.getStringExtra()", "FileOutputStream.<init>")
-        val ruleOnly = Finding(Severity.HIGH, "Weak cipher mode", "Cipher ... (around line 9)", "Use GCM.", "Lcom/x/B;", 2, 1, "CWE-327").also { it.ruleId = "crypto-cipher"; it.reach = "YES"; it.confidence = "HIGH"; it.scope = SecurityScanner.Scope.APP }
+        // phase 2: a rule-only card needs a high-impact sink and the exact path from its manifest entry to be a MUST FIX
+        val ruleOnly = Finding(Severity.HIGH, "Shell command built from input", "The command text reaches Runtime.exec() in method B.c() (around line 9)", "Use a fixed command.", "Lcom/x/B;", 2, 1, "CWE-78")
+            .also { it.ruleId = "cmd-exec"; it.reach = "YES"; it.confidence = "HIGH"; it.scope = SecurityScanner.Scope.APP; it.chain = "Entry: exported service com.x.B\nPath: com.x.B.c()" }
         val m = must(strong, ruleOnly)
         assertEquals(2, m.size)
         assertEquals(1, m.count { it.startsWith("CHECK FIRST: ") })

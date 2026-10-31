@@ -76,6 +76,34 @@ class SelfCheckTest(unittest.TestCase):
         code, out = self.run_check([B])
         self.assertIn("1/1 found", out)                                                    # the library entry is not counted
 
+    # phase 2: top3_accuracy = MUST FIX cards (Verdict) that match an expected issue (bench.py --evidence FOUND cards)
+    def run_with_verdict(self, cards, must_lines):
+        v = "## Verdict\n\n- **VERDICT:** x\n- **CRITICAL PATH:** none\n- **MUST FIX:**" + ("".join("\n  - " + l for l in must_lines) if len(must_lines) > 1 else " " + must_lines[0]) + \
+            "\n- **CONFIDENCE:** weak\n- **NOT SEEN:** n\n\n"
+        open(os.path.join(self.reports, "com.example.app.md"), "w").write(report(cards).replace("## Security scan", v + "## Security scan", 1))
+        return subprocess.run([sys.executable, SCRIPT, "--reports", self.reports, "--baseline-dir", self.base, "--apps", self.apps], capture_output=True, text=True).stdout
+
+    def test_top3_counts_must_fix_cards_that_match_an_expected_issue(self):
+        c = dict(sev="HIGH", title="Weak cipher", loc="com.example.app.Other", rule="crypto", why="x.")
+        out = self.run_with_verdict([A, B, c], ["#1 [HIGH] file in Store", "→ to verify: x", "Evidence: 1.0 (real SSA source+path)", "CHECK FIRST: #3 [HIGH] Weak cipher in Other", "→ to verify: y"])
+        self.assertIn("TOP3: top3 1/2", out)
+        self.assertIn("top3_accuracy: 1/2 = 50%", out)
+
+    def test_top3_twin_empty_must_fix_is_not_a_score(self):
+        out = self.run_with_verdict([A, B], ["no HIGH/CRITICAL finding passes the MUST FIX gate"])
+        self.assertIn("top3 n/a (MUST FIX empty)", out)
+        self.assertIn("top3_accuracy: n/a", out)
+
+    def test_top3_twin_a_card_the_ai_marked_false_positive_does_not_count(self):
+        fp = dict(B, why=B["why"] + " Found by the SSA data-flow engine.\n- AI triage: FALSE POSITIVE (read)")
+        out = self.run_with_verdict([A, fp], ["#1 [HIGH] file in Store", "→ to verify: x", "#2 [HIGH] web in Web", "→ to verify: y"])
+        self.assertIn("FOUND-AI-FP", out)
+        self.assertIn("TOP3: top3 1/2", out)
+
+    def test_top3_single_line_must_fix(self):
+        out = self.run_with_verdict([A, B], ["#2 [HIGH] web in Web"])
+        self.assertIn("TOP3: top3 1/1", out)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,67 @@
+name: CI
+
+# The repository has no Gradle wrapper (the owner builds on the phone with Code on the Go),
+# so CI installs the Gradle version tools/sandbox/gradle_build.sh verified: 9.8.2 (AGP 9.3.1, JDK 21, compileSdk 36).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hygiene:
+    name: Repository hygiene (no app binaries, no file over 1024 KB)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh tools/ci/hygiene_check.sh
+
+  ir-tests:
+    name: ir engine tests (javac + JUnit stub, no Gradle)
+    needs: hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: bash tools/termux/run_ir_tests.sh
+
+  gradle:
+    name: Gradle unit tests + lint
+    needs: hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.8.2'
+      - name: Android SDK platform 36
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-36" "build-tools;36.1.0" > /dev/null
+      # No ./gradlew in the repository: the Gradle installed above runs the same tasks.
+      - run: gradle :app:testDebugUnitTest :app:lintDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: gradle-reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          retention-days: 7
