@@ -15,6 +15,40 @@ Owner speaks Egyptian Arabic, wants concise, actionable answers.
 - **0.104.1 VERIFIED ON THE PHONE (report 9, Axis Pay, second Deep scan without re-picking the app)**: "cache: 25 of 25 groups reused", **groups 8 s instead of 743-752 s** (plan 21 s still runs; the 8 s include the hash pass over the unique classes and reading 25 cache files), GC 0.9 s in 32 collections instead of 447-620 s. The report is identical to the full run's (report 8) except the status line: 80 cards, +16 flows, same loss counters. So the 0.104.0 miss was the workspace wipe, as suspected. Note: the "slowest methods" of a cached run are the CACHED measurements of the run that produced them (their times are not this run's). Still unmeasured: the cold-run overhead of writing the 25 files.
 - 2.0.0 (in progress; one branch, PR #2 consolidates everything since 1.2.1: it was fast-forwarded to 6a77647, the tip of #8, and supersedes #3, #4, #5, #6, #7, #8, whose
   own heads all had green CI. The owner merges once instead of retargeting seven branches.)
+  - Pillar 3a housekeeping (owner, 3b session): (1) drift.simonbinder.eu on Zulip is recorded as KNOWN NOISE (1 app) and is NOT added to NativeScanner.noiseHosts:
+    a general deny entry needs the pattern in >= 3 apps (rule 4). (2) Reading ONE libapp.so (arm64-v8a first) is a permanent invariant: the same snapshot is
+    compiled per ABI, so reading every copy triples the string scan on a multi-ABI APK for the same strings.
+  - Pillar 3b (React Native, Cordova / Capacitor, audit_brief, NOT SEEN): HybridInspector now returns one Section per framework; HybridResult keeps the 3a
+    properties (kind = the first detected, the 3a fields = the first section's) and adds kinds (FLUTTER, REACT_NATIVE, CORDOVA order, empty for a native app).
+    Detection: REACT_NATIVE = (libreactnativejni.so or libhermes.so) and assets/index.android.bundle; CORDOVA = (assets/www/ or assets/public/) and (config.xml or
+    assets/capacitor.config.json). RN: a Hermes bundle's string table through HermesStrings unchanged (the prefix up to the end of the string storage, under the
+    asset scan's 48 MB cap; an unsupported version is named, not guessed); otherwise the bundle is read as text under the 10 MB cap. A long minified line is read
+    in 1,800-char windows overlapping by 400 (SecretFormats.scan reads at most 2,000 chars); a value cut by a window's end is skipped there because the next
+    window holds it whole (the first test of the boundary found the cut prefix counted as a second secret: fixed, with the test). No JS syntax is parsed.
+    Cordova: res/xml/config.xml is binary XML in an APK (decoded with Axml; a text copy read as it is), only a <widget> document counts; every
+    <access origin> / <allow-navigation href> value is listed, "*" is noted and left to the asset scan's card; capacitor.config.json's server.hostname /
+    androidScheme / cleartext / allowNavigation listed verbatim (metadata, not findings); the text files of assets/www and assets/public read for endpoints and
+    credential formats. audit_brief: one line per framework ("Flutter: libapp.so, 5 endpoints, 1 secret, 1 config file", "React Native: index.android.bundle, 2
+    endpoints, 1 secret", "Cordova: assets/www, 2 named origins, 1 secret"; none for a native app); the UI line is the same lines joined.
+    Verdict NOT SEEN: built from Coverage.hybridKinds ("Dart code (Flutter libapp.so): strings read, code not analysed", "JavaScript (React Native bundle): ...",
+    "JavaScript (Cordova / Capacitor www): ..."; one per kind; none for a native app). The 1.2.0 wording was NOT a static "Dart not read": it came from the
+    native-flutter and assets-coverage cards; those card-based lines now stay ONLY as a fallback when HybridInspector detected nothing but a card says a
+    hybrid layer was seen (e.g. a React Native bundle whose libhermes.so is in a split that was not imported), so NOT SEEN never loses a line it had. No
+    existing Verdict test changed (Verdict120Test's hybrid test passes cards and no kinds: the fallback). The other four Verdict lines are untouched.
+  - Measured: Zulip 30.0.273 (the APK of 3a): 16 LOW + 4 MEDIUM cards before and after (20); NOT SEEN now starts "Dart code (Flutter libapp.so): strings read,
+    code not analysed;" (before: "Dart code (libapp.so): strings scanned, the code itself not analysed; Flutter assets: scanned as text only, the code itself not
+    analysed;", the second clause came from the assets-coverage card and is no longer printed when the kind is known).
+  - Tests: HybridInspector3bTest 14 (Hermes bundle through HermesStrings: 2 endpoints, 2 noise hosts dropped, 1 secret never printed; an unsupported Hermes
+    version named; a plain-JS bundle with a 6,400-char minified line; a secret across a window boundary; libreactnativejni as the other marker; Cordova with
+    2 named origins + Capacitor settings + 1 secret; a COMPILED binary config.xml (an AXML builder copied from AxmlStrippedNamesTest into AxmlTestBuilder,
+    the original file untouched) with "*" noted, not listed; assets/public + Capacitor alone; mixed Flutter + React Native in order with both sections and both
+    NOT SEEN clauses; K-9-shaped native app: NONE, no section, no brief line, no Dart / JavaScript clause; brief lines; NOT SEEN per kind) + the 12 of 3a
+    unchanged. One fixture fixed on the way: reactnative.dev is NOT in noiseHosts and was not added (rule 4); the noise twin uses w3.org / github.com, which are.
+    Mutants 27 / 27 killed (two first reported SURVIVED were mutants that did not compile: the harness now calls a run with fewer than 465 tests "did not
+    compile", and both were rewritten in a form that compiles and then failed tests). Kotlin 465 / 465, Gradle 862 tests / 0 failures, lint 0 errors,
+    assembleDebug OK. The audit_brief wiring in MainActivity is compiled by the Gradle build but not unit-tested (the lines themselves are).
+  - NOT measured: a real React Native or Cordova APK in this session (none in the container; the corpus Paperless is React Native and was not re-scanned here,
+    the owner did not list it); the device. Not built by design: JS syntax, Dart snapshot, deobfuscation.
   - Pillar 3a (Flutter payload inventory; Pillar 2 was paused after a safety-classifier stop and moved to later sessions by the owner): `HybridInspector.kt`
     classifies what a Flutter APK SHIPS, read as strings and files only. It does not parse the Dart snapshot's object graph, does not disassemble, executes
     nothing. Detection: libflutter.so AND libapp.so AND assets/flutter_assets/ across the base and the splits (NativeScanner.extraArchives: Axis Pay keeps

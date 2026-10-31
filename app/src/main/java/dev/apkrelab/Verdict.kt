@@ -17,7 +17,9 @@ object Verdict {
         val groups: Int = 0, val groupsCapped: Int = 0, val timeUp: Boolean = false,
         val nativeMethods: Int = 0, val nativeLibs: Int = 0,
         val decryptorCalls: Int = 0, val decrypted: Int? = null,
-        val splits: Int = 0
+        val splits: Int = 0,
+        /** 2.0.0 pillar 3b: the hybrid frameworks HybridInspector detected (empty = a native app). */
+        val hybridKinds: List<HybridInspector.HybridKind> = emptyList()
     )
 
     class Lines(val failed: Boolean, val verdict: String, val criticalPath: List<String>, val mustFix: List<String>, val confidence: String, val notSeen: String) {
@@ -130,8 +132,13 @@ object Verdict {
     private fun notSeen(cards: List<Finding>, cov: Coverage, all: List<Finding>): String {
         val parts = ArrayList<String>()
         // QA 1.2.0 (a Flutter and a React Native app): the app's own code in Dart / JavaScript was not named, although the native and asset scans say so in INFO cards
-        if (all.any { it.ruleId == "native-flutter" }) parts.add("Dart code (libapp.so): strings scanned, the code itself not analysed")
-        all.firstOrNull { it.ruleId == "assets-coverage" }?.let { f -> parts.add(f.title.substringAfter("scanned as text: ").ifEmpty { "hybrid layer" } + ": scanned as text only, the code itself not analysed") }
+        // 2.0.0 pillar 3b: from the frameworks HybridInspector detected; a native app gets no hybrid clause. When it detected none but the asset / native scans
+        // still saw a hybrid layer (its libraries in a split that was not imported), their 1.2.0 card-based lines stay so NOT SEEN keeps saying so.
+        if (cov.hybridKinds.isNotEmpty()) parts.addAll(HybridInspector.notSeen(cov.hybridKinds))
+        else {
+            if (all.any { it.ruleId == "native-flutter" }) parts.add("Dart code (libapp.so): strings scanned, the code itself not analysed")
+            all.firstOrNull { it.ruleId == "assets-coverage" }?.let { f -> parts.add(f.title.substringAfter("scanned as text: ").ifEmpty { "hybrid layer" } + ": scanned as text only, the code itself not analysed") }
+        }
         parts.add(if (!cov.deepScan) "code: not scanned (no Deep scan)" else "native: " + (if (cov.nativeMethods == 0) "no native method declared" else
             "${cov.nativeMethods} native methods, flows into .so not followed, " + (if (cov.nativeLibs > 0) "${cov.nativeLibs} libraries read" else "libraries not available (import the ABI split)")))
         val refl = cards.count { it.title.contains("class or method by name") }

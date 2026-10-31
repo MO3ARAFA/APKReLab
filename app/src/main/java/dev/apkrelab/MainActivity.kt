@@ -3594,7 +3594,7 @@ class MainActivity : Activity() {
         val natives = try { NativeBridge.bindings().size } catch (_: Throwable) { 0 }
         Verdict.build(cards, sc, Verdict.Coverage(deepScan = lastScanNote.isNotEmpty(), classesScanned = read, groups = groups, groupsCapped = capped, timeUp = ssaTimeUp,
             nativeMethods = natives, nativeLibs = NativeBridge.libs.size, decryptorCalls = PostureScanner.decryptorCallCount(), decrypted = StringOverlay.current?.replaced,
-            splits = NativeScanner.extraArchives.size), pkg, secFindings,
+            splits = NativeScanner.extraArchives.size, hybridKinds = HybridInspector.current?.kinds ?: emptyList()), pkg, secFindings,
             guard = try { PermissionGuard(ManifestContext(manifestFull), PermissionGuard.systemResolver(this)) } catch (_: Throwable) { null })   // phase 2: MUST FIX gate
     } catch (_: Throwable) { null }
 
@@ -4493,7 +4493,8 @@ class MainActivity : Activity() {
                 mc.exportedComponents.filter { pg.guardFor(mc.smaliTypeOf(it)) == PermissionGuard.Guard.NONE }.map { it.name + " (" + it.tag + ")" }.distinct()
             } catch (_: Throwable) { emptyList() }
             val links = try { DeepLinks.brief(DeepLinks.parse(manifestFull, packageNameOrNull() ?: "")) + NativeBridge.brief(packageNameOrNull() ?: "") } catch (_: Throwable) { "" }   // 1.1.0
-            return AuditBrief.build(packageNameOrNull() ?: "", cards, PostureScanner.rows(), lastScanNote, reported, open) + links
+            val hybrid = HybridInspector.briefLines(HybridInspector.current).joinToString("") { "\n$it" }   // 2.0.0 pillar 3b: one line per framework
+            return AuditBrief.build(packageNameOrNull() ?: "", cards, PostureScanner.rows(), lastScanNote, reported, open) + links + hybrid
         }
         override fun listEdits() = agentListEdits()
         override fun openClass(cls: String) = agentOpenClass(cls)
