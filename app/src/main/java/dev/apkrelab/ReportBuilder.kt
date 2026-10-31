@@ -447,6 +447,7 @@ object ReportBuilder {
                 FixTemplates.match(f, pkg)?.let { t -> sb.append("<p><b>Suggested fix:</b> ").append(esc(t.sentence)).append(" <span class=\"mut\">(API: ").append(esc(t.api)).append(")</span></p>") }   // 1.2.0
                 sb.append("</div>")
             }
+            sb.append(HybridInspector.html(HybridInspector.current))   // 2.0.0 pillar 3a: what a Flutter payload ships
             val seen = LinkedHashSet<String>()
             for (f in list) if (f.cwe.isNotEmpty()) seen.add(f.cwe.uppercase())
             if (seen.isNotEmpty()) {

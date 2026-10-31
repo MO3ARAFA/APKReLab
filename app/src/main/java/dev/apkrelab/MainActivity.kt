@@ -1826,7 +1826,8 @@ class MainActivity : Activity() {
                 RuleRegistry.noteError("sca-package")
             }
             synchronized(LibraryScanner) { if (apkModule === module) LibraryScanner.inventory = inv }   // 0.103.2: the one publication
-            AndroGoatChecks.resStats = res.stats + "; SCA: " + scaStats
+            AndroGoatChecks.resStats = res.stats + "; SCA: " + scaStats +
+                HybridInspector.summaryLine(HybridInspector.current).let { if (it.isEmpty()) "" else "\n$it" }   // 2.0.0 pillar 3a: one UI line
             runOnUiThread {
                 if (apkModule !== module) return@runOnUiThread   // another APK was loaded meanwhile
                 val resMerged = try { SecurityScanner.aggregate(res.findings) } catch (_: Throwable) { res.findings }
@@ -2431,6 +2432,7 @@ class MainActivity : Activity() {
         PostureScanner.clear()   // 0.91.0
         DynamicReceivers.clear()   // 1.1.0
         NativeBridge.clear()   // 1.1.0
+        HybridInspector.clear()   // 2.0.0
         if (!SecretFormats.loaded()) try {   // 0.89.0: vendor token formats (assets/secret_formats.json)
             SecretFormats.load(assets.open("secret_formats.json").use { it.readBytes() }.toString(Charsets.UTF_8))
         } catch (_: Throwable) { RuleRegistry.noteError("secret-formats") }
@@ -3540,6 +3542,7 @@ class MainActivity : Activity() {
         } else {
             if (lastScanNote.isNotEmpty()) sb.append("Deep scan status: ").append(lastScanNote).append("\n\n")
             sb.append(ReportBuilder.securitySection(secFindings, 400, packageNameOrNull() ?: ""))
+            sb.append(HybridInspector.markdown(HybridInspector.current))   // 2.0.0 pillar 3a
             sb.append(try { ReportBuilder.scaSection(LibraryScanner.inventory) } catch (_: Throwable) { LibraryScanner.sbomMarkdown() })
             try { sb.append(PostureScanner.section()) } catch (_: Throwable) { RuleRegistry.noteError("posture") }   // 0.91.0
             try { sb.append(AttackScenarios.section(secFindings, ManifestContext(manifestFull), packageNameOrNull() ?: "")) } catch (_: Throwable) { RuleRegistry.noteError("scenarios") }   // 0.93.0

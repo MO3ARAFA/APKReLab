@@ -181,7 +181,7 @@ object NativeScanner {
                 }
                 val top = hosts.entries.sortedByDescending { it.value }.take(25).joinToString(", ") { it.key }
                 out.add(f(Severity.INFO, "native-flutter", "Flutter app: the Dart code is compiled into libapp.so and is NOT analysed",
-                    "The business logic, the API client and the deep-link router of this app are Dart code inside ${app.path}${if (app.fromSplit != null) " (from " + app.fromSplit + ")" else ""}: this scanner reads only the Java plug-in layer and the strings of the Dart snapshot. " +
+                    "The Dart code itself is not analysed; the report's Hybrid framework analysis section lists what the payload ships. The business logic, the API client and the deep-link router of this app are Dart code inside ${app.path}${if (app.fromSplit != null) " (from " + app.fromSplit + ")" else ""}: this scanner reads only the Java plug-in layer and the strings of the Dart snapshot. " +
                         (if (hosts.isEmpty()) "No endpoint was found in the snapshot strings (they may be encrypted by a protector)."
                         else "Hosts named in the snapshot (${hosts.size}; they can come from the app or from its packages, and a string in the snapshot is not proof that it is used): $top.") +
                         (if (pins.isEmpty() && certs == 0) " No certificate pinning material in the snapshot strings (no sha256/ SPKI pin, no colon-separated SHA-256 fingerprint, no PEM certificate): unless pins live in an asset, in native code or in encrypted strings, the Dart HTTP client trusts the system CAs."

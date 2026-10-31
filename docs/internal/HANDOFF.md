@@ -15,6 +15,32 @@ Owner speaks Egyptian Arabic, wants concise, actionable answers.
 - **0.104.1 VERIFIED ON THE PHONE (report 9, Axis Pay, second Deep scan without re-picking the app)**: "cache: 25 of 25 groups reused", **groups 8 s instead of 743-752 s** (plan 21 s still runs; the 8 s include the hash pass over the unique classes and reading 25 cache files), GC 0.9 s in 32 collections instead of 447-620 s. The report is identical to the full run's (report 8) except the status line: 80 cards, +16 flows, same loss counters. So the 0.104.0 miss was the workspace wipe, as suspected. Note: the "slowest methods" of a cached run are the CACHED measurements of the run that produced them (their times are not this run's). Still unmeasured: the cold-run overhead of writing the 25 files.
 - 2.0.0 (in progress; one branch, PR #2 consolidates everything since 1.2.1: it was fast-forwarded to 6a77647, the tip of #8, and supersedes #3, #4, #5, #6, #7, #8, whose
   own heads all had green CI. The owner merges once instead of retargeting seven branches.)
+  - Pillar 3a (Flutter payload inventory; Pillar 2 was paused after a safety-classifier stop and moved to later sessions by the owner): `HybridInspector.kt`
+    classifies what a Flutter APK SHIPS, read as strings and files only. It does not parse the Dart snapshot's object graph, does not disassemble, executes
+    nothing. Detection: libflutter.so AND libapp.so AND assets/flutter_assets/ across the base and the splits (NativeScanner.extraArchives: Axis Pay keeps
+    libapp.so in split_config.arm64_v8a.apk). Extraction: the printable strings of ONE libapp.so (arm64-v8a first; the same snapshot is compiled per ABI, so
+    reading all three would triple the cost on a phone for the same strings; the count of libapp.so files is reported) through ElfAnalyzer.forEachString,
+    and the text files of flutter_assets (.env / .json / .yaml / .txt / .properties, under the asset scan's 3 MB cap): endpoint URLs (scheme + host + path,
+    no query) and hosts with NativeScanner.noiseHost removed; flutter_assets files with a config name (.env, .env.*, *.env, secrets.*, config.*, *.yaml / *.yml);
+    strings in a SecretFormats format (SecretFormats.scan: the brief's `match` does not exist), counted and named by format, placeholder values dropped, the
+    value never kept. Report: "## Hybrid framework analysis" after the security section (MD in MainActivity and SandboxScan, HTML in ReportBuilder with a
+    collapsible list of every host and endpoint), hosts capped at 20 on the MD line. The native-flutter INFO card stays (no new card); its detail now starts
+    "The Dart code itself is not analysed; the report's Hybrid framework analysis section lists what the payload ships." UI: one line under the resource-scan
+    stats (AndroGoatChecks.resStats). Set by ResourceScanner.scanApk, cleared with the other per-scan state.
+  - Measured: Zulip 30.0.273 (F-Droid com.zulipmobile_273.apk, SHA-256 24ef2bb4b573c4597de490dfbfcb368bf57a9510fff2f521659ea9eb77725385 = the index; the brief said a
+    0.99.0 unit test uses Zulip: there is none, 0.99.0 measured it by hand, so the APK was downloaded again): before 16 LOW + 4 MEDIUM reported cards, after the
+    same 16 + 4 and the new section: 3 libapp.so (read: arm64-v8a), 4 endpoints on 4 hosts (secure.gravatar.com, zulip.readthedocs.io, blog.zulip.com,
+    drift.simonbinder.eu: the last is a Dart package author's site the deny list does not know, i.e. noise), 0 config files, 0 credential-format strings. The
+    Zulip server URL is chosen by the user at login, so its absence is expected. Axis Pay's split is not in this container: the live classification of the
+    owner's app is measured on the next device scan.
+  - Tests: HybridInspectorTest 12 (the brief's fixture: 5 endpoints = 3 from libapp.so + 2 from .env, 1 secret never printed, the .env listed; twins: a
+    placeholder in the format, a native APK = NONE with no section, each of the three markers required, a 32-bit copy first in the archive, the same secret in
+    two places, the snapshot in a split). Mutants 19 / 19 killed (two survivors on the first run were fixed: a `substringBefore('?')` the URL regex made dead
+    code was removed, and the placeholder twin now uses a value that matches the format). Kotlin 451 / 451, Gradle 848 tests / 0 failures, lint 0 errors,
+    assembleDebug OK (MainActivity / ReportBuilder compiled; not run on a device).
+  - NOT measured: a real app with a .env or a credential in flutter_assets (Zulip has neither); the snapshot of a protected app (encrypted strings show nothing);
+    the device's split import path (only the unit test with a split archive). Not built here by design: React Native / Cordova (pillar 3b), any decoding of
+    the Dart snapshot.
   - Pillar 1.1 (async dispatch, measured first): before, on Axis Pay 3.0.1 with MeasureBig (the device's grouped pipeline, -Xmx2g, 2 threads), real-source drops at
     java/util/concurrent/Executor 97, ExecutorService 72, android/os/Handler 44, 15 flows; and the engine lost a value captured by a Runnable's constructor even on a
     direct run() call (test directRunCallCarriesTheCapturedField failed before). Built: (a) CTOR_CAPTURE: the summary of a constructor of a Runnable / Callable /
