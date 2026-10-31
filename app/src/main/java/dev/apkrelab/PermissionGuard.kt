@@ -27,7 +27,9 @@ class PermissionGuard(
     fun strengthOf(permission: String?): Guard {
         if (permission.isNullOrEmpty()) return Guard.NONE
         manifest.declaredPerms[permission]?.let { return if (isSignatureLevel(it)) Guard.SIGNATURE else Guard.WEAK }
-        val base = systemLevel(permission) ?: return Guard.WEAK   // declared by an app we cannot see: unknown -> do not downgrade on it
+        // phase 2: platform BIND_* service permissions and the known platform signature permissions count as SIGNATURE even when no resolver
+        // knows them (the sandbox); dangerous / normal ones (android.permission.READ_SMS) stay WEAK
+        val base = systemLevel(permission) ?: ReportBuilder.defaultLevel(permission) ?: return Guard.WEAK   // declared by an app we cannot see: unknown -> do not downgrade on it
         return if (base >= 2) Guard.SIGNATURE else Guard.WEAK
     }
 

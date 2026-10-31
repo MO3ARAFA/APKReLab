@@ -1,8 +1,8 @@
 [
- {"name": "Sieve", "package": "com.mwr.example.sieve", "expected": "expected_heldout/com.mwr.example.sieve.json", "heldout": true},
- {"name": "Allsafe", "package": "infosecadventures.allsafe", "expected": "expected_heldout/infosecadventures.allsafe.json"},
- {"name": "PIVAA", "package": "com.htbridge.pivaa", "expected": "expected_heldout/com.htbridge.pivaa.json"},
- {"name": "Vuldroid", "package": "com.vuldroid.application", "expected": "expected_heldout/com.vuldroid.application.json"},
- {"name": "OVAA", "package": "oversecured.ovaa", "expected": "expected/oversecured.ovaa.json"},
- {"name": "InsecureShop", "package": "com.insecureshop", "expected": "expected_taint/insecureshop.json"}
+ {"name": "Sieve", "package": "com.mwr.example.sieve", "versionName": "1.0", "sha256": "31878e33c526f9747c9b7ff38954bfcb2acc2a947ce7103589438e034637a6b7", "expected": "expected_heldout/com.mwr.example.sieve.json", "heldout": true},
+ {"name": "Allsafe", "package": "infosecadventures.allsafe", "versionName": "1.5", "sha256": "d6792d6634a033f048f935f1269179d3c27b859c4c34b1e9e5b008a88375efd9", "expected": "expected_heldout/infosecadventures.allsafe.json"},
+ {"name": "PIVAA", "package": "com.htbridge.pivaa", "versionName": "1.0", "sha256": "57887e1d1e119939eec0e929801b049f8037cf90d2accab479a48f0d4dd2c19a", "expected": "expected_heldout/com.htbridge.pivaa.json"},
+ {"name": "Vuldroid", "package": "com.vuldroid.application", "versionName": "1.0", "sha256": "157377755759c8ea8a841a048432e04768a70d93833941d84eb8144578eca42f", "expected": "expected_heldout/com.vuldroid.application.json"},
+ {"name": "OVAA", "package": "oversecured.ovaa", "versionName": "1.0", "sha256": "073d87a2bcbfcd539146854681d4968960dbee0209673b17cdbe1aaed6705233", "expected": "expected/oversecured.ovaa.json"},
+ {"name": "InsecureShop", "package": "com.insecureshop", "versionName": "1.0", "sha256": "a83298ae4a37fcab8101e8b41e513dd2199af71a94ea537d556a318e07d4d1bd", "expected": "expected_taint/insecureshop.json"}
 ]
