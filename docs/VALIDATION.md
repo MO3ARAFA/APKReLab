@@ -127,6 +127,22 @@ is created by its host, so its Intent read now has a path from the exported acti
 Corpus flow counts and reach=Y counts (MeasureBig) are identical to run 3 on K-9, NewPipe, KeePassDX, Paperless, Chaka and Axis Pay 3.0.1. `self_check`: recall and flow sets identical to the baseline.
 NOT measured: a device run of 2.0.2; WE Wallet / JustMarkets / Axis Pay 3.1.0 themselves (their APKs are not on this machine).
 
+### Run 5, scanner 88bacae (2.1.0; tuning set, NOT blind)
+**MUST FIX recall 6 of 13 (was 4 of 13); the patched build drops the card in 5 of 6 (was 3 of 4).** New: C09 News (a `uri-grant-via-result` MEDIUM card that returns `getIntent()` in an exported activity,
+with a `grantUriPermissions` provider in the manifest, is raised to HIGH; the patched 0.x build removes the card) and C07 Nextcloud (card #60 "Untrusted input is used as a file path in DiskLruImageCacheFileProvider", HIGH, no validation seen; not isolated which 2.1.0 piece lets it in: weak-validation or the reach edges). C03 Omni-Notes still keeps its card in the patched build (not differentiated).
+
+| Case set | 2.0.1 | 2.0.2 | 2.1.0 |
+|---|---|---|---|
+| MUST FIX recall (13 valid) | 3 | 4 | 6 |
+| Patched build drops the card | 3/3 | 3/4 | 5/6 |
+| Gate-visible (secondary) | - | - | 8 of 13 |
+
+Across all 24 scanned APKs (vulnerable and fixed builds) the only MUST FIX changes against run 4 are C07 and C09 (both wanted): no unrelated growth.
+Still not entering MUST FIX: C01 Talk (MEDIUM sink), C04 Tasks, C05 ownCloud (weak `contains` is now labelled weak, but the card stays below the gate), C08 Nextcloud, C12 and C14 as in run 4. (C10 is in MUST FIX since 2.0.1; C13 is the invalid pair.) C13 stays an invalid pair.
+CAVEAT (mirror): `SandboxScan` mirrors the device reach pass only for a rule card inside an exported component's own class (C09 relies on it); the device pass is broader, so this is a lower bound on the device, but it was not run on a device.
+Other 2.1.0 changes (no benchmark delta claimed): Verdict CRITICAL PATH lists only proven (reach YES) HIGH/CRITICAL scenarios, else `none`; dispatcher methods (switch + 8 callee classes, R8-merged lambdas) are hubs, so Axis Pay cards that cross `im2.success -> f51.run` become `YES~`; Conductor controller, WorkManager and Kotlin suspend-lambda reach edges.
+NOT measured: a device run of 2.1.0; WE Wallet / JustMarkets / Axis Pay 3.1.0 themselves (APKs not on this machine; the fixes are built from report text plus synthetic smali); MeasureBig corpus re-run. `self_check` PASSED (OVAA recall 18/19).
+
 ### What the 2.0.1 device reports showed (and what 2.0.2 changes)
 - WE Wallet card #1 (`SignUpWebViewActivity`, `exported="false"`) was still MUST FIX: it is a card of the single-class IR rule, which 2.0.1's SSA-only rule did not touch.
 - Axis Pay 3.1.0 report 9 had no Hybrid section although HybridInspector is in main: `HybridInspector.clear()` ran at the start of every code scan and wiped what the resource scan had published at APK load.

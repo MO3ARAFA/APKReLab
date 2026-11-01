@@ -2,6 +2,12 @@
 
 Release notes in short. The full record (measurements, what was not measured, every decision) is `docs/internal/HANDOFF.md`; numbers are in `docs/internal/PERF.md`.
 
+## 2.1.0 (versionCode 233)
+- Verdict: CRITICAL PATH shows only HIGH/CRITICAL scenarios with a proven path, otherwise `none`.
+- Reach: dispatcher methods (R8-merged lambdas) count as hubs (Axis Pay cards via `im2.success -> f51.run` are `YES~`); Conductor controllers, WorkManager workers and Kotlin suspend lambdas are reached.
+- Precision/recall: weak substring checks are no longer counted as validation; a reflected `getIntent()` URI grant with a grantUriPermissions provider is HIGH.
+- Real-CVE benchmark: MUST FIX recall 6 of 13 (4 of 13 in 2.0.2), patched build drops the card in 5 of 6.
+
 ## 2.0.2 (versionCode 232)
 - Fixes from the 2.0.1 device reports: the Hybrid framework section no longer disappears when the resource scan finishes before the code scan starts; a not-exported Activity/Service's Intent flow is lowered for EVERY engine's cards unless a tainted value is proven to flow into its launching Intent (WE Wallet SignUpWebViewActivity); the approximate-reach hub rule covers R8-renamed callback interfaces (Axis Pay).
 - Reach: Fragments created by a reached method have their lifecycle callbacks reached (Omni-Notes).
