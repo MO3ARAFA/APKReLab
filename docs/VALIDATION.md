@@ -96,3 +96,21 @@ Reported in 11 of 14 (9 exact, 2 partial); fix visible in 4 of 14 (C06, C07, C09
 Regression checks of the same build: self_check identical to the baseline (Recall line unchanged, SELF-CHECK PASSED); MeasureBig flow sets of K-9 (0), NewPipe (1),
 KeePassDX (9), Paperless (1), Chaka (1), Axis Pay (15) identical to pillar 1 (Axis Pay: 2 LOW flows show a SharedPreferences source label instead of Intent.getExtras()).
 NOT measured: any device run of these builds; apps outside these 14 cases and the 6 corpus apps.
+
+### Amendment (2.0.1): C13 is not a valid pair
+Reading the smali for the 2.0.1 work showed that the C13 'before' build (OsmAnd 5.3.10) passes the `name` of `/open-gpx` through `Algorithms.getFileWithoutDirs` (a basename) before it
+becomes a file name. The advisory tested 5.3.2 / 5.3.3; F-Droid does not carry them, so no vulnerable build was available. C13 is excluded (`valid_pair: false` in `cases.json`); the
+denominator is **13** in-scope cases. Runs 1 and 2 above counted C13 as 'NOT-DIFFERENT'; run 3 below shows a 'DETECTED' for it that is an unrelated SharedPreferences card matched by an
+anchor, so it is not counted either. Frozen rules are unchanged: this is a correction of the case list, written next to the numbers it affects.
+
+### Run 3, scanner 0a3fed6 (2.0.1; tuning set, NOT blind) and a secondary measure
+Automatic score (`runs/run3_201_0a3fed6.txt`, C13 excluded): DETECTED 5 (C01, C06, C07, C09, C11), NOT-DIFFERENT 8 (C02, C03, C04, C05, C08, C10, C12, C14), MISSED 0.
+Reported in 13 of 13 valid in-scope cases (C03 Omni-Notes is new: `DetailFragment.importAttachments` -> `AttachmentTask.uri` -> `StorageHelper.createExternalStoragePrivateFile` ->
+`openInputStream`; C04 Tasks now shows the ShareLinkActivity Intent flow instead of a SharedPreferences flow of the same sink, MEDIUM).
+Secondary measure, defined AFTER run 1 and not part of the frozen score (`score.py --secondary`): the fix is also 'gate-visible' when the before card says 'no validation seen'
+and the after card says 'validation-like calls seen on the path', the condition the MUST FIX gate uses. That adds C02 (Home Assistant) and C10 (Element): fix visible in 7 of 13
+(C01, C02, C06, C07, C09, C10, C11). Still not differentiated: C03, C04, C05, C08, C12, C14 (C05 / C08 / C12: the fix is a path check the engine already sees as 'validation-like' in
+the before build too; C14: a caller check inside a service).
+Device reports (WE Wallet, JustMarkets, Axis Pay 3.1.0, 2.0.0): see HANDOFF 2.0.1. The WE Wallet card #2 pattern (a non-exported Activity read as attacker-fed) also appeared
+independently in NewPipe's `ReCaptchaActivity` (`exported="false"`): HIGH before, MEDIUM / LOW now.
+NOT measured: any device run of 2.0.1; the three device apps (their APKs are not on this machine, the fixes were built from the report text and synthetic smali of the same shape).

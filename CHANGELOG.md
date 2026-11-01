@@ -2,6 +2,11 @@
 
 Release notes in short. The full record (measurements, what was not measured, every decision) is `docs/internal/HANDOFF.md`; numbers are in `docs/internal/PERF.md`.
 
+## 2.0.1 (versionCode 231)
+- Precision (from the 2.0.0 device reports): a non-exported Activity/Service no longer counts as attacker-fed because an exported class "reads some Intent value and launches it" - the value must be proven to flow into the launching Intent; hub-aware reach (a path through a call on a framework interface with 8+ implementers is approximate); deserialization / weak hash / weak random in obfuscated code one level lower; a pattern-only fintech card is MEDIUM.
+- Coverage: the card of a sink shared by a SharedPreferences flow and an Intent flow is the Intent one; AsyncTask constructor capture; parameter-valued Intent extras through method summaries.
+- Real-CVE benchmark: reported in 13 of 13 valid in-scope cases, fix visible in 7 (secondary measure); C13 removed as an invalid pair (docs/VALIDATION.md).
+
 ## 2.0.0 (versionCode 230)
 - Engine: async dispatch to Runnable / Callable / AsyncTask, constructor capture (deferred tasks, collection fields), Kotlin FunctionN devirtualisation,
   explicit-Intent extras and WorkManager Data linked by key, collection fields filled through "this".
