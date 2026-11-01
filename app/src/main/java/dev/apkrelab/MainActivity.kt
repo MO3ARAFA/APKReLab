@@ -3498,6 +3498,7 @@ class MainActivity : Activity() {
                 FindingPolish.lowerConstantFedActivities(secFindings, FindingPolish.nonExportedActivities(mc))            // 0.108.0
                 FindingPolish.lowerUnforwardedPrivateIntentFlows(secFindings, FindingPolish.privateActivitiesAndServices(mc), dev.apkrelab.ir.TaintIr.forwardedComponents(), dev.apkrelab.ir.TaintIr.openRedirectorSeen())   // 2.0.2
                 FindingPolish.lowerGuardedProviderFlows(secFindings, mc, PermissionGuard(mc, PermissionGuard.systemResolver(this)))   // phase 3
+                FindingPolish.raiseReflectedUriGrant(secFindings, mc)   // 2.1.0
                 // 1.1.0: receivers registered at run time with a signature permission (or RECEIVER_NOT_EXPORTED and minSdk 33+): their Intent comes from the app or the system
                 val sys = PermissionGuard.systemResolver(this)
                 val minSdk = Regex("minSdkVersion\\s*=\\s*\"?(\\d+)").find(manifestFull)?.groupValues?.get(1)?.toIntOrNull() ?: 1

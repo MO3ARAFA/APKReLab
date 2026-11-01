@@ -56,7 +56,8 @@ object MustFixGate {
      * so the card's reach is taken as it is).
      */
     fun check(f: Finding, guard: PermissionGuard? = null): Result {
-        val sink = !CHECK_SINK || highImpactSink(FixTemplates.sinkOf(f))
+        // 2.1.0: a reflected setResult(getIntent()) card raised to HIGH by FindingPolish.raiseReflectedUriGrant is its own high-impact sink (it grants a provider's data)
+        val sink = !CHECK_SINK || highImpactSink(FixTemplates.sinkOf(f)) || (f.ruleId == "uri-grant-via-result" && f.adjusted.contains("Raised to HIGH"))
         val reachable = f.reach == "YES" || f.reach == "YES~"
         val entry = entryType(f)
         val guarded = CHECK_GUARD && guard != null && entry != null && guard.guardFor(entry) == PermissionGuard.Guard.SIGNATURE

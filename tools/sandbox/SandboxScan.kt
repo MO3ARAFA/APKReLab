@@ -50,6 +50,16 @@ fun main(args: Array<String>) {
     FindingPolish.lowerNonExportedReceivers(final, FindingPolish.nonExportedReceiversAndServices(mc))   // 0.80.0, like MainActivity.reachPass
     FindingPolish.lowerSeparateProcessDialogs(final, FindingPolish.separateProcessActivities(mc))        // 0.81.0
     FindingPolish.lowerGuardedProviderFlows(final, mc, PermissionGuard(mc))                              // phase 3, like MainActivity (no device resolver)
+    FindingPolish.raiseReflectedUriGrant(final, mc)                                                      // 2.1.0, like MainActivity
+    // 2.1.0: MIRROR of the device's reach pass for the simplest case only (the sandbox does not trace rule cards): a rule card inside an EXPORTED component's own class is reached by that entry
+    val entryTypes = mc.exportedComponents.map { mc.smaliTypeOf(it) }.filter { it.isNotEmpty() }.toSet()
+    for (f in final) {
+        val t = f.classType ?: continue
+        val outer = if (t.contains('$')) t.substringBefore('$') + ";" else t
+        if (f.reach.isEmpty() && f.clsIndex >= 0 && FindingPolish.wantsReach(f) && outer in entryTypes) {
+            f.reach = "YES"; f.chain = "Entry: exported activity " + outer.removePrefix("L").removeSuffix(";").replace('/', '.') + " (no permission)\nPath: " + outer.removePrefix("L").removeSuffix(";").replace('/', '.')
+        }
+    }
     FindingPolish.lowerUnforwardedPrivateIntentFlows(final, FindingPolish.privateActivitiesAndServices(mc), TaintIr.forwardedComponents(), TaintIr.openRedirectorSeen())   // 2.0.2, like MainActivity
     // 1.1.0, like MainActivity: receivers registered only with a signature permission (or NOT_EXPORTED and minSdk 33+); no device here, so platform levels come from ReportBuilder.defaultLevel
     val minSdk = Regex("minSdkVersion\\s*=\\s*\"?(\\d+)").find(manifest)?.groupValues?.get(1)?.toIntOrNull() ?: 1
