@@ -134,6 +134,7 @@ public final class CallGraph {
 
     private final Map<String, ClassIr> classes = new HashMap<>();
     private final Set<String> componentTypes = new LinkedHashSet<>();            // 0.68.6: the exported components the graph was built with
+    private Set<String> exportedClosure;                                       // 2.0.1: the exported entries and every superclass of one
     private boolean openRedirector;                                          // 0.68.6: an exported component launches an Intent it received (intent redirection): any component can be started
     private Set<String> guardedComponents = Collections.emptySet();               // 0.69.1: exported components protected by a SIGNATURE-level permission: not attacker seeds
     private Set<String> attackerReach;                                           // 0.68.6: exported components, their app superclasses, and the components they hand an Intent to
@@ -243,6 +244,51 @@ public final class CallGraph {
             if (cur.equals(key)) break;
             for (Edge e : edgesFrom(cur)) {
                 if (e.external || parent.containsKey(e.callee)) continue;
+                parent.put(e.callee, cur);
+                q.add(e.callee);
+            }
+        }
+        if (!parent.containsKey(key)) return Collections.emptyList();
+        ArrayList<String> p = new ArrayList<>();
+        for (String c = key; !c.isEmpty(); c = parent.get(c)) p.add(c);
+        Collections.reverse(p);
+        return p;
+    }
+
+    /**
+     * 2.0.1 (device reports, Axis Pay: MainActivity.onActivityResult -> im2.success -> f51.run -> 7 unrelated SDK classes; 3.0.1: ga8.a -> Closeable.close -> wx0.close -> ni2.run ...):
+     * a call site on a FRAMEWORK interface method (Closeable.close, Runnable.run, Callable.call, a Flutter / Play Services callback) whose receiver the graph does not know
+     * resolves to every app class that implements it, and R8 merges dozens of lambdas into one such class. A path through that hop is real syntax but proves little.
+     * True when the edge's call site has {@link #HUB_FANOUT} or more app targets and its declared owner is not an app class.
+     */
+    public boolean isHubEdge(Edge e) {
+        if (e == null || e.external) return false;
+        MethodIr m = methods.get(e.caller);
+        if (m == null || e.insn < 0 || e.insn >= m.insns.size()) return false;
+        Insn in = m.insns.get(e.insn);
+        if (in.kind != Insn.Kind.INVOKE || classes.containsKey(in.targetOwner())) return false;
+        int n = 0;
+        for (Edge o : edgesFrom(e.caller)) if (o.insn == e.insn && !o.external) n++;
+        return n >= HUB_FANOUT;
+    }
+
+    /** 2.0.1: call sites with at least this many app targets are "hubs" (same figure as the taint engine's FANOUT_WEAK). */
+    public static final int HUB_FANOUT = 8;
+
+    /** 2.0.1: switch for the mutation check of the hub-avoiding evidence path. */
+    public static boolean HUB_AWARE = !Boolean.getBoolean("apkrelab.noHubAware");
+
+    /** Shortest entry path that uses no hub edge, or an empty list when every path to {@code key} goes through one. */
+    public List<String> pathToAvoidingHubs(String key) {
+        if (!reachable.contains(key)) return Collections.emptyList();
+        Map<String, String> parent = new HashMap<>();
+        Deque<String> q = new ArrayDeque<>();
+        for (String e : entries) if (methods.containsKey(e) && parent.put(e, "") == null) q.add(e);
+        while (!q.isEmpty()) {
+            String cur = q.poll();
+            if (cur.equals(key)) break;
+            for (Edge e : edgesFrom(cur)) {
+                if (e.external || parent.containsKey(e.callee) || isHubEdge(e)) continue;
                 parent.put(e.callee, cur);
                 q.add(e.callee);
             }
@@ -393,6 +439,33 @@ public final class CallGraph {
         String t = type;
         for (int i = 0; i < 2; i++) {
             if (classes.containsKey(t) && !attackerReach.contains(t) && isComponentBase(frameworkBase(t))) return true;
+            int d = t.indexOf('$');
+            if (d < 0) break;
+            t = t.substring(0, d) + ";";
+        }
+        return false;
+    }
+
+    /**
+     * 2.0.1 (WE Wallet SignUpWebViewActivity, device report): a component the manifest DOES NOT export (the graph was built with a component list, the class is
+     * not one of its entries) that is an Activity / Service. {@link #isInternalComponent} also asks "no exported class that reads an Intent getter launches it,
+     * directly or through a chain": a class-level guess that makes almost every screen of a wallet look attacker-reached. The taint engine uses this method
+     * instead: such a component's Intent is the app's own unless an exported component's tainted value was proven to flow into the Intent that launches it
+     * (TaintIr ICC_EXTRAS) or an open redirector exists (false then, as for isInternalComponent).
+     */
+    public synchronized boolean isPrivateComponent(String type) {
+        if (componentTypes.isEmpty() || type == null || type.isEmpty()) return false;
+        if (attackerReach == null) attackerReach = computeAttackerReach();
+        if (openRedirector) return false;
+        if (exportedClosure == null) {
+            Set<String> cl = new HashSet<>();
+            for (String c : componentTypes) cl.addAll(supers(c));
+            exportedClosure = cl;
+        }
+        String t = type;
+        for (int i = 0; i < 2; i++) {
+            // an abstract base of an exported component runs as part of it: not private
+            if (classes.containsKey(t) && !isExportedEntry(t) && !exportedClosure.contains(t) && isComponentBase(frameworkBase(t))) return true;
             int d = t.indexOf('$');
             if (d < 0) break;
             t = t.substring(0, d) + ";";

@@ -37,6 +37,7 @@ public class IrGuardedSourceTest {
         sb.append("    invoke-virtual {v0, v1}, Landroid/content/Intent;->getStringExtra(Ljava/lang/String;)Ljava/lang/String;\n    move-result-object v4\n");
         sb.append("    const-class v5, " + to + "\n    new-instance v6, Landroid/content/Intent;\n");
         sb.append("    invoke-direct {v6, v7, v5}, Landroid/content/Intent;-><init>(Landroid/content/Context;Ljava/lang/Class;)V\n");
+        sb.append("    const-string v1, \"u\"\n    invoke-virtual {v6, v1, v4}, Landroid/content/Intent;->putExtra(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;\n");   // 2.0.1: the value is really handed on
         sb.append("    invoke-virtual {v7, v6}, Landroid/app/Activity;->startActivity(Landroid/content/Intent;)V\n    return-void\n.end method\n");
         return sb.toString();
     }

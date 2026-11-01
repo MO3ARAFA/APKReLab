@@ -43,6 +43,7 @@ object ReportBuilder {
         if (f.ruleId.isNotEmpty()) parts.add("Rule: " + f.ruleId)
         if (f.scope != SecurityScanner.Scope.OTHER) parts.add("Scope: " + f.scope.tag)
         if (f.reach == "YES") parts.add("Reachable from an exported component")
+        else if (f.reach == "YES~") parts.add("Approximate reach from an exported component")      // 2.0.1: only through a many-implementer framework call (see the card)
         else if (f.reach == "YES~") parts.add("Probably reachable from an exported component (approximate class-level path)")
         return parts.joinToString(" | ")
     }

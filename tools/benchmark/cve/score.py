@@ -7,7 +7,9 @@ anchors appears in the card text (title, Location, evidence). Severity order CRI
   NOT-DIFFERENT = a matching card at MEDIUM or above in 'before' and the same or higher in 'after'
   LOW-ONLY      = matching cards in 'before' only at LOW
   MISSED        = no matching card in 'before'
-Usage: score.py <reports dir> [--json out.json]"""
+Usage: score.py <reports dir> [--json out.json] [--secondary]
+  --secondary (added in 2.0.1, after run 1, NOT part of the frozen score): the fix is also "gate-visible" when the before card says "no validation seen"
+  and the after card says "validation-like calls seen on the path", the very condition the MUST FIX gate uses."""
 import json, re, sys, os
 SEV = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}
 def cards(path):
@@ -22,6 +24,11 @@ def ruleok(rule, rules): return any(rule == x or (x.endswith("*") and rule.start
 def best(cs, case):
     hits = [(s, r, b) for s, r, b in cs if ruleok(r, case["rules"]) and any(a in b for a in case["anchors"])]
     return max(hits, key=lambda h: h[0]) if hits else None
+def valflag(card):
+    """Secondary, defined AFTER run 1 (2.0.1): the card's own 'Why:' line says 'no validation seen' or 'validation-like calls seen on the path'."""
+    m = re.search(r"^- Why: (.*)$", card[2], re.M)
+    w = m.group(1) if m else ""
+    return "no-val" if "no validation seen" in w else "val-like" if "validation-like calls seen" in w else "-"
 def main():
     d = sys.argv[1]; cases = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cases.json")))
     res = []
@@ -36,6 +43,9 @@ def main():
         elif ha is not None and ha[0] >= hb[0]: v = "NOT-DIFFERENT"
         else: v = "DETECTED"
         res.append((c["id"], c["cve"], v, (inv[hb[0]] + " " + hb[1]) if hb else "-", (inv[ha[0]] + " " + ha[1]) if ha else "-"))
+        if "--secondary" in sys.argv and hb is not None and hb[0] >= 2:
+            sec = "gate-visible" if (v == "DETECTED" or (ha is not None and valflag(hb) == "no-val" and valflag(ha) == "val-like")) else "-"
+            print("   secondary %s: before %s, after %s -> %s" % (c["id"], valflag(hb), valflag(ha) if ha else "gone", sec))
     for r in res: print("%s %-15s %-13s before: %-40s after: %s" % r)
     ins = [r for r in res if r[2] != "OUT-OF-SCOPE"]
     print("in scope: %d  DETECTED: %d  NOT-DIFFERENT: %d  LOW-ONLY: %d  MISSED: %d  NOT-SCANNED: %d" % (len(ins),

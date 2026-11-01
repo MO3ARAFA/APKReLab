@@ -188,9 +188,12 @@ object ExportedSensitiveActionRule : ScanRule {
             val between = after.substring(0, sink.range.first)
             val gated = rx("->(checkCallingPermission|checkSelfPermission|checkCallingOrSelfPermission|authenticate|getCallingUid|getCallingPackage)\\(").containsMatchIn(between)
             if (gated) continue
-            out.add(ctx.finding(Severity.HIGH, title,
-                "This component reads an Intent extra and the value reaches ${sink.groupValues[1]}() with nothing in between that checks the " +
-                    "caller (no checkCallingPermission/checkSelfPermission/getCallingUid/biometric re-auth). If this activity, service or " +
+            // 2.0.1 (WE Wallet StartupActivity, the launcher, device report): the rule sees a financial-sounding NAME after an Intent read in the same method and
+            // traces no value between them (confidence MEDIUM, "a rule's pattern match, no data flow traced"). A pattern match is a lead: MEDIUM, never HIGH.
+            out.add(ctx.finding(Severity.MEDIUM, title,
+                "This component reads an Intent extra and, later in the same method, calls ${sink.groupValues[1]}() with nothing in between that checks the " +
+                    "caller (no checkCallingPermission/checkSelfPermission/getCallingUid/biometric re-auth); no value was traced from the extra into that call, " +
+                    "so it can be an ordinary router. If this activity, service or " +
                     "receiver is exported (check android:exported / its intent-filter in the manifest), any app on the device can start it and " +
                     "drive a financial action - a classic deep-link/IPC trade-execution abuse pattern.",
                 "Confirm whether this component is actually exported. If it must be, re-validate the caller (signature permission, " +

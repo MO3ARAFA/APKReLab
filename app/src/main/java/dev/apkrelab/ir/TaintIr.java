@@ -515,6 +515,7 @@ public final class TaintIr {
         public final List<String> chain;    // methods from where the tainted value is held down to the sink method
         public boolean reachable;
         public List<String> entryPath = Collections.emptyList();
+        public boolean viaHub;                                  // 2.0.1: every entry path goes through a call on a framework interface with many app implementers
 
         Flow(String source, int level, String via, SinkRef sink, List<String> chain) {
             this(source, level, via, false, false, sink, chain);
@@ -760,7 +761,14 @@ public final class TaintIr {
         for (Flow f : best.values()) {
             String origin = f.chain.get(0);
             f.reachable = g.isReachable(origin);
-            if (f.reachable) f.entryPath = g.pathTo(origin);
+            if (f.reachable) {
+                f.entryPath = g.pathTo(origin);
+                if (CallGraph.HUB_AWARE && !f.entryPath.isEmpty()) {
+                    List<String> clean = g.pathToAvoidingHubs(origin);
+                    if (!clean.isEmpty()) f.entryPath = clean;           // a path without a hub hop exists: show that one
+                    else f.viaHub = true;                                // only through a many-target framework call: approximate
+                }
+            }
             res.flows.add(f);
         }
         Collections.sort(res.flows, (x, y) -> {
@@ -1055,7 +1063,8 @@ public final class TaintIr {
         boolean isDeferredTask(String type) {
             return deferredMemo.computeIfAbsent(type, t -> {
                 for (String s : g.supers(t))
-                    if (s.equals("Ljava/lang/Runnable;") || s.equals("Ljava/util/concurrent/Callable;") || s.startsWith("Lkotlin/jvm/functions/Function")) return true;
+                    if (s.equals("Ljava/lang/Runnable;") || s.equals("Ljava/util/concurrent/Callable;") || s.startsWith("Lkotlin/jvm/functions/Function")
+                            || (ASYNC_TASK_CTOR && s.equals("Landroid/os/AsyncTask;"))) return true;
                 return false;
             });
         }
@@ -1148,9 +1157,17 @@ public final class TaintIr {
     /** 2.0.0 step 2 (real-CVE benchmark C01, CVE-2023-39957, Nextcloud Talk ConversationsListController.upload -> UploadAndShareFilesWorker):
      *  WorkManager input data. Data.Builder.putX(literal key, real source) is remembered under "work-data:<key>" and Data.getX(same key) in a
      *  Worker reads it back, the way SharedPreferences keys are linked. The key is app-wide (a Data object can be handed to any worker). */
+    /** 2.0.1: switch for the mutation check of the non-exported-component rule (see CallGraph.isPrivateComponent). */
+    static boolean PRIVATE_STRICT = !Boolean.getBoolean("apkrelab.noPrivateStrict");
+    /** 2.0.1: switch for the mutation check of the whole-value Intent hand-over (putExtras / setData / copy constructor / startActivity(getIntent())). */
+    /** 2.0.1: switch for the mutation check of parameter-valued Intent-extra puts recorded in the method summary. */
+    static boolean ICC_PARAM_PUTS = !Boolean.getBoolean("apkrelab.noIccParamPuts");
+    static boolean ICC_WHOLE = !Boolean.getBoolean("apkrelab.noIccWhole");
     static boolean WORK_DATA = !Boolean.getBoolean("apkrelab.noWorkData");
     /** 2.0.0 step 2: switch for the mutation check of the collection-field write-back in raiseObj. */
     /** 2.0.0 step 2: switch for the mutation check of the AsyncTask.execute argument link. */
+    /** 2.0.1 (Omni-Notes AttachmentTask(uri) keeps the shared Uri in a field and reads it in doInBackground): AsyncTask subclasses are deferred tasks for constructor capture. */
+    static boolean ASYNC_TASK_CTOR = !Boolean.getBoolean("apkrelab.noAsyncTaskCtor");
     static boolean ASYNC_TASK_ARGS = !Boolean.getBoolean("apkrelab.noAsyncTaskArgs");
     static final String ASYNC_TASK_EXECUTE = "execute([Ljava/lang/Object;)Landroid/os/AsyncTask;";
     static final String ASYNC_TASK_ON_EXECUTOR = "executeOnExecutor(Ljava/util/concurrent/Executor;[Ljava/lang/Object;)Landroid/os/AsyncTask;";
@@ -1635,6 +1652,33 @@ public final class TaintIr {
             return run.g.classIr(t) != null ? t : null;
         }
 
+        /**
+         * 2.0.1: v is the Intent this component was started with (the result of getIntent()). The object itself is not a source (its getters are), so handing
+         * it on whole needs its own taint: real when this component can be reached with an outside Intent, what was forwarded to it when it is private,
+         * nothing otherwise.
+         */
+        private Tv incomingIntentObject(SsaForm.Value v) {
+            SsaForm.Value r = rootOf(v);
+            if (r == null || r.def == null || r.def.kind != Insn.Kind.INVOKE) return Tv.NONE;
+            if (!"getIntent".equals(r.def.targetName()) || !r.def.targetSig().endsWith(")Landroid/content/Intent;")) return Tv.NONE;
+            String cls = classOf(m.key());
+            if (run.g.isInternalComponent(cls) || run.g.isPrivateComponent(cls)) return readHeap(ICC_EXTRA_PREFIX + outerOfType(cls) + ":*");
+            return Tv.real(2, "Intent.getIntent()", null);
+        }
+
+        /**
+         * 2.0.1 (OVAA DeeplinkActivity.processDeeplink(Uri): the deep link's query parameter is a PARAMETER of the private method that puts it into the Intent for
+         * WebViewActivity): a heap write of the Intent-extra family. A real value is raised now; a value that is a parameter of this method is recorded in the summary
+         * (the slot's refs), so every caller's real taint for that parameter reaches the same slot, as for constructor-captured fields.
+         */
+        private void iccPut(String ref, Tv full) {
+            Tv real = full.realOnly();
+            if (!real.isNone()) run.raiseField(ref, real, m.key());
+            if (collect && ICC_PARAM_PUTS && full.params != 0L)
+                for (int k = 0; k < 64; k++)
+                    if ((full.params & (1L << k)) != 0) sum.ctorFields.computeIfAbsent(k, x -> new java.util.TreeSet<>()).add(ref);
+        }
+
         /** 2.0.0: v is the "this" parameter of an instance method. */
         private boolean isThis(SsaForm.Value v) {
             return v != null && v.entry && v.param && !m.isStatic && v.reg < regToSlot.length && regToSlot[v.reg] == 0;
@@ -1730,10 +1774,25 @@ public final class TaintIr {
                     && !owner.startsWith("Landroid/content/Intent;")) hit(REDIRECT_SINKS.get(name), in, t[1]);
             // 2.0.0: putExtra(literal key, real source) on an Intent this method builds for an in-app component and launches: remembered for that component + key
             if (ICC_EXTRAS && !isStatic && owner.equals("Landroid/content/Intent;") && name.equals("putExtra") && t.length >= 3 && av.length >= 3) {
-                Tv val = t[2].realOnly();
+                Tv val = t[2];
                 String key = constString(av[1]);
-                if (!val.isNone() && key != null)
-                    for (String target : launchedTargetsOf(av[0])) run.raiseField(ICC_EXTRA_PREFIX + target + ":" + unquote(key), val, m.key());
+                if (key != null && (!val.realOnly().isNone() || val.params != 0L))
+                    for (String target : launchedTargetsOf(av[0])) iccPut(ICC_EXTRA_PREFIX + target + ":" + unquote(key), val);
+            }
+            // 2.0.1: whole-value hand-over into an Intent launched at an in-app component: putExtras(Bundle|Intent), setData(Uri), setDataAndType(Uri, String), new Intent(Intent)
+            if (ICC_WHOLE && ICC_EXTRAS && !isStatic && owner.equals("Landroid/content/Intent;") && t.length >= 2 && av.length >= 2
+                    && (name.equals("putExtras") || name.equals("setData") || name.equals("setDataAndType") || name.equals("setDataAndNormalize")
+                        || (name.equals("<init>") && call.desc.startsWith("(Landroid/content/Intent;)")))) {
+                Tv val = t[1];
+                if (name.equals("putExtras") || name.equals("<init>")) val = val.join(incomingIntentObject(av[1]));   // putExtras(getIntent()), new Intent(getIntent())
+                if (!val.realOnly().isNone() || val.params != 0L)
+                    for (String target : launchedTargetsOf(av[0])) iccPut(ICC_EXTRA_PREFIX + target + ":*", val);
+            }
+            // 2.0.1: startActivity(getIntent()) after setClass(...): the Intent this component received is handed on whole
+            if (ICC_WHOLE && ICC_EXTRAS && !isStatic && REDIRECT_NAMES.contains(name) && call.desc.startsWith("(Landroid/content/Intent;") && av.length > 1) {
+                Tv val = incomingIntentObject(av[1]);
+                if (!val.isNone())
+                    for (String target : launchedTargetsOf(av[1])) run.raiseField(ICC_EXTRA_PREFIX + target + ":*", val, m.key());
             }
             // 2.0.0 step 2: WorkManager Data.Builder.putString / putStringArray(literal key, real source)
             if (WORK_DATA && !isStatic && owner.equals(WORK_DATA_BUILDER) && WORK_DATA_PUTS.contains(name) && t.length >= 3 && av.length >= 3) {
@@ -1761,8 +1820,9 @@ public final class TaintIr {
             }
             // real source
             Tv src = sourceOf(owner, name);
-            if (src != null && owner.equals("Landroid/content/Intent;") && run.g.isInternalComponent(classOf(m.key())))
-                src = Tv.internalSource(src.level, src.src, src.via);                 // 0.68.6: read in a component that is not exported
+            if (src != null && owner.equals("Landroid/content/Intent;")
+                    && (run.g.isInternalComponent(classOf(m.key())) || (PRIVATE_STRICT && run.g.isPrivateComponent(classOf(m.key())))))
+                src = Tv.internalSource(src.level, src.src, src.via);                 // 0.68.6: read in a component that is not exported (2.0.1: not even by a class-level chain)
             // 2.0.0: an extra another component of this app put under the same literal key into an Intent it launched at this class
             if (ICC_EXTRAS && src != null && owner.equals("Landroid/content/Intent;") && name.endsWith("Extra") && av.length > 1) {
                 String key = constString(av[1]);
@@ -1770,6 +1830,11 @@ public final class TaintIr {
                     Tv fw = readHeap(ICC_EXTRA_PREFIX + outerOfType(classOf(m.key())) + ":" + unquote(key));
                     if (fw.level > 0) src = fw.join(src);
                 }
+            }
+            // 2.0.1: a tainted value handed over as a whole (putExtras / setData / copy constructor) into an Intent launched at this class: any getter reads it
+            if (ICC_WHOLE && ICC_EXTRAS && src != null && owner.equals("Landroid/content/Intent;")) {
+                Tv fw = readHeap(ICC_EXTRA_PREFIX + outerOfType(classOf(m.key())) + ":*");
+                if (fw.level > 0) src = fw.join(src);
             }
             // 0.70.0: the Intent handed to onActivityResult is the ANSWER of an activity this app started (file picker, camera, its own
             // screens), not an input another app sends to one of our components. It is attacker data only when that activity can be
