@@ -183,7 +183,9 @@ public final class SsaBridge {
         MethodIr sinkM = g.methods.get(f.sink.method);
         if (sinkM == null || f.sink.insn < 0 || f.sink.insn >= sinkM.insns.size()) return null;
         int at = sinkM.insns.get(f.sink.insn).offset;
-        boolean validation = hasValidation(g, f);
+        int vkind = validationKind(g, f);
+        boolean validation = vkind == 2 || (vkind == 1 && !WEAK_VALIDATION);
+        boolean weakOnly = WEAK_VALIDATION && vkind == 1;
 
         // 0.84.0 (OpenTracks KMZ importer, FairEmail processUri): a file-name flow whose path cleans the name (a basename: substring after
         // lastIndexOf('/') with the '/' constant in the same method, or a call named sanitize* / safeName / baseName) is not a path traversal
@@ -224,6 +226,7 @@ public final class SsaBridge {
         if (f.source.startsWith("Parcel.")) sb.append(" The value is read from a Parcel inside an unmarshalling method (a Parcelable constructor, createFromParcel, readFromParcel or a Binder onTransact). The Parcel is filled by another app when the object is received through an Intent extra or an exported service: check where this class is read from an Intent or Binder call.");
         if (f.source.startsWith("ZipEntry.")) sb.append(" The value is the name of an archive entry. When the archive comes from outside the app (a download, a file another app shares) a name such as ../../x makes the extraction write outside the target folder (Zip Slip): the target path must be checked with getCanonicalPath() against the extraction folder.");
         if (prefs) sb.append(" The source is SharedPreferences, which only an attacker with root or a tampered backup can change: treat this as a lead, not as a confirmed flaw.");
+        if (weakOnly) sb.append(" The chain contains only WEAK checks on the value (a substring or suffix test: contains / endsWith without a canonical path, a full match or an allow-list). They are easy to bypass (\"/data\" is not in \"/./data\", \"example.com\" ends \"evil-example.com\"), so they are not counted as a sanitizer: read them and decide.");
         if (validation) sb.append(" The chain also contains validation-like calls (startsWith, matches, getHost, canonical path, allow-list contains ...): verify that they really restrict this value before the sink.");
         if (f.reachable && f.viaHub) sb.append(" Every call path from an exported component goes through a call on a framework interface that " + CallGraph.HUB_FANOUT + " or more app classes implement (a generic callback / Runnable / Closeable, often R8-merged lambdas), so the exported component may not really reach this code: treat the reach as approximate.");
         if (!f.reachable) sb.append(" No exported component reaches this method in the call graph: it may be internal-only, or reached through an implicit Intent, reflection or a lambda the graph does not follow.");
@@ -292,18 +295,32 @@ public final class SsaBridge {
         return false;
     }
 
-    private static boolean hasValidation(CallGraph g, TaintIr.Flow f) {
+    /** 2.1.0: switch for the mutation check of weak validation (substring / prefix / suffix tests alone are not a sanitizer). */
+    public static boolean WEAK_VALIDATION = !Boolean.getBoolean("apkrelab.noWeakValidation");
+
+    /** The checks a bypass is well known for: a substring or SUFFIX test on a String (blacklist contains, host endsWith). startsWith stays a validation: it is the usual scheme / prefix check ("https://"). Everything else VALIDATION matches (regex, allow-list contains, getHost, canonical path, named helpers) is strong. */
+    private static final Pattern WEAK_ONLY = Pattern.compile("^(?:invoke-[a-z]+(?:/range)?\\s+\\{[^}]*\\},\\s*)?Ljava/lang/String;->(endsWith|contains)\\(.*$");
+
+    /** 0 = no validation-like call on the chain, 1 = only weak ones, 2 = at least one strong one. */
+    private static int validationKind(CallGraph g, TaintIr.Flow f) {
         Set<String> seen = new HashSet<>();
         List<String> keys = new ArrayList<>(f.chain);
         keys.add(f.sink.method);
+        int kind = 0;
         for (String k : keys) {
             if (!seen.add(k)) continue;
             MethodIr m = g.methods.get(k);
             if (m == null) continue;
-            for (Insn in : m.insns) if (VALIDATION.matcher(in.text()).find()) return true;
+            for (Insn in : m.insns) {
+                String t = in.text();
+                if (!VALIDATION.matcher(t).find()) continue;
+                if (WEAK_ONLY.matcher(t).find() && !t.contains("->matches(")) kind = Math.max(kind, 1);
+                else return 2;
+            }
         }
-        return false;
+        return kind;
     }
+
 
     private static String step(String conf) {
         return conf.equals("HIGH") ? "MEDIUM" : "LOW";

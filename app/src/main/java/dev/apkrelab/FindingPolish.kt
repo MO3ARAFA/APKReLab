@@ -451,6 +451,37 @@ object FindingPolish {
         return n
     }
 
+    /** 2.1.0: switch for the mutation check of [raiseReflectedUriGrant]. */
+    internal var RAISE_REFLECTED_GRANT = true
+
+    /**
+     * 2.1.0 (real-CVE benchmark C09, Nextcloud News SettingsActivity.onStart: setResult(RESULT_OK, getIntent())): an EXPORTED activity that hands the caller's own Intent back
+     * through setResult() lets that caller name any content:// Uri and FLAG_GRANT_*_URI_PERMISSION in the Intent it started the activity with; the system then grants it. With a
+     * provider in the manifest that declares grantUriPermissions="true" (and is not exported, so nothing else reaches its data), that is a read of the app's private files by any app:
+     * HIGH. Without such a provider, or in a not-exported activity, the card stays at the rule's MEDIUM. Returns the number raised; idempotent.
+     */
+    fun raiseReflectedUriGrant(list: List<SecurityScanner.Finding>, mc: ManifestContext): Int {
+        if (!RAISE_REFLECTED_GRANT) return 0
+        val grantProvider = mc.components.any { it.tag == "provider" && it.headerAttrs.contains("grantUriPermissions=\"true\"") }
+        if (!grantProvider) return 0
+        val exportedActivities = mc.components.filter { it.exported && (it.tag == "activity" || it.tag == "activity-alias") }.map { mc.smaliTypeOf(it) }.filter { it.isNotEmpty() }.toSet()
+        var n = 0
+        for (f in list) {
+            try {
+                if (f.ruleId != "uri-grant-via-result" || f.severity != SecurityScanner.Severity.MEDIUM || !f.detail.contains("returns the Intent this activity was started with (getIntent())")) continue
+                val t = f.classType ?: continue
+                val outer = if (t.contains('$')) t.substringBefore('$') + ";" else t
+                if (outer !in exportedActivities) continue
+                f.severity = SecurityScanner.Severity.HIGH
+                f.confidence = "MEDIUM"
+                f.adjusted = (if (f.adjusted.isNotEmpty()) f.adjusted + " " else "") +
+                    "Raised to HIGH: this activity is exported and the manifest declares a provider with grantUriPermissions=\"true\", so the Uri the caller put in the Intent it started this activity with is granted to it."
+                n++
+            } catch (_: Throwable) { }
+        }
+        return n
+    }
+
     /** 2.0.2: switch for the mutation check of [lowerUnforwardedPrivateIntentFlows]. */
     internal var PRIVATE_COMPONENT_CARDS = true
 

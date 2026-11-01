@@ -263,6 +263,7 @@ public final class CallGraph {
      */
     public boolean isHubEdge(Edge e) {
         if (e == null || e.external) return false;
+        if (DISPATCHER_HUBS && isDispatcherMethod(e.caller)) return true;       // 2.1.0
         MethodIr m = methods.get(e.caller);
         if (m == null || e.insn < 0 || e.insn >= m.insns.size()) return false;
         Insn in = m.insns.get(e.insn);
@@ -270,6 +271,30 @@ public final class CallGraph {
         int n = 0;
         for (Edge o : edgesFrom(e.caller)) if (o.insn == e.insn && !o.external) n++;
         return n >= HUB_FANOUT;
+    }
+
+    /** 2.1.0: switch for the mutation check of dispatcher methods as hubs. */
+    public static boolean DISPATCHER_HUBS = !Boolean.getBoolean("apkrelab.noDispatcherHubs");
+
+    private final Map<String, Boolean> dispatcherMemo = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 2.1.0 (Axis Pay 3.1.0 report 10: MainActivity.onActivityResult -> im2.success -> f51.run -> pm2 / m70 / am8 / d80 / o33 ...): R8 merges dozens of lambdas into ONE class whose
+     * run() / call() / invoke() is a switch over a tag field, each case calling a different class from its own call site. No single call site has many targets, so the call-site
+     * rule misses it, but the METHOD is a hub: which case runs depends on a field the call graph does not link to the caller. A method with a switch instruction whose app callees
+     * span {@link #HUB_FANOUT} or more distinct classes is a dispatcher; a path that leaves a dispatcher is approximate unless another path exists.
+     */
+    boolean isDispatcherMethod(String key) {
+        return dispatcherMemo.computeIfAbsent(key, k -> {
+            MethodIr m = methods.get(k);
+            if (m == null) return false;
+            boolean sw = false;
+            for (Insn in : m.insns) if (in.kind == Insn.Kind.SWITCH) { sw = true; break; }
+            if (!sw) return false;
+            Set<String> classes = new HashSet<>();
+            for (Edge x : edgesFrom(k)) if (!x.external) classes.add(TaintIr.classOf(x.callee));
+            return classes.size() >= HUB_FANOUT;
+        });
     }
 
     /** 2.0.1: call sites with at least this many app targets are "hubs" (same figure as the taint engine's FANOUT_WEAK). */
@@ -694,7 +719,8 @@ public final class CallGraph {
 
     /** Fragment callbacks the FragmentManager runs once a host Activity has created and added the fragment. */
     static final Set<String> FRAGMENT_NAMES = new HashSet<>(Arrays.asList(
-            "onAttach", "onCreate", "onCreateView", "onViewCreated", "onActivityCreated", "onStart", "onResume", "onCreateDialog"));
+            "onAttach", "onCreate", "onCreateView", "onViewCreated", "onActivityCreated", "onStart", "onResume", "onCreateDialog",
+            "onViewBound", "onContextAvailable"));          // 2.1.0: Conductor controllers
 
     /**
      * 2.0.2 (real-CVE benchmark C03, Omni-Notes DetailFragment.handleIntents -> importAttachments): a Fragment is never called by app code, the FragmentManager runs its
@@ -702,13 +728,51 @@ public final class CallGraph {
      * instantiates a Fragment class now has a "frag" edge to that fragment's lifecycle callbacks.
      */
     private void fragmentHosted(String caller, int insn, String type) {
-        if (!FRAGMENT_HOSTING || !classes.containsKey(type) || !frameworkBase(type).endsWith("Fragment;")) return;
-        for (String k : lifecycleKeys(type, FRAGMENT_NAMES)) addEdge(caller, insn, k, "frag");
+        if (!classes.containsKey(type)) return;
+        String base = frameworkBase(type);
+        if (FRAGMENT_HOSTING && (base.endsWith("Fragment;") || (CONTROLLER_HOSTING && base.startsWith("Lcom/bluelinelabs/conductor/") && base.endsWith("Controller;")))) {
+            for (String k : lifecycleKeys(type, FRAGMENT_NAMES)) addEdge(caller, insn, k, "frag");
+        } else if (SUSPEND_LAMBDAS && base.startsWith("Lkotlin/coroutines/jvm/internal/") && (base.endsWith("SuspendLambda;") || base.endsWith("ContinuationImpl;"))) {
+            for (String k : lifecycleKeys(type, SUSPEND_NAMES)) addEdge(caller, insn, k, "suspend");
+        }
+    }
+
+    /** 2.1.0: switches for the mutation checks of Conductor controller hosting, Kotlin suspend lambdas and WorkManager workers. */
+    public static boolean CONTROLLER_HOSTING = !Boolean.getBoolean("apkrelab.noControllerHosting");
+    public static boolean SUSPEND_LAMBDAS = !Boolean.getBoolean("apkrelab.noSuspendLambdas");
+    public static boolean WORK_EDGES = !Boolean.getBoolean("apkrelab.noWorkEdges");
+
+    /** What the coroutine machinery runs once a launched suspend lambda exists (ShareLinkActivity$onCreate$1.invokeSuspend, reached from lifecycleScope.launch { }). */
+    static final Set<String> SUSPEND_NAMES = new HashSet<>(Arrays.asList("invokeSuspend"));
+    static final Set<String> WORKER_NAMES = new HashSet<>(Arrays.asList("doWork", "startWork", "createWork"));
+
+    /**
+     * 2.1.0 (real-CVE benchmark C01, Nextcloud Talk: ConversationsListController.upload builds OneTimeWorkRequest.Builder(UploadAndShareFilesWorker.class)): WorkManager runs the
+     * worker after enqueue. {@code new OneTimeWorkRequest.Builder(X.class)} / PeriodicWorkRequest.Builder is an edge to X's doWork / startWork.
+     */
+    private void workScheduled(MethodIr m, Insn in) {
+        if (!WORK_EDGES || !in.targetName().equals("<init>") || in.uses.length < 2) return;
+        String o = in.targetOwner();
+        if (!o.equals("Landroidx/work/OneTimeWorkRequest$Builder;") && !o.equals("Landroidx/work/PeriodicWorkRequest$Builder;")) return;
+        int reg = in.uses[1];
+        for (int i = in.index - 1, n = 0; i >= 0 && n < 12; i--, n++) {
+            Insn d = m.insns.get(i);
+            boolean defines = false;
+            for (int r : d.defs) if (r == reg) { defines = true; break; }
+            if (!defines) continue;
+            if (d.kind == Insn.Kind.MOVE && d.uses.length > 0) { reg = d.uses[0]; continue; }
+            if (d.kind == Insn.Kind.CONST && d.op.equals("const-class") && classes.containsKey(d.ref)) {
+                instantiate(d.ref);
+                for (String k : lifecycleKeys(d.ref, WORKER_NAMES)) addEdge(m.key(), in.index, k, "work");
+            }
+            return;
+        }
     }
 
     private void invoke(MethodIr m, Insn in, Set<String> localNew) {
         String owner = in.targetOwner(), sig = in.targetSig(), kind = in.invokeKind();
         if (owner.isEmpty() || owner.charAt(0) == '[') return;
+        workScheduled(m, in);
         String caller = m.key();
         if (ASYNC_EDGES) {                                                     // 2.0.0: the dispatched Runnable runs: its run() is reached through this site
             String at = asyncTarget(m, in);

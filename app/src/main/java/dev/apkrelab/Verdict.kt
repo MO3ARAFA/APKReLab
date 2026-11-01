@@ -85,6 +85,9 @@ object Verdict {
 
     /** [all] = every finding of the scan, INFO included (the native and asset scans say there what they could not read); the cards are the reported subset. */
     /** [guard] = the manifest's permission guards for the MUST FIX gate (phase 2); null = the reach pass's own seed filter is trusted. */
+    /** 2.1.0: switch for the mutation check of the proven-only CRITICAL PATH. */
+    internal var CRITICAL_PATH_PROVEN = true
+
     fun build(cards: List<Finding>, scenarios: List<AttackScenarios.Scenario>, cov: Coverage, pkg: String = "", all: List<Finding> = cards, guard: PermissionGuard? = null): Lines {
         if (cov.deepScan && cov.classesScanned == 0)
             return Lines(true, "SCAN FAILED: the deep scan read 0 classes, so nothing in this report is a verdict on the code (re-import the APK and run the Deep scan again).",
@@ -97,11 +100,17 @@ object Verdict {
 
         // CRITICAL PATH: the scenario whose chain holds the highest-priority reported card and names an entry
         val pos = HashMap<Finding, Int>(); for ((i, f) in cards.withIndex()) pos[f] = i
-        val best = scenarios.filter { s -> s.entry.isNotBlank() && s.chain.any { it in pos } }
-            .maxByOrNull { s -> s.chain.filter { it in pos }.maxOf { FindingScore.of(it).value } }
-        val path = if (best == null) listOf("none: no attack scenario links a reported card to an entry point") else {
+        // 2.1.0 (WE Wallet report 3: the Verdict still printed a MEDIUM scenario whose cards had just been lowered to MEDIUM with an approximate reach): only a HIGH / CRITICAL scenario
+        // that holds a HIGH / CRITICAL card whose path is not approximate (reach YES, or a rule that is not traced) is a critical path. Anything else is a lead the cards already show.
+        fun proven(f: Finding) = f.severity.rank <= Severity.HIGH.rank && f.reach != "YES~" && f.reach != "NO"
+        val linked = scenarios.filter { s -> s.entry.isNotBlank() && s.chain.any { it in pos } }
+        val best = if (!CRITICAL_PATH_PROVEN) linked.maxByOrNull { s -> s.chain.filter { it in pos }.maxOf { FindingScore.of(it).value } }
+            else linked.filter { s -> s.severity.rank <= Severity.HIGH.rank && s.chain.any { it in pos && proven(it) } }
+                .maxByOrNull { s -> s.chain.filter { it in pos && proven(it) }.maxOf { FindingScore.of(it).value } }
+        val path = if (best == null) listOf(if (linked.isEmpty()) "none: no attack scenario links a reported card to an entry point"
+            else "none: no HIGH or CRITICAL attack scenario has a proven path from an entry point to a HIGH or CRITICAL card (${linked.size} lower-confidence lead(s) are in the Attack surface)") else {
             val chain = best.chain.filter { it in pos }
-            val top = chain.maxByOrNull { FindingScore.of(it).value }!!
+            val top = (if (CRITICAL_PATH_PROVEN) chain.filter { proven(it) } else chain).maxByOrNull { FindingScore.of(it).value }!!
             listOf("card ${label(pos[top]!!)}: ${best.title}",
                 "entry: ${best.entry} -> path: " + chain.joinToString(" -> ") { label(pos[it]!!) + " " + it.title.take(60) + " in " + where(it) } +
                     (FixTemplates.sinkOf(top)?.let { " -> sink: $it" } ?: ""),
