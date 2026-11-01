@@ -92,7 +92,9 @@ public class IrInternalSourceTest {
         return launcher("Lt/A;", "Lt/B;", readsIntent);
     }
 
-    private static String launcher(String self, String to, boolean readsIntent) {
+    private static String launcher(String self, String to, boolean readsIntent) { return launcher(self, to, readsIntent, true); }
+
+    private static String launcher(String self, String to, boolean readsIntent, boolean forwards) {
         StringBuilder sb = new StringBuilder(".class public " + self + "\n.super Landroid/app/Activity;\n\n.method public onCreate(Landroid/os/Bundle;)V\n    .locals 7\n");
         if (readsIntent) {
             sb.append("    new-instance v0, Landroid/content/Intent;\n    const-string v1, \"u\"\n");
@@ -100,6 +102,7 @@ public class IrInternalSourceTest {
         }
         sb.append("    const-class v5, " + to + "\n    new-instance v6, Landroid/content/Intent;\n");
         sb.append("    invoke-direct {v6, v7, v5}, Landroid/content/Intent;-><init>(Landroid/content/Context;Ljava/lang/Class;)V\n");
+        if (readsIntent && forwards) sb.append("    const-string v1, \"u\"\n    invoke-virtual {v6, v1, v4}, Landroid/content/Intent;->putExtra(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;\n");   // 2.0.1: really handed on
         sb.append("    invoke-virtual {v7, v6}, Landroid/app/Activity;->startActivity(Landroid/content/Intent;)V\n    return-void\n.end method\n");
         return sb.toString();
     }
@@ -110,6 +113,98 @@ public class IrInternalSourceTest {
         TaintIr.Flow f = flowIn(g, "Lt/B;");
         assertFalse(f.internal);
         assertFalse(f.weak);
+    }
+
+    // 2.0.1 (WE Wallet SignUpWebViewActivity): an exported launcher that READS an Intent value but never hands it on does not make the target attacker-fed
+    @Test
+    public void anActivityLaunchedByAReaderThatForwardsNothingIsInternal() {
+        CallGraph g = graph(Arrays.asList("Lt/A;"), launcher("Lt/A;", "Lt/B;", true, false), activity("Lt/B;", ACT));
+        assertTrue(flowIn(g, "Lt/B;").internal);
+    }
+
+    @Test
+    public void mutantClassLevelForwardingMakesItStrongAgain() {
+        boolean was = TaintIr.PRIVATE_STRICT;
+        TaintIr.PRIVATE_STRICT = false;
+        try {
+            CallGraph g = graph(Arrays.asList("Lt/A;"), launcher("Lt/A;", "Lt/B;", true, false), activity("Lt/B;", ACT));
+            assertFalse(flowIn(g, "Lt/B;").internal);
+        } finally { TaintIr.PRIVATE_STRICT = was; }
+    }
+
+    /** An exported activity that hands its whole incoming Intent on: how = "putExtras" | "copy" | "startActivity". */
+    private static String wholesale(String how) {
+        StringBuilder sb = new StringBuilder(".class public Lt/A;\n.super Landroid/app/Activity;\n\n.method public onCreate(Landroid/os/Bundle;)V\n    .locals 7\n");
+        sb.append("    invoke-virtual {v7}, Lt/A;->getIntent()Landroid/content/Intent;\n    move-result-object v4\n");
+        sb.append("    const-class v5, Lt/B;\n    new-instance v6, Landroid/content/Intent;\n");
+        if (how.equals("copy")) {
+            sb.append("    invoke-direct {v6, v4}, Landroid/content/Intent;-><init>(Landroid/content/Intent;)V\n");
+            sb.append("    invoke-virtual {v6, v7, v5}, Landroid/content/Intent;->setClass(Landroid/content/Context;Ljava/lang/Class;)Landroid/content/Intent;\n");
+        } else if (how.equals("putExtras")) {
+            sb.append("    invoke-direct {v6, v7, v5}, Landroid/content/Intent;-><init>(Landroid/content/Context;Ljava/lang/Class;)V\n");
+            sb.append("    invoke-virtual {v6, v4}, Landroid/content/Intent;->putExtras(Landroid/content/Intent;)Landroid/content/Intent;\n");
+        } else {
+            sb.append("    invoke-virtual {v4, v7, v5}, Landroid/content/Intent;->setClass(Landroid/content/Context;Ljava/lang/Class;)Landroid/content/Intent;\n");
+            sb.append("    move-object v6, v4\n");
+        }
+        sb.append("    invoke-virtual {v7, v6}, Landroid/app/Activity;->startActivity(Landroid/content/Intent;)V\n    return-void\n.end method\n");
+        return sb.toString();
+    }
+
+    @Test
+    public void handingTheWholeIncomingIntentOnKeepsTheTargetStrong() {
+        for (String how : new String[]{"putExtras", "copy", "startActivity"}) {
+            CallGraph g = graph(Arrays.asList("Lt/A;"), wholesale(how), activity("Lt/B;", ACT));
+            TaintIr.Flow f = flowIn(g, "Lt/B;");
+            assertFalse(how, f.internal);
+            assertFalse(how, f.weak);
+        }
+    }
+
+    /** OVAA DeeplinkActivity: onCreate hands the deep link Uri to a private method that puts one of its query parameters into the Intent for Lt/B; (a parameter, not yet a source). */
+    private static String deepLink() {
+        return ".class public Lt/A;\n.super Landroid/app/Activity;\n\n"
+            + ".method public onCreate(Landroid/os/Bundle;)V\n    .locals 3\n"
+            + "    invoke-virtual {p0}, Lt/A;->getIntent()Landroid/content/Intent;\n    move-result-object v0\n"
+            + "    invoke-virtual {v0}, Landroid/content/Intent;->getData()Landroid/net/Uri;\n    move-result-object v0\n"
+            + "    invoke-direct {p0, v0}, Lt/A;->process(Landroid/net/Uri;)V\n    return-void\n.end method\n"
+            + ".method private process(Landroid/net/Uri;)V\n    .locals 5\n"
+            + "    const-string v2, \"u\"\n"
+            + "    invoke-virtual {p1, v2}, Landroid/net/Uri;->getQueryParameter(Ljava/lang/String;)Ljava/lang/String;\n    move-result-object v1\n"
+            + "    const-class v3, Lt/B;\n    new-instance v4, Landroid/content/Intent;\n"
+            + "    invoke-direct {v4, p0, v3}, Landroid/content/Intent;-><init>(Landroid/content/Context;Ljava/lang/Class;)V\n"
+            + "    invoke-virtual {v4, v2, v1}, Landroid/content/Intent;->putExtra(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;\n"
+            + "    invoke-virtual {p0, v4}, Lt/A;->startActivity(Landroid/content/Intent;)V\n    return-void\n.end method\n";
+    }
+
+    @Test
+    public void aParameterPutIntoTheIntentOfAPrivateActivityKeepsItStrong() {
+        CallGraph g = graph(Arrays.asList("Lt/A;"), deepLink(), activity("Lt/B;", ACT));
+        TaintIr.Flow f = flowIn(g, "Lt/B;");
+        assertFalse(f.internal);
+        assertFalse(f.weak);
+    }
+
+    @Test
+    public void mutantNoParameterPutsLeavesItInternal() {
+        boolean was = TaintIr.ICC_PARAM_PUTS;
+        TaintIr.ICC_PARAM_PUTS = false;
+        try {
+            CallGraph g = graph(Arrays.asList("Lt/A;"), deepLink(), activity("Lt/B;", ACT));
+            assertTrue(flowIn(g, "Lt/B;").internal);
+        } finally { TaintIr.ICC_PARAM_PUTS = was; }
+    }
+
+    @Test
+    public void mutantNoWholeValueHandOverLeavesTheTargetInternal() {
+        boolean was = TaintIr.ICC_WHOLE;
+        TaintIr.ICC_WHOLE = false;
+        try {
+            for (String how : new String[]{"putExtras", "copy", "startActivity"}) {
+                CallGraph g = graph(Arrays.asList("Lt/A;"), wholesale(how), activity("Lt/B;", ACT));
+                assertTrue(how, flowIn(g, "Lt/B;").internal);
+            }
+        } finally { TaintIr.ICC_WHOLE = was; }
     }
 
     @Test

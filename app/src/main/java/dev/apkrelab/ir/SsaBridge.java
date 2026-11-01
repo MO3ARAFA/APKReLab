@@ -42,6 +42,8 @@ public final class SsaBridge {
         public final String sourceMethod;
         /** 0.82.0 (AI triage): the data path source -> ... -> sink as short method names, "" when there is only the sink method. */
         public final String dataPath;
+        /** 2.0.1: every entry path goes through a call on a framework interface with many app implementers (Closeable.close, Runnable.run ...): the reach is approximate. */
+        public boolean viaHub;
 
         Item(String classType, String method, int at, String title, String cwe, String sev, String confidence, String fix,
              String detail, boolean reachable, String entry, String path, int count, String sourceMethod, String dataPath) {
@@ -64,6 +66,9 @@ public final class SsaBridge {
     }
 
     public static final int MAX_ITEMS = 40;
+
+    /** 2.0.1: switch for the mutation check of the group representative (see toItem). */
+    public static boolean PREFER_OUTSIDE_SOURCE = !Boolean.getBoolean("apkrelab.noPreferOutsideSource");
 
     // same idea as TaintEngine.validationRe in the Kotlin engine
     private static final Pattern VALIDATION = Pattern.compile(
@@ -171,6 +176,10 @@ public final class SsaBridge {
         // flows come sorted (severity, reachable first); the first one of the group is the one to show
         TaintIr.Flow f = group.get(0);
         if (f.weak) for (TaintIr.Flow x : group) if (!x.weak) { f = x; break; }      // 0.68.5: show a strong flow of the group when there is one
+        // 2.0.1 (real-CVE benchmark C04 Tasks ShareLinkActivity, C13 OsmAnd): flows are grouped per sink and the first one is shown. A SharedPreferences source (root or a
+        // tampered backup) is not weak in the engine, so it could hide the Intent / Uri flow of the same sink: prefer a strong flow whose source is not SharedPreferences.
+        if (PREFER_OUTSIDE_SOURCE && f.source.startsWith("SharedPreferences."))
+            for (TaintIr.Flow x : group) if (!x.weak && !x.source.startsWith("SharedPreferences.")) { f = x; break; }
         MethodIr sinkM = g.methods.get(f.sink.method);
         if (sinkM == null || f.sink.insn < 0 || f.sink.insn >= sinkM.insns.size()) return null;
         int at = sinkM.insns.get(f.sink.insn).offset;
@@ -216,6 +225,7 @@ public final class SsaBridge {
         if (f.source.startsWith("ZipEntry.")) sb.append(" The value is the name of an archive entry. When the archive comes from outside the app (a download, a file another app shares) a name such as ../../x makes the extraction write outside the target folder (Zip Slip): the target path must be checked with getCanonicalPath() against the extraction folder.");
         if (prefs) sb.append(" The source is SharedPreferences, which only an attacker with root or a tampered backup can change: treat this as a lead, not as a confirmed flaw.");
         if (validation) sb.append(" The chain also contains validation-like calls (startsWith, matches, getHost, canonical path, allow-list contains ...): verify that they really restrict this value before the sink.");
+        if (f.reachable && f.viaHub) sb.append(" Every call path from an exported component goes through a call on a framework interface that " + CallGraph.HUB_FANOUT + " or more app classes implement (a generic callback / Runnable / Closeable, often R8-merged lambdas), so the exported component may not really reach this code: treat the reach as approximate.");
         if (!f.reachable) sb.append(" No exported component reaches this method in the call graph: it may be internal-only, or reached through an implicit Intent, reflection or a lambda the graph does not follow.");
         if (group.size() > 1) sb.append(" ").append(group.size()).append(" flows of this kind end in this method.");
         if (also != null) sb.append(also);
@@ -236,7 +246,9 @@ public final class SsaBridge {
             if (!f.chain.get(f.chain.size() - 1).equals(f.sink.method)) dp.append(" -> ").append(TaintIr.shortKey(f.sink.method));
             dataPath = dp.toString();
         }
-        return new Item(sinkM.owner, f.sink.method, at, f.sink.title, f.sink.cwe, sev, conf, fix, sb.toString(), f.reachable, entry, path, group.size(), srcMethod, dataPath);
+        Item item = new Item(sinkM.owner, f.sink.method, at, f.sink.title, f.sink.cwe, sev, conf, fix, sb.toString(), f.reachable, entry, path, group.size(), srcMethod, dataPath);
+        item.viaHub = f.viaHub;
+        return item;
     }
 
     /**

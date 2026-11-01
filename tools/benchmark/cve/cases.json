@@ -453,7 +453,9 @@
    "taint-xclass",
    "ssa-group-*",
    "zip-slip"
-  ]
+  ],
+  "valid_pair": false,
+  "amendment": "2.0.1: the 'before' build (OsmAnd 5.3.10) already applies Algorithms.getFileWithoutDirs(name) (lastIndexOf + substring) to the open-gpx name before it is used as a file name (IntentHelper.parseOpenGpxIntent), so it is not a vulnerable build. The advisory tested 5.3.2 / 5.3.3, which F-Droid does not carry. Excluded from the denominator; the automatic score matched an unrelated SharedPreferences card and is not counted."
  },
  {
   "id": "C14",

@@ -2767,7 +2767,7 @@ class MainActivity : Activity() {
             f.sourceMethod = item.sourceMethod      // 0.82.0: what the AI triage is shown besides the sink method
             f.dataPath = item.dataPath
             f.scope = SecurityScanner.scopeOfText(item.classType, appPkg, text)      // 0.83.0
-            if (item.reachable) { f.reach = "YES"; f.chain = "Entry: " + item.entry + "\nPath: " + item.path } else { f.reach = "NO"; f.chain = "" }
+            if (item.reachable) { f.reach = if (item.viaHub) "YES~" else "YES"; f.chain = "Entry: " + item.entry + "\nPath: " + item.path } else { f.reach = "NO"; f.chain = "" }
             out.addAll(FindingPolish.apply(listOf(f), item.classType,
                 f.scope == SecurityScanner.Scope.OBF && text.isNotEmpty() && SecurityScanner.isAppBoundObf(text, appPkg)))   // 0.82.0
         }

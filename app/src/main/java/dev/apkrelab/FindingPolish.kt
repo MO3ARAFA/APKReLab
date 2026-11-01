@@ -24,6 +24,14 @@ object FindingPolish {
     /** 0.66.4: TLS rules lowered one level when the class is library / obfuscated code, even though their confidence is HIGH. */
     val SCOPE_LOWERED_RULES: Set<String> = setOf("tls-trustmanager", "tls-hostname-verifier", "tls-insecure-socket-factory")
 
+    /**
+     * 2.0.1 (device reports WE Wallet / JustMarkets / Axis Pay 3.1.0): API-presence rules whose card says nothing about input. An ObjectInputStream.readObject, an MD5 /
+     * SHA-1 digest or a java.util.Random in R8-obfuscated code is overwhelmingly a third-party SDK (Dynamite loader, Jackson, analytics) and the scan traced no outside
+     * value into it: MEDIUM x 9 on three apps. Same one-level lowering as the TLS rules; a traced flow is a taint-flow card and is not touched.
+     */
+    val OBF_API_ONLY_RULES: Set<String> = setOf("deserialization", "crypto-weak-hash", "weak-random")
+    @JvmField var LOWER_OBF_API_ONLY = !java.lang.Boolean.getBoolean("apkrelab.noLowerObfApiOnly")
+
     fun confidenceOf(f: SecurityScanner.Finding): String {
         val t = f.title.lowercase()
         if (f.severity == SecurityScanner.Severity.INFO) return "LOW"
@@ -82,6 +90,9 @@ object FindingPolish {
                     f.severity = lowered(f.severity)
                     f.adjusted = "Lowered one level: " + (if (f.scope == SecurityScanner.Scope.LIB) "known library" else "obfuscated (likely third-party)") +
                         " code; the pattern is exact but usage / reachability from the app is not checked."
+                } else if (LOWER_OBF_API_ONLY && f.ruleId in OBF_API_ONLY_RULES && f.scope == SecurityScanner.Scope.OBF) {
+                    f.severity = lowered(f.severity)
+                    f.adjusted = "Lowered one level: obfuscated (likely third-party) code; the API is called but no outside value was traced into it."
                 } else if (f.scope == SecurityScanner.Scope.LIB && confidenceOf(f) != "HIGH") {
                     f.severity = lowered(f.severity)
                     f.adjusted = "Lowered one level: heuristic finding inside known library code."
