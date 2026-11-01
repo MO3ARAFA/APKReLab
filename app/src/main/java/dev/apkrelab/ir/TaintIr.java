@@ -579,6 +579,11 @@ public final class TaintIr {
             }
         }
 
+        /** 2.0.2: components a strong tainted value was proven to flow into (see TaintIr.forwardedComponents), kept with the group result so a cached group gives the same answer. */
+        public final Set<String> forwarded = java.util.Collections.synchronizedSet(new java.util.TreeSet<>());
+        /** 2.0.2: an exported component of this group launches an Intent it received. */
+        public boolean openRedirector;
+
         public int analyses;
         public final long[] outOfScope = new long[2];    // call edge to an app method that has no summary (outside the scope / not analysed)
         public final long[] unresolved = new long[2];    // call to a method of an app class the graph has, but no app callee edge (abstract / interface without implementation)
@@ -592,6 +597,8 @@ public final class TaintIr {
 
         public synchronized void merge(Stats o) {
             if (o == null || o == this) return;
+            forwarded.addAll(o.forwarded);
+            openRedirector |= o.openRedirector;
             analyses += o.analyses;
             for (int i = 0; i < 2; i++) {
                 outOfScope[i] += o.outOfScope[i];
@@ -708,6 +715,7 @@ public final class TaintIr {
      * @param old           old taint findings to compare with (may be null)
      */
     public static Result analyze(CallGraph g, boolean reachableOnly, Collection<Old> old) {
+        if (g.hasOpenRedirector()) openRedirectorSeen = true;           // 2.0.2: an exported component launches an Intent it received: every component can be fed
         long t0 = System.currentTimeMillis();
         Run run = new Run(g);
         Result res = new Result();
@@ -779,6 +787,8 @@ public final class TaintIr {
         });
         if (old != null) res.compareText = compare(res.flows, old);
         res.millis = System.currentTimeMillis() - t0;
+        res.stats.forwarded.addAll(run.forwarded);                  // 2.0.2: stored with the group result (GroupCache)
+        res.stats.openRedirector = g.hasOpenRedirector();
         return res;
     }
 
@@ -1031,9 +1041,12 @@ public final class TaintIr {
         }
 
         /** 0.69.0: every heap write goes through here, so a later object-sensitive HeapKey needs no call-site change. */
+        final Set<String> forwarded = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());     // 2.0.2: this run's proofs (stored in Stats)
+
         void raiseHeap(HeapKey k, Tv t, String writer, boolean isString) {
             Tv r = t.realOnly();
             if (r.isNone()) return;
+            if (!r.weak && k.field.startsWith(ICC_EXTRA_PREFIX)) { String o = forwardedOuter(k.field); if (o != null) { forwarded.add(o); FORWARDED.add(o); } }        // 2.0.2: proof that a tainted value reaches an in-app component
             // 1.0.0: a write through an object of known class id: its readers register on the plain key (see readTagged)
             HeapKey rk = k.obj.startsWith(TAG_SPACE) ? HeapKey.global(k.field) : k;
             if (rk != k) tagsWritten.computeIfAbsent(k.field, x -> new HashSet<>()).add(Integer.parseInt(k.obj.substring(TAG_SPACE.length())));
@@ -1157,6 +1170,30 @@ public final class TaintIr {
     /** 2.0.0 step 2 (real-CVE benchmark C01, CVE-2023-39957, Nextcloud Talk ConversationsListController.upload -> UploadAndShareFilesWorker):
      *  WorkManager input data. Data.Builder.putX(literal key, real source) is remembered under "work-data:<key>" and Data.getX(same key) in a
      *  Worker reads it back, the way SharedPreferences keys are linked. The key is app-wide (a Data object can be handed to any worker). */
+    /**
+     * 2.0.2 (WE Wallet SignUpWebViewActivity: the card came from the single-class IR rule, which knows nothing about forwarding): the in-app components (outer class types)
+     * that a STRONG tainted value was proven to flow into, through the Intent that launches them (every ICC heap write that is not weak or internal). Written at WRITE time,
+     * so a forwarder in one analysis group and a target in another still meet. Findings of any engine use it (FindingPolish.lowerUnforwardedPrivateIntentFlows); cleared per scan.
+     */
+    private static final Set<String> FORWARDED = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+    private static volatile boolean openRedirectorSeen;
+
+    static String forwardedOuter(String iccRef) {
+        int from = ICC_EXTRA_PREFIX.length(), to = iccRef.indexOf(";:", from);
+        return to < 0 ? null : outerOfType(iccRef.substring(from, to + 1));
+    }
+
+    /** 2.0.2: the proofs of a group result that came from the cache (the engine did not run for it). */
+    public static void recordForwarded(Stats st) {
+        if (st == null) return;
+        FORWARDED.addAll(st.forwarded);
+        if (st.openRedirector) openRedirectorSeen = true;
+    }
+
+    public static Set<String> forwardedComponents() { return new HashSet<>(FORWARDED); }
+    public static boolean openRedirectorSeen() { return openRedirectorSeen; }
+    public static void clearForwarded() { FORWARDED.clear(); openRedirectorSeen = false; }
+
     /** 2.0.1: switch for the mutation check of the non-exported-component rule (see CallGraph.isPrivateComponent). */
     static boolean PRIVATE_STRICT = !Boolean.getBoolean("apkrelab.noPrivateStrict");
     /** 2.0.1: switch for the mutation check of the whole-value Intent hand-over (putExtras / setData / copy constructor / startActivity(getIntent())). */

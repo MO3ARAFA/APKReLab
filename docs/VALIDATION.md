@@ -114,3 +114,20 @@ the before build too; C14: a caller check inside a service).
 Device reports (WE Wallet, JustMarkets, Axis Pay 3.1.0, 2.0.0): see HANDOFF 2.0.1. The WE Wallet card #2 pattern (a non-exported Activity read as attacker-fed) also appeared
 independently in NewPipe's `ReCaptchaActivity` (`exported="false"`): HIGH before, MEDIUM / LOW now.
 NOT measured: any device run of 2.0.1; the three device apps (their APKs are not on this machine, the fixes were built from the report text and synthetic smali of the same shape).
+
+### Metric correction (2.0.2): the headline is MUST FIX recall, not "a card of any severity"
+Runs 1-3 counted a case as found when ANY card of the advisory's rule family and class existed ("13 of 13"). A user acts on the Verdict's MUST FIX list, so that is the number that
+means something. `score.py --mustfix` reports it: how many valid in-scope cases put a card of the advisory's class in MUST FIX in the vulnerable build, and in how many the patched
+build drops it. **2.0.1 (run 3): 3 of 13 (C02 Home Assistant, C06 Nextcloud provider, C10 Element); the patched build drops the card in 3 of 3.** The other 10 vulnerable builds reported the
+code at a lower severity or without a path from an exported component, so the user is not told to look. The "reported in 13 of 13" figure above is kept as the secondary measure.
+
+### Run 4, scanner 5920dc0 (2.0.2; tuning set, NOT blind)
+Valid in-scope statuses are identical to run 3 (the only change is C13, the invalid pair). **MUST FIX recall 4 of 13: C03 Omni-Notes enters MUST FIX** (fragment hosting: `DetailFragment`
+is created by its host, so its Intent read now has a path from the exported activity). The patched Omni-Notes build (6.2.8) keeps the card in MUST FIX, so the patch drops the card in 3 of 4.
+Corpus flow counts and reach=Y counts (MeasureBig) are identical to run 3 on K-9, NewPipe, KeePassDX, Paperless, Chaka and Axis Pay 3.0.1. `self_check`: recall and flow sets identical to the baseline.
+NOT measured: a device run of 2.0.2; WE Wallet / JustMarkets / Axis Pay 3.1.0 themselves (their APKs are not on this machine).
+
+### What the 2.0.1 device reports showed (and what 2.0.2 changes)
+- WE Wallet card #1 (`SignUpWebViewActivity`, `exported="false"`) was still MUST FIX: it is a card of the single-class IR rule, which 2.0.1's SSA-only rule did not touch.
+- Axis Pay 3.1.0 report 9 had no Hybrid section although HybridInspector is in main: `HybridInspector.clear()` ran at the start of every code scan and wiped what the resource scan had published at APK load.
+- `im2.success -> f51.run` kept reach YES: the hub rule required a framework owner and `im2` is an R8-renamed interface of the app.

@@ -162,8 +162,10 @@ public class IrGroupCacheTest {
         List<SsaBridge.Item> items = new ArrayList<>();
         items.add(new SsaBridge.Item("Lt/S;", "Lt/S;->go()V", 77, "Untrusted input is loaded into a WebView", "CWE-79", "HIGH", "MEDIUM", "fix text é中", "Data from Intent.getStringExtra() reaches loadUrl",
                 true, "Lt/E;->onCreate()V", "E.onCreate -> S.go", 3, "Lt/E;->onCreate()V", "Intent.getStringExtra -> S.go -> loadUrl"));
+        items.get(0).viaHub = true;                                   // 2.0.2: a cached card must keep its approximate reach
         items.add(new SsaBridge.Item("Lt/T;", "m", 0, "x", "", "LOW", "", "", "", false, "", "", 1, "", ""));
         TaintIr.Stats st = new TaintIr.Stats();
+        st.forwarded.add("Lt/B;"); st.forwarded.add("Lt/C;"); st.openRedirector = true;
         st.analyses = 41; st.outOfScope[0] = 1; st.outOfScope[1] = 2; st.unresolved[0] = 3; st.unresolved[1] = 4; st.library[0] = 5; st.library[1] = 6;
         st.capRefs = 7; st.capRounds = 8; st.capRequeue = 9; st.capApprox = 10; st.owners.put("fo6", 210L); st.owners.put("np2", 131L);
         st.slowest.add(new TaintIr.Stats.Slow("Lt/S;->go()V", 123456789L, 4, 55, 2));
@@ -175,9 +177,25 @@ public class IrGroupCacheTest {
         assertEquals(b.confidence, a.confidence); assertEquals(b.fix, a.fix); assertEquals(b.detail, a.detail); assertEquals(b.reachable, a.reachable); assertEquals(b.entry, a.entry);
         assertEquals(b.path, a.path); assertEquals(b.count, a.count); assertEquals(b.sourceMethod, a.sourceMethod); assertEquals(b.dataPath, a.dataPath);
         assertFalse(e.items.get(1).reachable);
+        assertTrue(a.viaHub); assertFalse(e.items.get(1).viaHub);
+        assertEquals(new java.util.TreeSet<>(java.util.Arrays.asList("Lt/B;", "Lt/C;")), new java.util.TreeSet<>(e.stats.forwarded)); assertTrue(e.stats.openRedirector);
         assertEquals(41, e.stats.analyses); assertEquals(2, e.stats.outOfScope[1]); assertEquals(4, e.stats.unresolved[1]); assertEquals(6, e.stats.library[1]);
         assertEquals(10, e.stats.capApprox); assertEquals(Long.valueOf(210L), e.stats.owners.get("fo6")); assertEquals(1, e.stats.slowest.size()); assertEquals(4, e.stats.slowest.get(0).runs);
         assertNull(c.load("missing"));
+    }
+
+    // 2.0.2: a cached group must hand the forwarding proofs on exactly as a group that ran
+    @Test
+    public void aCacheHitReplaysTheForwardingProofs() throws Exception {
+        GroupCache.Disk c = disk();
+        TaintIr.Stats st = new TaintIr.Stats();
+        st.forwarded.add("Lt/B;"); st.openRedirector = true;
+        c.store("fw", new ArrayList<SsaBridge.Item>(), st);
+        TaintIr.clearForwarded();
+        assertFalse(TaintIr.forwardedComponents().contains("Lt/B;")); assertFalse(TaintIr.openRedirectorSeen());
+        TaintIr.recordForwarded(c.load("fw").stats);
+        assertTrue(TaintIr.forwardedComponents().contains("Lt/B;")); assertTrue(TaintIr.openRedirectorSeen());
+        TaintIr.clearForwarded();
     }
 
     @Test

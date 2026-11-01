@@ -451,6 +451,44 @@ object FindingPolish {
         return n
     }
 
+    /** 2.0.2: switch for the mutation check of [lowerUnforwardedPrivateIntentFlows]. */
+    internal var PRIVATE_COMPONENT_CARDS = true
+
+    /**
+     * 2.0.2 (WE Wallet SignUpWebViewActivity, `android:exported="false"`, still MUST FIX in 2.0.1): the card was made by the single-class IR rule ("a flow inside one class"),
+     * which cannot know who builds the Intent, and the reach pass gave it `YES` because a METHOD CALL chain links the exported launcher to that class. 2.0.1 fixed this only
+     * in the SSA engine. The rule for every engine: a HIGH / CRITICAL taint card whose value comes from an Intent getter in an Activity / Service the manifest does NOT export stays
+     * as it is only when the SSA engine proved that a tainted value flows into the Intent that launches that component ([forwarded], recorded at write time by TaintIr), or when
+     * an exported component launches an Intent it received ([openRedirector]). Otherwise it drops one level, confidence LOW, and its reach is approximate (`YES~`), never `YES`.
+     * Cards of the SSA engine are skipped (they carry the rule themselves). Idempotent. Returns the number lowered.
+     */
+    fun lowerUnforwardedPrivateIntentFlows(list: List<SecurityScanner.Finding>, privateComponents: Set<String>, forwarded: Set<String>, openRedirector: Boolean): Int {
+        if (!PRIVATE_COMPONENT_CARDS || openRedirector || privateComponents.isEmpty()) return 0
+        val intentSource = Regex("^Data from Intent\\.get[A-Za-z]*\\(")
+        var n = 0
+        for (f in list) {
+            try {
+                if (!f.ruleId.startsWith("taint") || f.severity.rank > 1 || !intentSource.containsMatchIn(f.detail)) continue
+                if (f.detail.contains("SSA data-flow engine") || f.adjusted.contains("not forwarded")) continue
+                val t = f.classType ?: continue
+                val outer = if (t.contains('$')) t.substringBefore('$') + ";" else t
+                if (outer !in privateComponents || outer in forwarded) continue
+                f.severity = if (f.severity == SecurityScanner.Severity.CRITICAL) SecurityScanner.Severity.HIGH else SecurityScanner.Severity.MEDIUM
+                f.confidence = "LOW"
+                if (f.reach == "YES") f.reach = "YES~"
+                f.adjusted = (if (f.adjusted.isNotEmpty()) f.adjusted + " " else "") +
+                    "Lowered one level: this component is not exported and no tainted value was proven to flow into the Intent that starts it (a method-call path from an exported component is not " +
+                    "a data flow); not forwarded, so another app cannot supply this value unless it reaches the component in a way the scanner does not see (a PendingIntent, reflection)."
+                n++
+            } catch (_: Throwable) { }
+        }
+        return n
+    }
+
+    /** smali types of Activities and Services the manifest does NOT export (outer classes). */
+    fun privateActivitiesAndServices(mc: ManifestContext): Set<String> =
+        mc.components.filter { !it.exported && (it.tag == "activity" || it.tag == "service") }.map { mc.smaliTypeOf(it) }.filter { it.isNotEmpty() }.toSet()
+
     /** Phase 3: switch for the mutation check of [lowerGuardedProviderFlows]. */
     internal var PROVIDER_CONTEXT = true
 
