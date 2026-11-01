@@ -275,6 +275,7 @@ public final class SsaGroups {
                 GroupCache.Entry hit = gc.load(key);
                 if (hit != null) {                       // the same classes, entries, earlier findings and engine: the same result
                     total.merge(hit.stats);
+                    TaintIr.recordForwarded(hit.stats);      // 2.0.2: the engine did not run for this group: its forwarding proofs come from the cache
                     cached.incrementAndGet();
                     return hit.items;
                 }

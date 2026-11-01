@@ -41,7 +41,7 @@ public interface GroupCache {
     /** One file per group under [dir]: a small binary record, written to a temporary name and renamed (a reader never sees half a file); the oldest files go when there are more than [maxFiles]. */
     final class Disk implements GroupCache {
         private static final int MAGIC = 0x53474331;       // "SGC1"
-        private static final int FORMAT = 1;
+        private static final int FORMAT = 2;      // 2.0.2: Item.viaHub, Stats.forwarded, Stats.openRedirector (a format-1 file is a miss)
         private static final int MAX_STRING = 60000;       // writeUTF limit is 65535 bytes
         private final File dir;
         private final int maxFiles;
@@ -72,7 +72,9 @@ public interface GroupCache {
                     String entry = in.readUTF(), path = in.readUTF();
                     int count = in.readInt();
                     String sourceMethod = in.readUTF(), dataPath = in.readUTF();
-                    items.add(new SsaBridge.Item(classType, method, at, title, cwe, sev, confidence, fix, detail, reachable, entry, path, count, sourceMethod, dataPath));
+                    SsaBridge.Item item = new SsaBridge.Item(classType, method, at, title, cwe, sev, confidence, fix, detail, reachable, entry, path, count, sourceMethod, dataPath);
+                    item.viaHub = in.readBoolean();
+                    items.add(item);
                 }
                 TaintIr.Stats st = new TaintIr.Stats();
                 st.analyses = in.readInt();
@@ -89,6 +91,10 @@ public interface GroupCache {
                 int ns = in.readInt();
                 if (ns < 0 || ns > 1000) return null;
                 for (int i = 0; i < ns; i++) st.slowest.add(new TaintIr.Stats.Slow(in.readUTF(), in.readLong(), in.readInt(), in.readInt(), in.readInt()));
+                st.openRedirector = in.readBoolean();
+                int nf = in.readInt();
+                if (nf < 0 || nf > 100000) return null;
+                for (int i = 0; i < nf; i++) st.forwarded.add(in.readUTF());
                 if (in.readInt() != MAGIC) return null;                 // the end marker: a truncated file is a miss
                 if (in.read() != -1) return null;
                 f.setLastModified(System.currentTimeMillis());
@@ -116,6 +122,7 @@ public interface GroupCache {
                         utf(out, it.entry); utf(out, it.path);
                         out.writeInt(it.count);
                         utf(out, it.sourceMethod); utf(out, it.dataPath);
+                        out.writeBoolean(it.viaHub);
                     }
                     out.writeInt(st.analyses);
                     for (int i = 0; i < 2; i++) out.writeLong(st.outOfScope[i]);
@@ -138,6 +145,10 @@ public interface GroupCache {
                         out.writeInt(s.insns);
                         out.writeInt(s.rounds);
                     }
+                    out.writeBoolean(st.openRedirector);
+                    java.util.List<String> fw; synchronized (st.forwarded) { fw = new ArrayList<>(st.forwarded); }
+                    out.writeInt(fw.size());
+                    for (String x : fw) utf(out, x);
                     out.writeInt(MAGIC);
                 }
                 File f = file(key);

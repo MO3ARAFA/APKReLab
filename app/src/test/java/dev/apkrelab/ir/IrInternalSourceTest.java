@@ -186,6 +186,16 @@ public class IrInternalSourceTest {
     }
 
     // 2.0.2: the proof is recorded at WRITE time for every engine's cards (TaintIr.forwardedComponents)
+    // the run's own Stats carry the proof (this is what the group cache stores)
+    @Test
+    public void theRunStatsCarryTheProof() {
+        TaintIr.clearForwarded();
+        TaintIr.Result r = TaintIr.analyze(graph(Arrays.asList("Lt/A;"), deepLink(), activity("Lt/B;", ACT)), false, null);
+        assertTrue(r.stats.forwarded.toString(), r.stats.forwarded.contains("Lt/B;"));
+        TaintIr.Result none = TaintIr.analyze(graph(Arrays.asList("Lt/A;"), launcher("Lt/A;", "Lt/B;", true, false), activity("Lt/B;", ACT)), false, null);
+        assertFalse(none.stats.forwarded.contains("Lt/B;"));
+    }
+
     @Test
     public void aProvenForwardIsRecordedAndAnUnprovenOneIsNot() {
         TaintIr.clearForwarded();

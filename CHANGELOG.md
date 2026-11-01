@@ -2,6 +2,11 @@
 
 Release notes in short. The full record (measurements, what was not measured, every decision) is `docs/internal/HANDOFF.md`; numbers are in `docs/internal/PERF.md`.
 
+## 2.0.2 (versionCode 232)
+- Fixes from the 2.0.1 device reports: the Hybrid framework section no longer disappears when the resource scan finishes before the code scan starts; a not-exported Activity/Service's Intent flow is lowered for EVERY engine's cards unless a tainted value is proven to flow into its launching Intent (WE Wallet SignUpWebViewActivity); the approximate-reach hub rule covers R8-renamed callback interfaces (Axis Pay).
+- Reach: Fragments created by a reached method have their lifecycle callbacks reached (Omni-Notes).
+- Real-CVE benchmark: the headline metric is now MUST FIX recall (3 of 13 in 2.0.1, 4 of 13 in 2.0.2); "a card of any severity" is a secondary measure.
+
 ## 2.0.1 (versionCode 231)
 - Precision (from the 2.0.0 device reports): a non-exported Activity/Service no longer counts as attacker-fed because an exported class "reads some Intent value and launches it" - the value must be proven to flow into the launching Intent; hub-aware reach (a path through a call on a framework interface with 8+ implementers is approximate); deserialization / weak hash / weak random in obfuscated code one level lower; a pattern-only fintech card is MEDIUM.
 - Coverage: the card of a sink shared by a SharedPreferences flow and an Intent flow is the Intent one; AsyncTask constructor capture; parameter-valued Intent extras through method summaries.
