@@ -2432,7 +2432,7 @@ class MainActivity : Activity() {
         PostureScanner.clear()   // 0.91.0
         DynamicReceivers.clear()   // 1.1.0
         NativeBridge.clear()   // 1.1.0
-        HybridInspector.clear()   // 2.0.0
+        TaintIr.clearForwarded()   // 2.0.2: the forwarding proofs of the previous scan (the SSA engine of THIS scan fills them)
         if (!SecretFormats.loaded()) try {   // 0.89.0: vendor token formats (assets/secret_formats.json)
             SecretFormats.load(assets.open("secret_formats.json").use { it.readBytes() }.toString(Charsets.UTF_8))
         } catch (_: Throwable) { RuleRegistry.noteError("secret-formats") }
@@ -2914,6 +2914,7 @@ class MainActivity : Activity() {
         inSecurity = false
         secFindings = emptyList()
         NativeBridge.clearApk()   // 1.1.0: the libraries of the previous APK
+        HybridInspector.clearApk()   // 2.0.2: the payload of the previous APK; NOT cleared at the start of a code scan (the resource scan of this APK fills it, possibly before that)
         PostureScanner.clearApk()   // 0.103.1: before the resource scan of THIS apk starts (see PostureScanner.clearApk)
         scanResourcesAsync()
         callIdx = null
@@ -3495,6 +3496,7 @@ class MainActivity : Activity() {
                 FindingPolish.lowerNonExportedReceivers(secFindings, FindingPolish.nonExportedReceiversAndServices(mc))   // 0.80.0
                 FindingPolish.lowerSeparateProcessDialogs(secFindings, FindingPolish.separateProcessActivities(mc))       // 0.81.0
                 FindingPolish.lowerConstantFedActivities(secFindings, FindingPolish.nonExportedActivities(mc))            // 0.108.0
+                FindingPolish.lowerUnforwardedPrivateIntentFlows(secFindings, FindingPolish.privateActivitiesAndServices(mc), TaintIr.forwardedComponents(), TaintIr.openRedirectorSeen())   // 2.0.2
                 FindingPolish.lowerGuardedProviderFlows(secFindings, mc, PermissionGuard(mc, PermissionGuard.systemResolver(this)))   // phase 3
                 // 1.1.0: receivers registered at run time with a signature permission (or RECEIVER_NOT_EXPORTED and minSdk 33+): their Intent comes from the app or the system
                 val sys = PermissionGuard.systemResolver(this)

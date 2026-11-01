@@ -257,16 +257,16 @@ public final class CallGraph {
 
     /**
      * 2.0.1 (device reports, Axis Pay: MainActivity.onActivityResult -> im2.success -> f51.run -> 7 unrelated SDK classes; 3.0.1: ga8.a -> Closeable.close -> wx0.close -> ni2.run ...):
-     * a call site on a FRAMEWORK interface method (Closeable.close, Runnable.run, Callable.call, a Flutter / Play Services callback) whose receiver the graph does not know
+     * a call site on an INTERFACE method (Closeable.close, Runnable.run, Callable.call, a Flutter / Play Services callback, or the same interface after R8 renamed it) whose receiver the graph does not know
      * resolves to every app class that implements it, and R8 merges dozens of lambdas into one such class. A path through that hop is real syntax but proves little.
-     * True when the edge's call site has {@link #HUB_FANOUT} or more app targets and its declared owner is not an app class.
+     * True when the edge's call site has {@link #HUB_FANOUT} or more app targets (framework or obfuscated app owner alike: 2.0.2).
      */
     public boolean isHubEdge(Edge e) {
         if (e == null || e.external) return false;
         MethodIr m = methods.get(e.caller);
         if (m == null || e.insn < 0 || e.insn >= m.insns.size()) return false;
         Insn in = m.insns.get(e.insn);
-        if (in.kind != Insn.Kind.INVOKE || classes.containsKey(in.targetOwner())) return false;
+        if (in.kind != Insn.Kind.INVOKE) return false;           // 2.0.2: the declared owner may be an app class too (R8 renames Flutter / SDK callback interfaces: im2.success -> f51.run)
         int n = 0;
         for (Edge o : edgesFrom(e.caller)) if (o.insn == e.insn && !o.external) n++;
         return n >= HUB_FANOUT;
@@ -426,6 +426,13 @@ public final class CallGraph {
     public synchronized boolean isExportedEntry(String type) {
         if (componentTypes.isEmpty() || type == null) return false;
         return componentTypes.contains(type) || componentTypes.contains(outerOf(type));
+    }
+
+    /** 2.0.2: an exported component takes an Intent out of its extras and launches it (intent redirection), so any component of the app can be started with outside data. */
+    public synchronized boolean hasOpenRedirector() {
+        if (componentTypes.isEmpty()) return false;
+        if (attackerReach == null) attackerReach = computeAttackerReach();
+        return openRedirector;
     }
 
     public synchronized boolean hasComponentList() {
@@ -664,6 +671,7 @@ public final class CallGraph {
                 case NEW_INSTANCE:
                     instantiate(in.ref);
                     classInit(caller, in.index, in.ref);
+                    fragmentHosted(caller, in.index, in.ref);
                     break;
                 case FIELD_GET:
                 case FIELD_PUT:
@@ -679,6 +687,23 @@ public final class CallGraph {
                     break;
             }
         }
+    }
+
+    /** 2.0.2: switch for the mutation check of fragment hosting. */
+    public static boolean FRAGMENT_HOSTING = !Boolean.getBoolean("apkrelab.noFragmentHosting");
+
+    /** Fragment callbacks the FragmentManager runs once a host Activity has created and added the fragment. */
+    static final Set<String> FRAGMENT_NAMES = new HashSet<>(Arrays.asList(
+            "onAttach", "onCreate", "onCreateView", "onViewCreated", "onActivityCreated", "onStart", "onResume", "onCreateDialog"));
+
+    /**
+     * 2.0.2 (real-CVE benchmark C03, Omni-Notes DetailFragment.handleIntents -> importAttachments): a Fragment is never called by app code, the FragmentManager runs its
+     * lifecycle after the host creates it, so its methods had no incoming edge and every card in a fragment read "no path from an exported component". A reached method that
+     * instantiates a Fragment class now has a "frag" edge to that fragment's lifecycle callbacks.
+     */
+    private void fragmentHosted(String caller, int insn, String type) {
+        if (!FRAGMENT_HOSTING || !classes.containsKey(type) || !frameworkBase(type).endsWith("Fragment;")) return;
+        for (String k : lifecycleKeys(type, FRAGMENT_NAMES)) addEdge(caller, insn, k, "frag");
     }
 
     private void invoke(MethodIr m, Insn in, Set<String> localNew) {

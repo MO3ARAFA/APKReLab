@@ -708,6 +708,7 @@ public final class TaintIr {
      * @param old           old taint findings to compare with (may be null)
      */
     public static Result analyze(CallGraph g, boolean reachableOnly, Collection<Old> old) {
+        if (g.hasOpenRedirector()) openRedirectorSeen = true;           // 2.0.2: an exported component launches an Intent it received: every component can be fed
         long t0 = System.currentTimeMillis();
         Run run = new Run(g);
         Result res = new Result();
@@ -1034,6 +1035,7 @@ public final class TaintIr {
         void raiseHeap(HeapKey k, Tv t, String writer, boolean isString) {
             Tv r = t.realOnly();
             if (r.isNone()) return;
+            if (!r.weak && k.field.startsWith(ICC_EXTRA_PREFIX)) noteForwarded(k.field);        // 2.0.2: proof that a tainted value reaches an in-app component
             // 1.0.0: a write through an object of known class id: its readers register on the plain key (see readTagged)
             HeapKey rk = k.obj.startsWith(TAG_SPACE) ? HeapKey.global(k.field) : k;
             if (rk != k) tagsWritten.computeIfAbsent(k.field, x -> new HashSet<>()).add(Integer.parseInt(k.obj.substring(TAG_SPACE.length())));
@@ -1157,6 +1159,24 @@ public final class TaintIr {
     /** 2.0.0 step 2 (real-CVE benchmark C01, CVE-2023-39957, Nextcloud Talk ConversationsListController.upload -> UploadAndShareFilesWorker):
      *  WorkManager input data. Data.Builder.putX(literal key, real source) is remembered under "work-data:<key>" and Data.getX(same key) in a
      *  Worker reads it back, the way SharedPreferences keys are linked. The key is app-wide (a Data object can be handed to any worker). */
+    /**
+     * 2.0.2 (WE Wallet SignUpWebViewActivity: the card came from the single-class IR rule, which knows nothing about forwarding): the in-app components (outer class types)
+     * that a STRONG tainted value was proven to flow into, through the Intent that launches them (every ICC heap write that is not weak or internal). Written at WRITE time,
+     * so a forwarder in one analysis group and a target in another still meet. Findings of any engine use it (FindingPolish.lowerUnforwardedPrivateIntentFlows); cleared per scan.
+     */
+    private static final Set<String> FORWARDED = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+    private static volatile boolean openRedirectorSeen;
+
+    static void noteForwarded(String iccRef) {
+        int from = ICC_EXTRA_PREFIX.length(), to = iccRef.indexOf(";:", from);
+        if (to < 0) return;
+        FORWARDED.add(outerOfType(iccRef.substring(from, to + 1)));
+    }
+
+    public static Set<String> forwardedComponents() { return new HashSet<>(FORWARDED); }
+    public static boolean openRedirectorSeen() { return openRedirectorSeen; }
+    public static void clearForwarded() { FORWARDED.clear(); openRedirectorSeen = false; }
+
     /** 2.0.1: switch for the mutation check of the non-exported-component rule (see CallGraph.isPrivateComponent). */
     static boolean PRIVATE_STRICT = !Boolean.getBoolean("apkrelab.noPrivateStrict");
     /** 2.0.1: switch for the mutation check of the whole-value Intent hand-over (putExtras / setData / copy constructor / startActivity(getIntent())). */

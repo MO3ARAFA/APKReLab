@@ -1,6 +1,7 @@
 import dev.apkrelab.*
 import java.io.File
 import java.util.zip.ZipFile
+import dev.apkrelab.ir.TaintIr
 
 /** Sandbox approximation of the device Smart scan: code rules per class, manifest rules, resource rules, SSA taint flows -> Markdown report. No AI triage, no reach labels. */
 fun main(args: Array<String>) {
@@ -20,7 +21,7 @@ fun main(args: Array<String>) {
     // 0.86.2: like the device (MainActivity: SecurityScanner.codePackage(...)): the code package, not the manifest package. Quillpad's code is in
     // org.qosp.notes while the manifest says io.github.quillpad; with the manifest package an app-bound renamed class looked like a library.
     val pkg = SecurityScanner.codePackage(texts.map { it.first }, manifestPkg, mc.componentTypes(manifestPkg), mc.launcherTypes(manifestPkg))   // 0.106.0: like the app
-    DynamicReceivers.clear(); HybridInspector.clear(); NativeBridge.clear(); NativeBridge.clearApk(); PostureScanner.clear()
+    TaintIr.clearForwarded(); DynamicReceivers.clear(); HybridInspector.clearApk(); NativeBridge.clear(); NativeBridge.clearApk(); PostureScanner.clear()
     for ((i, p) in texts.withIndex()) {
         all.addAll(SecurityScanner.scanSmali(p.first, i, p.second, pkg))
         DynamicReceivers.observe(p.second)                       // 1.1.0: like the app's scan loop
@@ -49,6 +50,7 @@ fun main(args: Array<String>) {
     FindingPolish.lowerNonExportedReceivers(final, FindingPolish.nonExportedReceiversAndServices(mc))   // 0.80.0, like MainActivity.reachPass
     FindingPolish.lowerSeparateProcessDialogs(final, FindingPolish.separateProcessActivities(mc))        // 0.81.0
     FindingPolish.lowerGuardedProviderFlows(final, mc, PermissionGuard(mc))                              // phase 3, like MainActivity (no device resolver)
+    FindingPolish.lowerUnforwardedPrivateIntentFlows(final, FindingPolish.privateActivitiesAndServices(mc), TaintIr.forwardedComponents(), TaintIr.openRedirectorSeen())   // 2.0.2, like MainActivity
     // 1.1.0, like MainActivity: receivers registered only with a signature permission (or NOT_EXPORTED and minSdk 33+); no device here, so platform levels come from ReportBuilder.defaultLevel
     val minSdk = Regex("minSdkVersion\\s*=\\s*\"?(\\d+)").find(manifest)?.groupValues?.get(1)?.toIntOrNull() ?: 1
     DynamicReceivers.lower(final, DynamicReceivers.protectedReceivers(minSdk) { p -> mc.declaredPerms[p]?.let { PermissionGuard.isSignatureLevel(it) } ?: ((ReportBuilder.defaultLevel(p) ?: 0) >= 2) })

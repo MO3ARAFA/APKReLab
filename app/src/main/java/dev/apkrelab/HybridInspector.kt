@@ -63,6 +63,14 @@ object HybridInspector {
     val NONE = HybridResult(emptyList())
 
     @Volatile var current: HybridResult? = null
+    /**
+     * 2.0.2 (device reports: the "Hybrid framework analysis" section of Axis Pay 3.1.0 was there in one report and missing in the next, same APK): the inspection is a product of
+     * the RESOURCE scan, which runs when the APK is loaded, so its result belongs to the APK and is cleared when a new APK is loaded (like NativeBridge.clearApk), NOT when a
+     * code scan starts: the code scan starts later, and clearing there wiped a result the resource scan had already published whenever it finished first.
+     */
+    fun clearApk() { current = null }
+
+    @Deprecated("2.0.2: use clearApk() when an APK is loaded; never at the start of a code scan", ReplaceWith("clearApk()"))
     fun clear() { current = null }
 
     private const val FLUTTER_ASSETS = "assets/flutter_assets/"

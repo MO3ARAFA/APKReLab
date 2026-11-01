@@ -185,6 +185,22 @@ public class IrInternalSourceTest {
         assertFalse(f.weak);
     }
 
+    // 2.0.2: the proof is recorded at WRITE time for every engine's cards (TaintIr.forwardedComponents)
+    @Test
+    public void aProvenForwardIsRecordedAndAnUnprovenOneIsNot() {
+        TaintIr.clearForwarded();
+        CallGraph g = graph(Arrays.asList("Lt/A;"), deepLink(), activity("Lt/B;", ACT));
+        TaintIr.analyze(g, false, null);
+        assertTrue(TaintIr.forwardedComponents().toString(), TaintIr.forwardedComponents().contains("Lt/B;"));
+        TaintIr.clearForwarded();
+        TaintIr.analyze(graph(Arrays.asList("Lt/A;"), launcher("Lt/A;", "Lt/B;", true, false), activity("Lt/B;", ACT)), false, null);
+        assertFalse(TaintIr.forwardedComponents().toString(), TaintIr.forwardedComponents().contains("Lt/B;"));
+        TaintIr.analyze(graph(Arrays.asList("Lt/A;"), redirector(true), activity("Lt/B;", ACT)), false, null);
+        assertTrue(TaintIr.openRedirectorSeen());
+        TaintIr.clearForwarded();
+        assertFalse(TaintIr.openRedirectorSeen());
+    }
+
     @Test
     public void mutantNoParameterPutsLeavesItInternal() {
         boolean was = TaintIr.ICC_PARAM_PUTS;
