@@ -136,3 +136,5 @@ after in the commit message and `docs/internal/HANDOFF.md`, and a plain list of 
 
 ## From the phase 4 blind run (2026-10-31, docs/VALIDATION.md)
 - Path sanitizer by character allow-list: `String.replaceAll("[^a-zA-Z0-9._]+", "_")` (any class that excludes '/') leaves one path segment; both blind HIGH cards (Chaka viewer #10 / #11) were false because of it. Candidate: treat a replaceAll / replace whose constant pattern is a negated character class without '/' as a basename sanitizer for file sinks. Must be validated on the NEXT blind set (set 8), never on Chaka viewer. BUILT in phase 3.5 (TaintIr PATH_STRIP_SANITIZER); its blind measurement is round 2 in docs/VALIDATION.md.
+
+Session 2 (DeviceReportShapes): stopped at step 1. Not completed.

@@ -13,6 +13,7 @@ Owner speaks Egyptian Arabic, wants concise, actionable answers.
 
 ## Current version: 1.2.1
 - **0.104.1 VERIFIED ON THE PHONE (report 9, Axis Pay, second Deep scan without re-picking the app)**: "cache: 25 of 25 groups reused", **groups 8 s instead of 743-752 s** (plan 21 s still runs; the 8 s include the hash pass over the unique classes and reading 25 cache files), GC 0.9 s in 32 collections instead of 447-620 s. The report is identical to the full run's (report 8) except the status line: 80 cards, +16 flows, same loss counters. So the 0.104.0 miss was the workspace wipe, as suspected. Note: the "slowest methods" of a cached run are the CACHED measurements of the run that produced them (their times are not this run's). Still unmeasured: the cold-run overhead of writing the 25 files.
+- Session 2: stopped at step 1.
 - 2.1.0 (device reports of 2.0.2; versionCode 233):
   - CVE MUST FIX recall 4/13 -> 6/13 (C07 file-path card on DiskLruImageCacheFileProvider, C09 reflected URI grant), patch drop 5/6 (run5_210_*.txt, VALIDATION.md run 5); no other MUST FIX change on 24 APKs.
   - Verdict CRITICAL PATH = proven HIGH/CRITICAL only; dispatcher-method hubs (CallGraph.isDispatcherMethod) make Axis Pay `im2.success -> f51.run` cards `YES~`.
