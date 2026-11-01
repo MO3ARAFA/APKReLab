@@ -39,7 +39,7 @@ fun main(args: Array<String>) {
         val sev = SecurityScanner.Severity.values().firstOrNull { it.label == item.sev } ?: SecurityScanner.Severity.HIGH
         val f = SecurityScanner.Finding(sev, item.title, item.detail, item.fix, item.classType, idx[item.classType] ?: -1, item.at, item.cwe)
         f.ruleId = "taint-flow"; f.confidence = item.confidence
-        f.reach = if (item.reachable) "YES" else "NO"; if (item.reachable) f.chain = "Entry: " + item.entry + "\nPath: " + item.path   // 1.2.0 QA: reach labels from the call graph, like SandboxScanReach and the device (rule cards stay untraced here)
+        f.reach = if (item.reachable) (if (item.viaHub) "YES~" else "YES") else "NO"; if (item.reachable) f.chain = "Entry: " + item.entry + "\nPath: " + item.path   // 1.2.0 QA: reach labels from the call graph, like SandboxScanReach and the device (rule cards stay untraced here)
         f.scope = SecurityScanner.scopeOfText(item.classType, pkg, texts.getOrNull(idx[item.classType] ?: -1)?.second ?: "")   // 0.83.0
         val itText = texts.firstOrNull { it.first == item.classType }?.second ?: ""
         all.addAll(FindingPolish.apply(listOf(f), item.classType,
