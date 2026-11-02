@@ -335,6 +335,10 @@ public final class SsaBridge {
         Set<String> seen = new HashSet<>();
         List<String> keys = new ArrayList<>(f.chain);
         keys.add(f.sink.method);
+        // 3.0.0 (real-CVE benchmark C03, Omni-Notes 6.2.8: importAttachments calls validatePath(uri.getPath()) and only then stores the Uri in AttachmentTask.uri): when the value
+        // came through a field, the method that WROTE the field is where it was checked, and it is not on the chain (which starts at the field read)
+        String writer = WRITER_OF_FIELD ? fieldWriter(g, f) : null;
+        if (writer != null) keys.add(writer);
         int kind = 0, ignored = 0;
         for (String k : keys) {
             if (!seen.add(k)) continue;
@@ -351,6 +355,19 @@ public final class SsaBridge {
         return kind | ignored;
     }
 
+
+    /** 3.0.0: switch for the mutation check of the field-writer validation search. */
+    public static boolean WRITER_OF_FIELD = !Boolean.getBoolean("apkrelab.noWriterOfField");
+
+    /** The method key of "field X (written in Cls.m(...))" in the flow's via, or null. */
+    static String fieldWriter(CallGraph g, TaintIr.Flow f) {
+        if (f.via == null) return null;
+        int i = f.via.indexOf("(written in ");
+        if (i < 0 || !f.via.endsWith(")")) return null;
+        String w = f.via.substring(i + "(written in ".length(), f.via.length() - 1);
+        for (String k : g.methods.keySet()) if (TaintIr.shortKey(k).equals(w)) return k;
+        return null;
+    }
 
     private static String step(String conf) {
         return conf.equals("HIGH") ? "MEDIUM" : "LOW";
