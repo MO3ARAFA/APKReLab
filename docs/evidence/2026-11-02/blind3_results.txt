@@ -1,0 +1,23 @@
+Blind round 3 results (docs/PLAN_3_0_0.md Item 5). Sandbox scans with SandboxScan on branch claude/rc-3-0-0 (release candidate switches: sink-kind validation off, setter summary off, Parcel round trip and the three bridges on) and with the six session switches off (= 2.1.0 engine). Each report was hashed right after the scan, before it was opened.
+package | classes | cards RC (HIGH+ / MEDIUM / LOW) | MUST FIX RC | cards main | cards identical | report SHA-256 (RC)
+com.blogspot.e_kanivets.moneytracker 2.3.0 | n/a | 9 (0 / 5 / 4) | 0 | 9 | yes | e8c513a9c2cad13d3bc7f2939e6ec63813d7bba622b52777935d80e5f316c62d
+de.nielstron.simplenextcloud 1.0.5 | n/a | 6 (0 / 1 / 5) | 0 | 6 | yes | 2c9b5c8dfe8d6722981d37b6bea89a1a7f3f994a6cbb5f45d638f652818e40d7
+de.monocles.translator 1.5 | n/a | 11 (0 / 3 / 8) | 0 | 11 | yes | 6362fdf7f9c68889170512f15a2eb484945e8545eaa7e1a9e5e4d748c6dc44ed
+com.kaii.photos v2.1.4 | n/a | 52 (0 / 12 / 40) | 0 | 52 | yes | b75dc350ace24f473b056a45338cc1bc51f9bdba825b87f5df2bf5c72d130e0f
+com.lesspass.android 9.8.7 | n/a | 7 (0 / 3 / 4) | 0 | 7 | yes | 3dc34b0ff0bd0b8800b7a7a972f62c889e469c6ea5138bdfee2bd4328fcf14a4
+be.ppareit.swiftp_free 3.7.0 | n/a | 32 (5 / 12 / 15) | 3 | 32 | yes | 25c5d267152dd75338099d465b0dc4a73c10270fd64b391c4b5e0c23b89a8f3c
+at.linuxtage.Eventfahrplan 1.8.29-glt-Edition | n/a | 8 (0 / 4 / 4) | 0 | 8 | yes | b1049e6eddd30087577ddb5f2b3d5d5225446f0a82f76f7fbccec6f2f52aafcc
+com.albertodiaz.valencia_transit_reloaded 0.1.1 | n/a | 5 (0 / 1 / 4) | 0 | 5 | yes | 5e0ee591f1fa046f98defa708fd247078113a9a564a5e6dd93c40dc3276aead5
+com.lazydevs.wristotle 1.23.0 | n/a | 26 (0 / 5 / 21) | 0 | 26 | yes | 1c4bc3b131322a0682f57cd40a4486788613fff459dc0d925a9e3a5261cf192f
+dev.dettmer.simplenotes 2.21.0 | n/a | 25 (1 / 7 / 17) | 1 | 25 | yes | 890a635533c0ba370a4c394df95d5155dbccdf3384a58a3dc4db1111c97f9ee8
+com.fitforge.fitforge 2.1.0 | n/a | 6 (0 / 2 / 4) | 0 | 6 | yes | e92513b852a30454153247a33fdcfaf749619310398be5b0e88b4d55cca5e0a7
+com.example.mempal 2.0 | n/a | 22 (2 / 8 / 12) | 0 | 22 | yes | 2d6ab303acee8d6ac72702d7f48702f0b234ec220b18b9b77312880613f73fa5
+
+Judgements (every MUST FIX card, then the other HIGH cards), read in the smali / manifest of the APK:
+- swiftp_free #27 (TaskerPluginRunnerAction$Companion.runFromIntent), #28 (TaskerPluginRunnerCondition$Companion.getResultFromIntent), #29 (TaskerPluginRunnerCondition.getUpdate): TP x3. The services IntentServiceAction and IntentServiceCondition are exported with no permission (manifest lines 147, 157); the Bundle string `net.dinglisch.android.tasker.extras.ACTION_INPUT_CLASS` (InternalKt.getInputClass) goes to Class.forName with only a not-null check. One library pattern in three methods; impact limited to loading a class by name from the app's class path.
+- simplenotes #21 (o41.J(File), a `readBytes` helper): FP. The File is built in `c0.k` (an R8-merged class: one method `k(Object, Object)` with a packed switch over unrelated lambdas) as `new File(app directory field, String argument)`; no URI-to-File conversion is on the visible path; the Intent source is the result parser of a merged ActivityResult contract (`c5.S`), reached through a class-level path (reach `YES~`). Shape: R8 conflation of generic `Object` parameters.
+- swiftp_free #30 (TaskerPluginRunner.getInputClass), #31 (TaskerPluginRunner$Companion.getFromTaskerIntent): same Tasker pattern, TP-low (not in MUST FIX: the gate keeps three).
+- mempal #2 (cleartext traffic allowed, raised to HIGH because app code uses a plain-HTTP URL) and #21 (network security config permits cleartext in base-config): TP, one configuration issue reported twice.
+
+Totals over 12 apps: HIGH+ cards 8 (TP 7, FP 1); MUST FIX cards 4 (TP 3, FP 1); distinct issues among HIGH+ cards 3 (Tasker class-by-name: TP, cleartext HTTP: TP, simplenotes readBytes: FP).
+Paired scan, release candidate vs the 2.1.0 engine: 12 of 12 apps have identical card lists (0 differing cards), so the paired false positives = 0; the simplenotes false positive is also in the 2.1.0 engine's report (present with all six session switches off).

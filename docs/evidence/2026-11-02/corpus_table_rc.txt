@@ -1,0 +1,12 @@
+Item 4 table (docs/PLAN_3_0_0.md). MeasureBig -Xmx2g -Downers=5000 on decoded smali, run 2026-11-02 on branch claude/rc-3-0-0.
+main behaviour = the six session switches off by system property (apkrelab.noParcelRoundTrip, noSetterCapture, noSinkKindValidation, noWebViewClientEdges, noResultCallbackEdges, noBinderHosting); rc = all on.
+Columns: classes read (smali files) | of which non-library | Parcel real drops | all real drops (library or outside group) | flows | flow lines identical between main behaviour and rc
+CORRECTION: the earlier Zulip row (0 classes read, 0 flows) came from a symlinked smali directory that the harness did not follow; Zulip is read here from a real copy.
+
+zulip      | classes 2352 | non-library 1699 | main: parcel 3, real 12, flows 6 | rc: parcel 0, real 9, flows 6 | flow lines identical: yes
+k9         | classes 11941 | non-library 3716 | main: parcel 4, real 33, flows 0 | rc: parcel 0, real 29, flows 0 | flow lines identical: yes
+newpipe    | classes 10671 | non-library 1263 | main: parcel 0, real 31, flows 1 | rc: parcel 0, real 31, flows 1 | flow lines identical: yes
+paperless  | classes 10987 | non-library 7503 | main: parcel 0, real 38, flows 1 | rc: parcel 0, real 42, flows 1 | flow lines identical: yes
+chaka      | classes 1357 | non-library 1077 | main: parcel 2, real 14, flows 1 | rc: parcel 0, real 12, flows 1 | flow lines identical: yes
+keepass    | classes 18277 | non-library 3034 | main: parcel 76, real 127, flows 9 | rc: parcel 0, real 59, flows 11 | flow lines identical: no (rc has 2 more)
+axis       | classes 18093 | non-library 9576 | main: parcel 17, real 4592, flows 15 | rc: parcel 0, real 4576, flows 15 | flow lines identical: yes

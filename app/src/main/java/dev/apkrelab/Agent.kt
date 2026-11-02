@@ -47,6 +47,8 @@ interface AgentHost {
     /** 0.38.2: queues EVERY applicable boolean manifest fix at once (one confirmation listing them all). */
     fun queueManifestAll(): String
     fun exportReport(): String
+    /** 2.2: compares two scan REPORT files (Markdown): findings, MUST FIX and manifest delta. Read-only; default needs no host code (ReportDiff.diffFiles). */
+    fun diffScans(oldPath: String, newPath: String): String = ReportDiff.diffFiles(oldPath, newPath)
 }
 
 /** What a tool needs to know about the current request: the user's words, the model acting as lead (analyst for the council), progress lines for the chat, a status line, and the stop flag. */
@@ -235,6 +237,7 @@ object Agent {
             "classify_class" -> host.classifyClass(a.optString("name"))
             "verify_class_edit" -> host.verifyClassEdit(a.optString("name"), a.optString("modified"))
             "audit_brief" -> host.auditBrief()
+            "diff_scans" -> host.diffScans(a.optString("old_path").trim(), a.optString("new_path").trim())
             "list_edits" -> host.listEdits()
             "open_class" -> host.openClass(a.optString("class"))
             "scan_security" -> host.runScan(a.optString("mode", "smart").trim().lowercase(), ctx)

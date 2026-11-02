@@ -2,6 +2,15 @@
 
 Release notes in short. The full record (measurements, what was not measured, every decision) is `docs/internal/HANDOFF.md`; numbers are in `docs/internal/PERF.md`.
 
+## 2.1.1 (versionCode 234)
+- New agent tool `diff_scans` (ReportDiff): compares two saved scan reports (findings, MUST FIX, exported components, permissions, deep links). Run on 2 real pairs without error: Paperless 33 -> 32 findings (1 fixed), Zulip 20 -> 20.
+- Engine: identical to 2.1.0. Real-CVE benchmark: MUST FIX recall 6 of 13, patched build drops the card in 5 of 6 (final scan identical to the 2.1.0 scan, 24 of 24 APKs).
+- Six engine changes were built and measured and ship OFF by default: sink-kind validation (CVE recall 5 of 13 with it on, 6 of 13 off), setter summary (+1 MUST FIX card on Omni-Notes, +2 LOW flows on KeePassDX), Parcel round trip (Parcel drops 76 -> 0 on KeePassDX, 0 flow change on 7 apps), WebViewClient / ActivityResult / Binder call-graph bridges (0 flow change on 7 apps, 0 differing cards on 12 blind apps).
+- Blind round 3: 12 apps never named before; 4 judged MUST FIX cards (3 true positive, 1 false positive); 8 HIGH+ cards (7 true positive, 1 false positive); the false positive is also in the 2.1.0 engine. The thresholds were stricter than any earlier round (>= 4 judged cards, 0 false positives); 1 false positive, so 3.0.0 and 2.2.0 were not reached.
+- Tests: 1003 pass, 0 fail, 0 lint errors (2.1.0: 946). Self-scan of the debug APK: dev.apkrelab HIGH 0, MEDIUM 12, LOW 10 (1.1.0: 0 / 12 / 7).
+- Device validation: not performed. The release is based on sandbox scans only.
+- versionCode: 234. The owner's table gave 221 for 2.1.1; 2.1.0 is 233 and Android refuses to install a lower code over it, so the owner confirmed 234.
+
 ## 2.1.0 (versionCode 233)
 - Verdict: CRITICAL PATH shows only HIGH/CRITICAL scenarios with a proven path, otherwise `none`.
 - Reach: dispatcher methods (R8-merged lambdas) count as hubs (Axis Pay cards via `im2.success -> f51.run` are `YES~`); Conductor controllers, WorkManager workers and Kotlin suspend lambdas are reached.

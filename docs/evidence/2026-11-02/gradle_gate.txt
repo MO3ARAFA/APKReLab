@@ -1,0 +1,6 @@
+main 6610689 gradle_exit=0 tests=946 failures=0 errors=0 lint_errors=0
+session-1-reportdiff 0888abf gradle_exit=0 tests=971 failures=0 errors=0 lint_errors=0
+session-2-shapes d85ef1f gradle_exit=0 tests=952 failures=0 errors=0 lint_errors=0
+session-3a-parcel-validation b66c489 gradle_exit=0 tests=958 failures=0 errors=0 lint_errors=0
+session-3b-bridges 629715a gradle_exit=0 tests=954 failures=0 errors=0 lint_errors=0
+merged (main + the four session branches; HANDOFF.md conflicts resolved by taking one side, code merged without conflicts) gradle_exit=0 tests=997 failures=0 errors=0 lint_errors=0

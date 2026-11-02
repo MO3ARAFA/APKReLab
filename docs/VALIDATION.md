@@ -147,3 +147,19 @@ NOT measured: a device run of 2.1.0; WE Wallet / JustMarkets / Axis Pay 3.1.0 th
 - WE Wallet card #1 (`SignUpWebViewActivity`, `exported="false"`) was still MUST FIX: it is a card of the single-class IR rule, which 2.0.1's SSA-only rule did not touch.
 - Axis Pay 3.1.0 report 9 had no Hybrid section although HybridInspector is in main: `HybridInspector.clear()` ran at the start of every code scan and wiped what the resource scan had published at APK load.
 - `im2.success -> f51.run` kept reach YES: the hub rule required a framework owner and `im2` is an R8-renamed interface of the app.
+
+## Blind round 3 (2026-11-02; release candidate of 2.1.1; protocol: docs/PLAN_3_0_0.md Item 5)
+Selection committed before any download: `docs/evidence/2026-11-02/blind3_selection.txt` (12 apps from the F-Droid index SHA-256 `ca45b6c3...927b`, seed 20261102, minimum 5 MB, permission INTERNET, 15,141 names excluded; 0 of 12 in the touched list; 12 of 12 APKs matched the index SHA-256). Every app scanned once with the release candidate and once with the six session switches off (the 2.1.0 engine); reports hashed right after the scan. Per-app table and judgements: `docs/evidence/2026-11-02/blind3_results.txt`.
+- Judged MUST FIX cards: 4 (swiftp_free 3, simplenotes 1). True positives 3, false positives 1 (75% by card; by distinct issue: 1 true positive, 1 false positive).
+- All HIGH+ cards: 8 (7 true positive in 2 distinct issues, 1 false positive). The 3 true positives in MUST FIX are one library pattern (Tasker plugin: an exported service with no permission passes a bundle string to `Class.forName`).
+- The false positive (simplenotes, `o41.J(File)`, a `readBytes` helper reached through an R8-merged coroutine class) is present in the 2.1.0 engine's report too: paired difference between the release candidate and the 2.1.0 engine = 0 differing cards in 12 of 12 apps.
+- Item 5 tests: 1 (names and hashes) held; 2 (>= 4 judged MUST FIX cards) held with 4; 3 (false positives = 0) FAILED with 1; 4 (paired false positives = 0) held with 0 differing cards.
+- Not measured here: recall (no expected list); MEDIUM and LOW cards (not judged); a device run (no device reach pass: rule cards outside an exported class have no reach label in the sandbox).
+- First blind round with a true positive in MUST FIX: rounds 1 and 2 had 0 of 2 and no card. 4 judged cards in 12 apps is still too few for an accuracy figure.
+
+## 2.1.1 release-candidate CVE rescans (2026-11-02; tuning set, NOT blind)
+- Run 6, release candidate with sink-kind validation and setter summary on (`docs/evidence/2026-11-02/cve_run6_rc.txt`): MUST FIX recall 5 of 13, patched build drops the card in 3. Regression against run 5 (6 of 13, 5 of 6).
+- Run 7, same build with `apkrelab.noSinkKindValidation` (`cve_run7_rc_noSinkKind.txt`): 6 of 13 and 5 of 6; the only difference from run 5 is C03 "related MUST FIX cards" 1 -> 2 in both builds, caused by the setter summary (an SQL flow in DbHelper with a boxed Long id; removed by `noSetterCapture`).
+- Run 9, shipped configuration, all six session switches off by default (`cve_run9_final.txt`, `tools/benchmark/cve/runs/run9_211_final.txt`): case lines, MUST FIX lines and secondary lines identical to run 5: MUST FIX recall 6 of 13, patched build drops the card in 5 of 6.
+- Not measured: a device run; WE Wallet / JustMarkets / Axis Pay 3.1.0 themselves.
+
