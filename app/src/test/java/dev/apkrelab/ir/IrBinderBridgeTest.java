@@ -27,8 +27,13 @@ public class IrBinderBridgeTest {
         assertTrue(f == null || !f.reachable);
     }
 
-    @Test public void theBridgeIsOffByDefault() {
-        TaintIr.Flow f = flowIn("Lt/T;", service(true), BINDER);
-        assertTrue(f == null || !f.reachable);
+    @Test public void theBridgeIsOnByDefaultAndTheMutationLosesIt() {      // 2.1.2: on by default
+        assertTrue(CallGraph.BINDER_HOSTING);
+        boolean was = CallGraph.BINDER_HOSTING;
+        CallGraph.BINDER_HOSTING = false;
+        try {
+            TaintIr.Flow f = flowIn("Lt/T;", service(true), BINDER);
+            assertTrue(f == null || !f.reachable);
+        } finally { CallGraph.BINDER_HOSTING = was; }
     }
 }

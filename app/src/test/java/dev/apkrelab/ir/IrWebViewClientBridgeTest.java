@@ -22,8 +22,13 @@ public class IrWebViewClientBridgeTest {
         assertTrue(f == null || !f.reachable);
     }
 
-    @Test public void theBridgeIsOffByDefault() {
-        TaintIr.Flow f = flowIn("Lt/T;", activity(WV_NEW + WV_SET), WV_CLIENT);
-        assertTrue(f == null || !f.reachable);
+    @Test public void theBridgeIsOnByDefaultAndTheMutationLosesIt() {      // 2.1.2: on by default
+        assertTrue(CallGraph.WEBVIEW_CLIENT_EDGES);
+        boolean was = CallGraph.WEBVIEW_CLIENT_EDGES;
+        CallGraph.WEBVIEW_CLIENT_EDGES = false;
+        try {
+            TaintIr.Flow f = flowIn("Lt/T;", activity(WV_NEW + WV_SET), WV_CLIENT);
+            assertTrue(f == null || !f.reachable);
+        } finally { CallGraph.WEBVIEW_CLIENT_EDGES = was; }
     }
 }

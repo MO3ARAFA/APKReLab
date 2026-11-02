@@ -37,11 +37,11 @@ class Verdict120Test {
         assertTrue(Verdict.build(listOf(low, sink), listOf(noEntry), full).criticalPath.single().startsWith("none"))
     }
 
-    @Test fun neverMoreThanThreeMustFixAndOnlyReachableHighOnes() {
+    @Test fun everyGatePassingCardIsListedAndOnlyReachableHighOnes() {      // 2.1.2: no cap of 3 any more
         val cards = (1..5).map { card(Severity.HIGH, "Untrusted input is used as a file path", "Lcom/x/C$it;", reach = "YES") } +
             card(Severity.CRITICAL, "Not reachable", "Lcom/x/N;", reach = "NO") + card(Severity.MEDIUM, "Reachable medium", "Lcom/x/M;", reach = "YES")
         val v = Verdict.build(cards, emptyList(), full)
-        assertEquals(Verdict.MAX_MUST_FIX, v.mustFix.size)
+        assertEquals(5, v.mustFix.size)                                         // all five passing HIGH cards, none hidden
         assertTrue(v.mustFix.all { it.contains("[HIGH]") })
         assertTrue(v.mustFix[0], v.mustFix[0].startsWith("#1 ") && v.mustFix[0].contains("getCanonicalPath"))            // the file-write template sentence
         // twin: a CRITICAL card with no path from an exported component is not a must-fix

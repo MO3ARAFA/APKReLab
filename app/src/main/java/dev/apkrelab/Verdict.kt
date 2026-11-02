@@ -27,8 +27,13 @@ object Verdict {
             "CONFIDENCE" to confidence, "NOT SEEN" to notSeen)
     }
 
-    /** The longest MUST FIX list. 3.0.0 experiment: -Dapkrelab.mustFixMax=N measures how many gate-passing cards the cap hides (default stays 3 until measured). */
-    val MAX_MUST_FIX: Int = Integer.getInteger("apkrelab.mustFixMax", 3)
+    /**
+     * The longest MUST FIX list. 2.1.2: no practical cap (999): every HIGH / CRITICAL card that passes the four-condition gate is listed, so a card that passes is never hidden by
+     * others with a higher score (before, at most 3 were shown; on the CVE benchmark one report, Nextcloud 3.18.0, had 5 passing cards). -Dapkrelab.mustFixMax=N for measurements.
+     */
+    val MAX_MUST_FIX: Int = Integer.getInteger("apkrelab.mustFixMax", 999)
+    /** How many cards of the CRITICAL PATH chain get a "to verify" line (unchanged at 3: it is a reading aid, not a gate). */
+    const val MAX_VERIFY_LINES = 3
     /** 1.2.1: a MUST FIX card whose evidence is below this is marked "CHECK FIRST:" (no traced source + path). */
     const val CHECK_FIRST_BELOW = 0.9
     /** 1.2.1: switches for the mutation checks of the verify lines and the sanitizer families. */
@@ -115,7 +120,7 @@ object Verdict {
             listOf("card ${label(pos[top]!!)}: ${best.title}",
                 "entry: ${best.entry} -> path: " + chain.joinToString(" -> ") { label(pos[it]!!) + " " + it.title.take(60) + " in " + where(it) } +
                     (FixTemplates.sinkOf(top)?.let { " -> sink: $it" } ?: ""),
-                "impact: ${best.impact}") + chain.take(MAX_MUST_FIX).map { "→ to verify (" + label(pos[it]!!) + "): " + verifyOf(it) }      // 1.2.1
+                "impact: ${best.impact}") + chain.take(MAX_VERIFY_LINES).map { "→ to verify (" + label(pos[it]!!) + "): " + verifyOf(it) }      // 1.2.1
         }
 
         // MUST FIX: HIGH / CRITICAL cards that pass the four-condition gate (phase 2: MustFixGate), highest priority first; never more than three
