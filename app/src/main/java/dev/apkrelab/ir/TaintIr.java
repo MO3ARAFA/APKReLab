@@ -322,6 +322,21 @@ public final class TaintIr {
         return SINKS.containsKey(owner + "->" + name);
     }
 
+    /** 3.0.0: the field reference "Lowner;->name:T" has a number or boolean type (primitive or boxed): such a value cannot carry SQL, path or markup syntax. */
+    static boolean isNumericFieldRef(String ref) {
+        int i = ref.lastIndexOf(':');
+        if (i < 0) return false;
+        String t = ref.substring(i + 1);
+        if (t.length() == 1) return "ZBSIJFD".indexOf(t.charAt(0)) >= 0;
+        switch (t) {
+            case "Ljava/lang/Integer;": case "Ljava/lang/Long;": case "Ljava/lang/Double;": case "Ljava/lang/Float;":
+            case "Ljava/lang/Boolean;": case "Ljava/lang/Short;": case "Ljava/lang/Byte;":
+                return true;
+            default:
+                return false;
+        }
+    }
+
     static boolean isSanitizer(String owner, String name) {
         switch (owner) {
             case "Ljava/net/URLEncoder;":
@@ -1604,7 +1619,8 @@ public final class TaintIr {
                     }
                     // 2.2 (session 3a.1): the same for a small non-constructor instance method that only stores its parameter (setX(v) { this.x = v; }): the caller's real taint goes to the field
                     if (SETTER_CAPTURE && CTOR_CAPTURE && collect && t.params != 0L && !"<init>".equals(m.name) && !m.isStatic && m.desc.endsWith(")V") && m.insns.size() <= SETTER_MAX_INSNS
-                            && in.op.startsWith("iput") && u.length > vc && isThis(u[vc]) && !in.ref.endsWith(":Ljava/lang/Object;")) {
+                            && in.op.startsWith("iput") && u.length > vc && isThis(u[vc]) && !in.ref.endsWith(":Ljava/lang/Object;")
+                            && !isNumericFieldRef(in.ref)) {   // 3.0.0: a number-typed field (long id, int, boxed Long ...) cannot carry an injection
                         boolean str = vc == 1 && u.length > 0 && isString(u[0], 0);
                         for (int k = 1; k < 64; k++)
                             if ((t.params & (1L << k)) != 0) sum.ctorFields.computeIfAbsent(k, x -> new java.util.TreeSet<>()).add(in.ref + (str ? "|S" : ""));
