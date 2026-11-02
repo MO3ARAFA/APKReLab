@@ -183,7 +183,9 @@ public final class SsaBridge {
         MethodIr sinkM = g.methods.get(f.sink.method);
         if (sinkM == null || f.sink.insn < 0 || f.sink.insn >= sinkM.insns.size()) return null;
         int at = sinkM.insns.get(f.sink.insn).offset;
-        int vkind = validationKind(g, f);
+        int vres = validationKind(g, f);
+        int vkind = vres & 3;
+        boolean wrongKind = (vres & 4) != 0 && vkind == 0;          // 2.2: validation-like calls were seen, but none of them restricts THIS kind of sink
         boolean validation = vkind == 2 || (vkind == 1 && !WEAK_VALIDATION);
         boolean weakOnly = WEAK_VALIDATION && vkind == 1;
 
@@ -227,6 +229,7 @@ public final class SsaBridge {
         if (f.source.startsWith("ZipEntry.")) sb.append(" The value is the name of an archive entry. When the archive comes from outside the app (a download, a file another app shares) a name such as ../../x makes the extraction write outside the target folder (Zip Slip): the target path must be checked with getCanonicalPath() against the extraction folder.");
         if (prefs) sb.append(" The source is SharedPreferences, which only an attacker with root or a tampered backup can change: treat this as a lead, not as a confirmed flaw.");
         if (weakOnly) sb.append(" The chain contains only WEAK checks on the value (a substring or suffix test: contains / endsWith without a canonical path, a full match or an allow-list). They are easy to bypass (\"/data\" is not in \"/./data\", \"example.com\" ends \"evil-example.com\"), so they are not counted as a sanitizer: read them and decide.");
+        if (wrongKind) sb.append(" The chain contains validation-like calls, but none of them restricts this kind of sink (a path check does not decide which page a WebView loads, and a scheme, host or prefix test does not decide which file is opened): they are not counted as a sanitizer.");
         if (validation) sb.append(" The chain also contains validation-like calls (startsWith, matches, getHost, canonical path, allow-list contains ...): verify that they really restrict this value before the sink.");
         if (f.reachable && f.viaHub) sb.append(" Every call path from an exported component goes through a call on a framework interface that " + CallGraph.HUB_FANOUT + " or more app classes implement (a generic callback / Runnable / Closeable, often R8-merged lambdas), so the exported component may not really reach this code: treat the reach as approximate.");
         if (!f.reachable) sb.append(" No exported component reaches this method in the call graph: it may be internal-only, or reached through an implicit Intent, reflection or a lambda the graph does not follow.");
@@ -301,12 +304,33 @@ public final class SsaBridge {
     /** The checks a bypass is well known for: a substring or SUFFIX test on a String (blacklist contains, host endsWith). startsWith stays a validation: it is the usual scheme / prefix check ("https://"). Everything else VALIDATION matches (regex, allow-list contains, getHost, canonical path, named helpers) is strong. */
     private static final Pattern WEAK_ONLY = Pattern.compile("^(?:invoke-[a-z]+(?:/range)?\\s+\\{[^}]*\\},\\s*)?Ljava/lang/String;->(endsWith|contains)\\(.*$");
 
-    /** 0 = no validation-like call on the chain, 1 = only weak ones, 2 = at least one strong one. */
+    /** 2.2 (session 3a.2): switch for the mutation check of the sink-kind match (false = every validation-like call counts for every sink, as before). */
+    public static boolean SINK_KIND_VALIDATION = !Boolean.getBoolean("apkrelab.noSinkKindValidation");
+    private static final Pattern V_PATH = Pattern.compile("->(getCanonicalPath|getCanonicalFile|normalize)\\(|const-string [vp]\\d+, \"\\.\\.\"");
+    private static final Pattern V_HOST = Pattern.compile("->(getHost|getScheme|getAuthority|isHttpsUrl|isValidUrl)\\(");
+    private static final Pattern V_PREFIX = Pattern.compile("Ljava/lang/String;->startsWith\\(");
+
+    /**
+     * 2.2 (session 3a.2): can this validation-like instruction restrict a flow that ends in a sink of this kind? Only the three pairings that are wrong on their face are
+     * excluded; every other check (matches, allow-list contains, a named sanitize* / verify* helper ...) still counts for every sink, as before.
+     *  - a path check (canonical path, normalize, a ".." test) says nothing about which page a WebView loads;
+     *  - a scheme / host / authority test says nothing about which file a path names;
+     *  - a prefix test (startsWith("http")) restricts neither the file a path names nor the content URI that is opened.
+     */
+    static boolean validationAppliesTo(String insn, String sinkTitle) {
+        if (!SINK_KIND_VALIDATION) return true;
+        if (V_PATH.matcher(insn).find()) return !sinkTitle.equals(TaintIr.T_WEB);
+        if (V_HOST.matcher(insn).find()) return !sinkTitle.equals(TaintIr.T_FILE);
+        if (V_PREFIX.matcher(insn).find()) return !(sinkTitle.equals(TaintIr.T_FILE) || sinkTitle.equals(TaintIr.T_URI));
+        return true;
+    }
+
+    /** Low two bits: 0 = no validation-like call on the chain that applies to this sink, 1 = only weak ones, 2 = at least one strong one. Bit 4: a validation-like call was seen that does not apply to this kind of sink. */
     private static int validationKind(CallGraph g, TaintIr.Flow f) {
         Set<String> seen = new HashSet<>();
         List<String> keys = new ArrayList<>(f.chain);
         keys.add(f.sink.method);
-        int kind = 0;
+        int kind = 0, ignored = 0;
         for (String k : keys) {
             if (!seen.add(k)) continue;
             MethodIr m = g.methods.get(k);
@@ -314,11 +338,12 @@ public final class SsaBridge {
             for (Insn in : m.insns) {
                 String t = in.text();
                 if (!VALIDATION.matcher(t).find()) continue;
+                if (!validationAppliesTo(t, f.sink.title)) { ignored = 4; continue; }
                 if (WEAK_ONLY.matcher(t).find() && !t.contains("->matches(")) kind = Math.max(kind, 1);
                 else return 2;
             }
         }
-        return kind;
+        return kind | ignored;
     }
 
 

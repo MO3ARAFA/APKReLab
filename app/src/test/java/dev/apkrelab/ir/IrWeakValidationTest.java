@@ -41,8 +41,9 @@ public class IrWeakValidationTest {
     }
 
     // twins: strong checks still count
-    @Test public void aFullMatchACanonicalPathOrAPrefixSchemeCheckStillCounts() {
-        for (String strong : new String[]{MATCHES, CANON, STARTS}) {
+    // 2.2 (session 3a.2): this sink is a FILE path, and a startsWith("https://") prefix test no longer counts for a file sink (IrSinkKindValidationTest); it still counts for a WebView sink
+    @Test public void aFullMatchOrACanonicalPathStillCounts() {
+        for (String strong : new String[]{MATCHES, CANON}) {
             SsaBridge.Item it = items(strong).get(0);
             assertEquals("MEDIUM", it.confidence);
             assertTrue(it.detail, it.detail.contains("validation-like calls"));
