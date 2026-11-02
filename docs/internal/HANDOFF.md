@@ -13,6 +13,13 @@ Owner speaks Egyptian Arabic, wants concise, actionable answers.
 
 ## Current version: 1.2.1
 - **0.104.1 VERIFIED ON THE PHONE (report 9, Axis Pay, second Deep scan without re-picking the app)**: "cache: 25 of 25 groups reused", **groups 8 s instead of 743-752 s** (plan 21 s still runs; the 8 s include the hash pass over the unique classes and reading 25 cache files), GC 0.9 s in 32 collections instead of 447-620 s. The report is identical to the full run's (report 8) except the status line: 80 cards, +16 flows, same loss counters. So the 0.104.0 miss was the workspace wipe, as suspected. Note: the "slowest methods" of a cached run are the CACHED measurements of the run that produced them (their times are not this run's). Still unmeasured: the cold-run overhead of writing the 25 files.
+- 2.2 session 3b of 5 (bridges; branch claude/session-3b-bridges from main) - CARRYING FORWARD recorded BEFORE starting (from the owner, after session 3a):
+  - 3a.1 and 3a.2 are correctness fixes with ZERO measurable effect on the 13-app corpus (except 2 LOW-confidence flows on KeePassDX from the setter summary, and the drop-counter reduction from the Parcel change).
+  - The claim "3a fixes C03/C05/C08" is NOT supported by any measurement. The original roadmap hypotheses may be wrong. Any specific CVE fix claim requires a fresh measurement and does not belong in the 2.1.1 / 2.2.0 / 3.0.0 release notes unless session 4 (blind) measures it.
+  - The Paperless #32 case study was incorrect (it was a canonical-path check in a callee behind an interface, fixed in phase 3c). The 3a.2 design is still valid, implemented for correctness, not as a fix for #32.
+  - Session 2 correction: `viaHub` is computed on the entry-to-origin path (the method that reads the value), not source-to-sink. Read it before adding any bridge that might demote reach.
+  - `IrWeakValidationTest` was updated in 3a.2 because the BEHAVIOUR changed: `startsWith("https://")` on a FILE sink is no longer treated as a validation. A behaviour change, not a test fix; do not "fix it back".
+  - Release-note wording for session 5 (if it ships): "correctness improvements: Parcel transport, setter propagation, sink-kind validation, N bridges" - facts, no claims. If session 4 (blind) is below its gate the version is 2.2.0, not 3.0.0.
 - 2.1.0 (device reports of 2.0.2; versionCode 233):
   - CVE MUST FIX recall 4/13 -> 6/13 (C07 file-path card on DiskLruImageCacheFileProvider, C09 reflected URI grant), patch drop 5/6 (run5_210_*.txt, VALIDATION.md run 5); no other MUST FIX change on 24 APKs.
   - Verdict CRITICAL PATH = proven HIGH/CRITICAL only; dispatcher-method hubs (CallGraph.isDispatcherMethod) make Axis Pay `im2.success -> f51.run` cards `YES~`.
