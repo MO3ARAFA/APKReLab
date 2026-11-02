@@ -41,13 +41,20 @@ public class IrWeakValidationTest {
     }
 
     // twins: strong checks still count
-    @Test public void aFullMatchACanonicalPathOrAPrefixSchemeCheckStillCounts() {
-        for (String strong : new String[]{MATCHES, CANON, STARTS}) {
+    @Test public void aFullMatchOrACanonicalPathStillCounts() {
+        for (String strong : new String[]{MATCHES, CANON}) {
             SsaBridge.Item it = items(strong).get(0);
             assertEquals("MEDIUM", it.confidence);
             assertTrue(it.detail, it.detail.contains("validation-like calls"));
             assertFalse(it.detail, it.detail.contains("only WEAK checks"));
         }
+    }
+
+    // 2.1.4: sink-kind validation is on: a scheme prefix test ("https://") says nothing about which file a path names, so before this FileInputStream it is not a sanitizer
+    @Test public void aSchemePrefixCheckDoesNotCountForAFileSink() {
+        SsaBridge.Item it = items(STARTS).get(0);
+        assertEquals("HIGH", it.confidence);
+        assertTrue(it.detail, it.detail.contains("none of them restricts this kind of sink"));
     }
 
     @Test public void aStrongCheckBesideAWeakOneStillCounts() {
