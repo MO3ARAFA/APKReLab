@@ -51,7 +51,7 @@ object ClassTools {
      * one (a class-id field), or R8's static merger put unrelated static helpers in it, or it is renamed code no single library names. The card says what to check, not a verdict.
      * Cards already given to an SDK (scope LIB, see SdkAttribution) are left alone. Returns how many cards got a hint.
      */
-    fun obfHint(list: List<SecurityScanner.Finding>, merged: Set<String>, holders: Set<String>): Int {
+    fun obfHint(list: List<SecurityScanner.Finding>, merged: Set<String>, holders: Set<String>, refs: (String) -> String = { "" }): Int {
         var n = 0
         for (f in list) {
             val t = f.classType ?: continue
@@ -62,11 +62,31 @@ object ClassTools {
                 t in merged -> "R8 merged several original classes into this one (it has the synthetic class-id field): its fields and its dispatch methods hold code of unrelated origins. Run classify_class ${t.removePrefix("L").removeSuffix(";")} and check that the code of this finding belongs to the origin the input comes from."
                 t in holders -> "R8's static merger put unrelated static helpers into this class (static methods only, no state): the method of this finding may come from any library or from the app."
                 viaMerged -> "the value comes from a class R8 merged from several origins (${src.removePrefix("L").removeSuffix(";")}); check the writer and the reader of the shared field."
-                else -> "R8 renamed this class and no single bundled library names it (it may be the app's own code, or a library named by several others). Run classify_class to see which packages its code names."
+                else -> "R8 renamed this class and no single bundled library names it (it may be the app's own code, or a library named by several others). " +
+                    (refs(t).let { r -> if (r.isEmpty()) "Run classify_class to see which packages its code names." else "Its code names the packages: $r (classify_class gives the full picture)." })
             }
             n++
         }
         return n
+    }
+
+    /**
+     * 3.0.0: the library packages a class's code names (at most [max]), most frequent first, as "com.facebook.appevents (3), com.google.firebase (1)". Platform packages (java, javax, android, kotlin, dalvik),
+     * the class itself, the app's own package and renamed root classes are left out. Empty when it names no library package.
+     */
+    fun namedPackages(type: String, text: String, appPkg: String, max: Int = 4): String {
+        val appPrefix = appPkg.split('.').let { if (it.size >= 2) "L" + it[0] + "/" + it[1] + "/" else "L$appPkg/" }
+        val count = HashMap<String, Int>()
+        for (m in typeRef.findAll(text)) {
+            val t = m.value
+            if (t == type || t.indexOf('/') < 0) continue
+            if (appPkg.isNotEmpty() && t.startsWith(appPrefix)) continue
+            if (t.startsWith("Ljava/") || t.startsWith("Ljavax/") || t.startsWith("Landroid/") || t.startsWith("Lkotlin/") || t.startsWith("Ldalvik/")) continue
+            val parts = t.removePrefix("L").split('/')
+            val pkg = parts.take(minOf(3, parts.size - 1)).joinToString(".")   // the package of the type, at most three segments
+            if (pkg.isNotEmpty()) count[pkg] = (count[pkg] ?: 0) + 1
+        }
+        return count.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).take(max).joinToString(", ") { "${it.key} (${it.value})" }
     }
 
     /** [family] = the SDK the last Deep scan attributed this class to (null = none or not scanned); [scanned] = whether a Deep scan ran. */

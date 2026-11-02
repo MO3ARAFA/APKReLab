@@ -48,4 +48,28 @@ class AuditBrief100Test {
         assertFalse(app.detail.contains(ClassTools.OBF_HINT_MARK)); assertFalse(sdk.detail.contains(ClassTools.OBF_HINT_MARK))   // twins
         assertEquals(0, ClassTools.obfHint(all, setOf("Lm42;"), setOf("Lct1;")))   // a second pass adds nothing
     }
+
+    // 3.0.0: the packages a renamed class names are printed inside the card, so nobody has to run classify_class by hand
+    private val obfText = """
+        .class public Lzz;
+        .super Ljava/lang/Object;
+        invoke-virtual {v0}, Lcom/facebook/appevents/AppEventsLogger;->flush()V
+        invoke-virtual {v0}, Lcom/facebook/appevents/internal/Foo;->bar()V
+        invoke-virtual {v0}, Lcom/google/firebase/Bar;->baz()V
+        invoke-virtual {v0}, Landroid/content/Context;->getPackageName()Ljava/lang/String;
+        invoke-virtual {v0}, Lcom/acme/app/Own;->x()V
+        invoke-virtual {v0}, Lab;->y()V
+    """.trimIndent()
+
+    @Test fun renamedCodeCardNamesTheLibraryPackagesItUses() {
+        val p = ClassTools.namedPackages("Lzz;", obfText, "com.acme.app")
+        assertTrue(p, p.startsWith("com.facebook.appevents (2)")); assertTrue(p, p.contains("com.google.firebase (1)"))
+        assertFalse(p, p.contains("android")); assertFalse(p, p.contains("acme")); assertFalse(p, p.contains("ab"))   // twins: platform, own package, renamed roots stay out
+        val c = f("D", "Lzz;", SecurityScanner.Severity.MEDIUM, SecurityScanner.Scope.OBF)
+        ClassTools.obfHint(listOf(c), emptySet(), emptySet()) { ClassTools.namedPackages(it, obfText, "com.acme.app") }
+        assertTrue(c.detail, c.detail.contains("Its code names the packages: com.facebook.appevents (2)")); assertFalse(c.detail.contains("Run classify_class to see"))
+        val none = f("E", "Lyy;", SecurityScanner.Severity.MEDIUM, SecurityScanner.Scope.OBF)
+        ClassTools.obfHint(listOf(none), emptySet(), emptySet()) { "" }      // no library named: the old sentence stays
+        assertTrue(none.detail.contains("Run classify_class to see which packages"))
+    }
 }
