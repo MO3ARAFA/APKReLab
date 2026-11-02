@@ -72,20 +72,32 @@ Total: 19.5 hours (Item 6 counts 2 of them; the owner's device time is extra). O
 - Hybrid frameworks (Dart, JavaScript code analysis): no evidence bullet.
 - A merge of any branch without Items 1 and 2: the branches stay unmerged if Item 1 or 2 fails.
 
-### Version decision tree
-Names: RC = the Item 1 build after Items 3 and 4.
-1. Item 1 fails (Gradle not 997 tests / 0 failures, or the Recall line differs): no release; the branches stay as they are; report which gate failed.
-2. Item 2 shows recall < 6 of 13 or drops < 5 of 6: switch off the switch of the branch whose pairing changed the case (3a: `noParcelRoundTrip`, `noSetterCapture`, `noSinkKindValidation`; 3b: `noWebViewClientEdges`, `noResultCallbackEdges`, `noBinderHosting`), repeat Item 2; if recall is 6 of 13 or more after switching, the release is **2.1.1** (sessions 1 and 2 plus the branches that still pass); if it is still below 6 of 13 with all engine switches off, there is no release.
-3. Item 3 not decided or `fp`: `SETTER_CAPTURE` off; the release continues with that switch off (this alone does not change the version).
-4. Item 5 (the version gate), after Items 1 to 4 passed:
-   - tests 1 to 4 of Item 5 all hold -> **3.0.0**;
-   - tests 1, 3 and 4 hold and the judged MUST FIX count is below 4 (result "n/a") -> **2.2.0**, with "not proven blind: n/a (judged MUST FIX cards: N)" in the notes;
-   - FP among judged MUST FIX cards >= 1 or paired `fp` >= 1: attribute it to a switch by repeating the scan of that app with each switch off in turn; switch off the responsible one(s), rerun Item 5 once on the 12 apps (the selection stays the same, no new selection); if the rerun has FP = 0 and paired `fp` = 0 -> **2.2.0** with that switch off; if the cause cannot be attributed or the rerun still shows FP >= 1 -> **2.1.1** with all six engine switches off (sessions 1 and 2 only: ReportDiff and tests);
-   - test 1 fails (a name in the touched list, or a hash mismatch) -> Item 5 is repeated with a new seed; the version is not decided until it holds.
-5. Item 6 never changes the version.
-6. The version in `app/build.gradle.kts` is set only after step 4, and the notes state which of tests 1 to 4 held.
+### Version decision tree (reordered by the owner, 2026-11-02)
+Names: RC = the Item 1 build after Items 3 and 4. Precondition: Item 1 must pass, because without the integrated build there is no CVE score and no blind scan to evaluate.
 
-### Decisions requested from the owner before execution
+Precondition. Item 1 fails (Gradle not 997 tests / 0 failures / 0 lint errors, or the `self_check` Recall line differs) -> **no release**; the branches stay unmerged; report which gate failed.
+
+Priority order once Item 1 has passed (the first rule that applies decides; a later rule never overrides an earlier one):
+1. **CVE recall below 6 of 13, or patch drops below 5 of 6 (Item 2) -> 2.1.1.** A regression trumps everything. Switch off the engine switch(es) of the branch whose pairing changed the case (3a: `noParcelRoundTrip`, `noSetterCapture`, `noSinkKindValidation`; 3b: `noWebViewClientEdges`, `noResultCallbackEdges`, `noBinderHosting`) and repeat Item 2; the release contains sessions 1 and 2 plus the engine branches that pass. If recall is still below 6 of 13 with all six engine switches off, there is no release.
+2. **A false positive among the judged MUST FIX cards (Item 5 test 3), or a paired `fp` (test 4), that cannot be attributed to a switch -> 2.1.1** with all six engine switches off (sessions 1 and 2 only: ReportDiff and tests). Attribution = repeating the scan of the affected app with each switch off in turn.
+3. **Item 5 passes all four tests AND CVE recall >= 6 of 13 and drops >= 5 of 6 -> 3.0.0.**
+4. **Item 5 partial and attributable -> 2.2.0.** Partial means: tests 1, 3 and 4 hold and fewer than 4 MUST FIX cards were judged (result "n/a"); or a false positive was attributed to a switch, that switch was switched off, and one rerun of Item 5 on the same 12 apps (no new selection) shows FP = 0 and paired `fp` = 0. The notes name the switch that was switched off, or say "not proven blind: n/a (judged MUST FIX cards: N)".
+5. Item 5 test 1 fails (a selected name is in the touched list, or a hash mismatch) -> Item 5 is repeated with a new seed; the version is not decided until test 1 holds.
+6. Item 6 never changes the version and is never waited for.
+7. The version in `app/build.gradle.kts` is set only after the rules above have been applied; the notes state which of Item 5 tests 1 to 4 held.
+
+### versionCode per final version (owner, 2026-11-02)
+- 3.0.0 -> 240
+- 2.2.0 -> 230
+- 2.1.1 -> 221
+The chosen versionCode is written into `CHANGELOG.md` and the release notes. WARNING recorded before execution: `app/build.gradle.kts` on main has versionCode 233 (2.1.0) and 2.0.0 already used 230 (`CHANGELOG.md`, 2.0.0 entry). Android refuses to install an APK whose versionCode is lower than the installed one (INSTALL_FAILED_VERSION_DOWNGRADE), and the SSA group cache key includes the version code. So 230 and 221 cannot update an installed 2.1.0 (233) and 230 repeats the code of 2.0.0. Item 7 therefore stops before building a 2.2.0 or 2.1.1 release APK and asks the owner to confirm the code; 3.0.0 / 240 has no such conflict.
+
+### Owner clarifications recorded before Phase 3 (2026-11-02)
+- Item 6 (the device scan of WE Wallet, JustMarkets and Axis Pay) is OPTIONAL and NOT blocking. If it is not done in time, the release notes contain exactly: "Device validation: not performed. The release is based on sandbox scans only." Phase 3 does not wait for it.
+- The Item 5 thresholds stay as proposed (>= 4 judged MUST FIX cards, FP = 0, paired fp = 0, 12 apps). They are stricter than any past round (round 1: 2 judged, 0 true positive; round 2: 0 cards). The release notes say so. On the current evidence the likely outcome is **2.2.0**, unless the blind result is perfectly clean: reaching 3.0.0 needs at least 4 judged MUST FIX cards over 12 apps, and rounds 1 and 2 produced 2 cards over 6 apps.
+- Item 3: if `SETTER_CAPTURE` goes off, the lost behaviour (a setter hands the caller's taint to the field; `getterSetterRoundTripPreservesTaint`; the 2 extra KeePassDX flows) is an ACCEPTED COST of this release. The switch is not turned back on later without a measurement.
+
+### Decisions requested from the owner before execution (answered 2026-11-02: thresholds stay; versionCodes above; Item 6 optional)
 - The Item 5 thresholds (>= 4 judged MUST FIX cards, FP = 0, paired fp = 0, 12 apps) are proposals; they are stricter than any past round passed (round 1 had 2 of 2 false).
 - `versionCode` for the release: 240 was named earlier; 3.0.0 / 2.2.0 / 2.1.1 each need one.
 - Item 6 needs the owner to scan three apps on the phone; if the owner prefers not to, it is dropped and the gap stays open in the notes.
