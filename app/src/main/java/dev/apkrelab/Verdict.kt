@@ -27,7 +27,8 @@ object Verdict {
             "CONFIDENCE" to confidence, "NOT SEEN" to notSeen)
     }
 
-    const val MAX_MUST_FIX = 3
+    /** The longest MUST FIX list. 3.0.0 experiment: -Dapkrelab.mustFixMax=N measures how many gate-passing cards the cap hides (default stays 3 until measured). */
+    val MAX_MUST_FIX: Int = Integer.getInteger("apkrelab.mustFixMax", 3)
     /** 1.2.1: a MUST FIX card whose evidence is below this is marked "CHECK FIRST:" (no traced source + path). */
     const val CHECK_FIRST_BELOW = 0.9
     /** 1.2.1: switches for the mutation checks of the verify lines and the sanitizer families. */
