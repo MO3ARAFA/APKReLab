@@ -1,0 +1,44 @@
+   secondary C01: before no-val, after gone -> gate-visible
+   secondary C02: before no-val, after val-like -> gate-visible
+   secondary C03: before no-val, after no-val -> -
+   secondary C04: before val-like, after val-like -> -
+   secondary C05: before val-like, after val-like -> -
+   secondary C06: before no-val, after - -> gate-visible
+   secondary C07: before -, after gone -> gate-visible
+   secondary C08: before no-val, after no-val -> -
+   secondary C09: before -, after gone -> gate-visible
+   secondary C10: before no-val, after val-like -> gate-visible
+   secondary C11: before -, after gone -> gate-visible
+   secondary C12: before no-val, after val-like -> gate-visible
+   secondary C13: before no-val, after no-val -> -
+   secondary C14: before -, after - -> -
+C01 CVE-2023-39957  DETECTED      before: MEDIUM taint-flow                        after: -
+C02 CVE-2023-41898  NOT-DIFFERENT before: HIGH taint-flow                          after: HIGH taint-flow
+C03 CVE-2023-33188  NOT-DIFFERENT before: HIGH taint-flow                          after: HIGH taint-flow
+C04 CVE-2022-39349  NOT-DIFFERENT before: MEDIUM taint-flow                        after: MEDIUM taint-flow
+C05 CVE-2023-24804  NOT-DIFFERENT before: HIGH taint-flow                          after: HIGH taint-flow
+C06 CVE-2021-43863  DETECTED      before: HIGH taint-flow                          after: MEDIUM sql-concat
+C07 CVE-2021-41166  DETECTED      before: MEDIUM manifest-provider-partial-permission after: -
+C08 CVE-2022-39210  NOT-DIFFERENT before: MEDIUM taint-flow                        after: MEDIUM taint-flow
+C09 CVE-2021-41256  DETECTED      before: HIGH uri-grant-via-result                after: -
+C10 CVE-2024-26131  NOT-DIFFERENT before: HIGH taint-flow                          after: HIGH taint-flow
+C11 CVE-2026-65993  DETECTED      before: MEDIUM manifest-deep-links               after: -
+C12 CVE-2026-65994  NOT-DIFFERENT before: MEDIUM taint-flow                        after: MEDIUM taint-flow
+C13 CVE-2026-65996  NOT-DIFFERENT before: MEDIUM taint-flow                        after: MEDIUM taint-flow
+C14 CVE-2026-65995  NOT-DIFFERENT before: MEDIUM manifest-exported-components      after: MEDIUM manifest-exported-components
+C15 CVE-2026-65997  OUT-OF-SCOPE  before:                                          after: 
+in scope: 14  DETECTED: 5  NOT-DIFFERENT: 9  LOW-ONLY: 0  MISSED: 0  NOT-SCANNED: 0
+   mustfix C01: before related 0 of 0, after related 0 of 0
+   mustfix C02: before related 1 of 1, after related 0 of 0
+   mustfix C03: before related 1 of 1, after related 1 of 1
+   mustfix C04: before related 0 of 1, after related 0 of 1
+   mustfix C05: before related 0 of 3, after related 0 of 2
+   mustfix C06: before related 1 of 3, after related 0 of 2
+   mustfix C07: before related 1 of 3, after related 0 of 3
+   mustfix C08: before related 0 of 2, after related 0 of 2
+   mustfix C09: before related 1 of 1, after related 0 of 0
+   mustfix C10: before related 1 of 1, after related 0 of 0
+   mustfix C11: before related 0 of 0, after related 0 of 0
+   mustfix C12: before related 0 of 0, after related 0 of 0
+   mustfix C14: before related 0 of 0, after related 0 of 0
+HEADLINE (2.0.2): MUST FIX recall 6 of 13 valid in-scope cases; of those, the patched build drops the card in 5

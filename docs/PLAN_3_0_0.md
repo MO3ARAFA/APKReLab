@@ -101,3 +101,10 @@ The chosen versionCode is written into `CHANGELOG.md` and the release notes. WAR
 - The Item 5 thresholds (>= 4 judged MUST FIX cards, FP = 0, paired fp = 0, 12 apps) are proposals; they are stricter than any past round passed (round 1 had 2 of 2 false).
 - `versionCode` for the release: 240 was named earlier; 3.0.0 / 2.2.0 / 2.1.1 each need one.
 - Item 6 needs the owner to scan three apps on the phone; if the owner prefers not to, it is dropped and the gap stays open in the notes.
+
+### Outcome (2026-11-02, written after execution)
+- Item 1 passed (997 tests, self_check identical). Item 2 first FAILED (5 of 13, drops 3): remedy = sink-kind validation off (6 of 13, 5 of 6); the setter summary also off (Omni-Notes MUST FIX card). Item 3: both KeePassDX flows `by-design`. Item 4 passed with a correction: Zulip had never been read by the harness (symlink); now 2352 classes, 6 flows, identical between the two engines.
+- Item 5: tests 1, 2 (4 judged cards), 4 (0 differing cards) held; test 3 failed (1 false positive among 4 judged MUST FIX cards, also present in the 2.1.0 engine).
+- Version: rule 1 fired (CVE regression, remedied) and rule 2 applies -> **2.1.1**, all six engine switches off by default. versionCode 234 (owner confirmed over the table's 221 because 233 is installed). The expectation written before the numbers ("2.2.0 is the likely outcome") was wrong in detail: the outcome was 2.1.1, decided by the Item 2 regression first.
+- Item 6: not performed; the release notes carry the required sentence.
+

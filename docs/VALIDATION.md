@@ -157,3 +157,9 @@ Selection committed before any download: `docs/evidence/2026-11-02/blind3_select
 - Not measured here: recall (no expected list); MEDIUM and LOW cards (not judged); a device run (no device reach pass: rule cards outside an exported class have no reach label in the sandbox).
 - First blind round with a true positive in MUST FIX: rounds 1 and 2 had 0 of 2 and no card. 4 judged cards in 12 apps is still too few for an accuracy figure.
 
+## 2.1.1 release-candidate CVE rescans (2026-11-02; tuning set, NOT blind)
+- Run 6, release candidate with sink-kind validation and setter summary on (`docs/evidence/2026-11-02/cve_run6_rc.txt`): MUST FIX recall 5 of 13, patched build drops the card in 3. Regression against run 5 (6 of 13, 5 of 6).
+- Run 7, same build with `apkrelab.noSinkKindValidation` (`cve_run7_rc_noSinkKind.txt`): 6 of 13 and 5 of 6; the only difference from run 5 is C03 "related MUST FIX cards" 1 -> 2 in both builds, caused by the setter summary (an SQL flow in DbHelper with a boxed Long id; removed by `noSetterCapture`).
+- Run 9, shipped configuration, all six session switches off by default (`cve_run9_final.txt`, `tools/benchmark/cve/runs/run9_211_final.txt`): case lines, MUST FIX lines and secondary lines identical to run 5: MUST FIX recall 6 of 13, patched build drops the card in 5 of 6.
+- Not measured: a device run; WE Wallet / JustMarkets / Axis Pay 3.1.0 themselves.
+
