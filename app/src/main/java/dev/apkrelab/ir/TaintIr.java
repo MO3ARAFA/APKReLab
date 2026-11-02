@@ -385,6 +385,7 @@ public final class TaintIr {
         if (PURE.contains(owner)) return 1;
         if (owner.startsWith("Lkotlin/text/") || owner.startsWith("Lkotlin/collections/")) return 1;
         if (owner.startsWith("Ljava/time/") || owner.startsWith("Lj$/time/")) return 1;      // 0.68.4: LocalDate.parse(text) and the like
+        if (PARCEL_ROUNDTRIP && owner.equals(PARCEL_OWNER)) return 2;      // 2.2: write*(x) puts x's taint on the Parcel, a later read* of the same object hands it back (the unmarshalling-method sources are checked before this table)
         return 0;
     }
 
@@ -1161,6 +1162,12 @@ public final class TaintIr {
      */
     /** 2.0.0 pillar 1.1 switches (mutation checks): constructor field capture, async dispatch to the concrete Runnable, FunctionN devirtualisation. */
     static boolean CTOR_CAPTURE = !Boolean.getBoolean("apkrelab.noCtorCapture");
+    /** 2.2 (session 3a.1): switch for the mutation check of the Parcel round trip (a value written to a Parcel is what a read of the SAME Parcel object returns). */
+    static boolean PARCEL_ROUNDTRIP = !Boolean.getBoolean("apkrelab.noParcelRoundTrip");
+    /** 2.2 (session 3a.1): switch for the mutation check of the setter summary: a small instance method that stores its parameter into a field of "this" hands the caller's taint to that field, like a constructor does (CTOR_CAPTURE). */
+    static boolean SETTER_CAPTURE = !Boolean.getBoolean("apkrelab.noSetterCapture");
+    /** A setter is a method of at most this many instructions (instruction count of the parsed method, labels and returns included). */
+    static final int SETTER_MAX_INSNS = 8;
     static boolean ASYNC_DISPATCH = !Boolean.getBoolean("apkrelab.noAsyncDispatch");
     static boolean LAMBDA_DEVIRT = !Boolean.getBoolean("apkrelab.noLambdaDevirt");
 
@@ -1585,6 +1592,13 @@ public final class TaintIr {
                     if (CTOR_CAPTURE && collect && t.params != 0L && "<init>".equals(m.name) && in.op.startsWith("iput") && u.length > vc && isThis(u[vc])
                             && (run.isDeferredTask(m.owner) || (CTOR_COLLECTIONS && isCollectionField(in.ref)))   // 2.0.0 step 2: a collection field in any class
                             && !in.ref.endsWith(":Ljava/lang/Object;")) {   // measured (K-9): Object fields are R8-merged / erased: no capture
+                        boolean str = vc == 1 && u.length > 0 && isString(u[0], 0);
+                        for (int k = 1; k < 64; k++)
+                            if ((t.params & (1L << k)) != 0) sum.ctorFields.computeIfAbsent(k, x -> new java.util.TreeSet<>()).add(in.ref + (str ? "|S" : ""));
+                    }
+                    // 2.2 (session 3a.1): the same for a small non-constructor instance method that only stores its parameter (setX(v) { this.x = v; }): the caller's real taint goes to the field
+                    if (SETTER_CAPTURE && CTOR_CAPTURE && collect && t.params != 0L && !"<init>".equals(m.name) && !m.isStatic && m.desc.endsWith(")V") && m.insns.size() <= SETTER_MAX_INSNS
+                            && in.op.startsWith("iput") && u.length > vc && isThis(u[vc]) && !in.ref.endsWith(":Ljava/lang/Object;")) {
                         boolean str = vc == 1 && u.length > 0 && isString(u[0], 0);
                         for (int k = 1; k < 64; k++)
                             if ((t.params & (1L << k)) != 0) sum.ctorFields.computeIfAbsent(k, x -> new java.util.TreeSet<>()).add(in.ref + (str ? "|S" : ""));
