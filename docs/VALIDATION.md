@@ -148,6 +148,14 @@ NOT measured: a device run of 2.1.0; WE Wallet / JustMarkets / Axis Pay 3.1.0 th
 - Axis Pay 3.1.0 report 9 had no Hybrid section although HybridInspector is in main: `HybridInspector.clear()` ran at the start of every code scan and wiped what the resource scan had published at APK load.
 - `im2.success -> f51.run` kept reach YES: the hub rule required a framework owner and `im2` is an R8-renamed interface of the app.
 
+## 2.1.2 CVE rescan and self-check (2026-11-02; tuning set, NOT blind)
+- Full CVE benchmark, 24 of 24 APKs, final engine (`tools/benchmark/cve/runs/run10_212_final.txt`): MUST FIX recall 6 of 13; the patched build drops the card in 6 of 6 (2.1.1: 5 of 6; the change is C03).
+- MUST FIX without a cap: C06 3 related of 5 listed, C07 1 of 6; no case entered MUST FIX that was not there with the cap of 3.
+- Per-switch CVE runs (one switch on, the others off): setter summary, Parcel round trip, WebViewClient edges, ActivityResult edges: 6 of 13 and 5 each, identical to all off. Binder: stopped at 10 of 24 APKs.
+- Corpus (MeasureBig, 6 apps): Parcel round trip real drops on android/os/Parcel 4 -> 0 (K-9), 76 -> 0 (KeePassDX), 2 -> 0 (Chaka); flows unchanged; with the three bridges on as well: 0 further change.
+- self_check (6 lock apps): PASSED; recall and flow sets identical to the baseline; MUST FIX lists are longer (Allsafe 2/4, Vuldroid 4/5, InsecureShop 2/4 judged matches) because the cap is gone (`docs/evidence/2026-11-02/self_check_212.txt`).
+- Not measured: a blind round with 2.1.2 (the blind round 3 apps are now a tuning set: simplenotes was read for the false positive); a device run.
+
 ## Blind round 3 (2026-11-02; release candidate of 2.1.1; protocol: docs/PLAN_3_0_0.md Item 5)
 Selection committed before any download: `docs/evidence/2026-11-02/blind3_selection.txt` (12 apps from the F-Droid index SHA-256 `ca45b6c3...927b`, seed 20261102, minimum 5 MB, permission INTERNET, 15,141 names excluded; 0 of 12 in the touched list; 12 of 12 APKs matched the index SHA-256). Every app scanned once with the release candidate and once with the six session switches off (the 2.1.0 engine); reports hashed right after the scan. Per-app table and judgements: `docs/evidence/2026-11-02/blind3_results.txt`.
 - Judged MUST FIX cards: 4 (swiftp_free 3, simplenotes 1). True positives 3, false positives 1 (75% by card; by distinct issue: 1 true positive, 1 false positive).

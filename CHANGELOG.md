@@ -2,6 +2,18 @@
 
 Release notes in short. The full record (measurements, what was not measured, every decision) is `docs/internal/HANDOFF.md`; numbers are in `docs/internal/PERF.md`.
 
+## 2.1.2 (versionCode 235)
+- MUST FIX lists every card that passes the gate (the cap of 3 is gone). On the CVE benchmark one report (Nextcloud 3.18.0) had 5 passing cards. Recall did not change (6 of 13); C06 now shows 3 related cards in MUST FIX instead of 1.
+- C03 (Omni-Notes): a check in the method that WROTE the tainted field now counts (6.2.8 calls `validatePath` before storing the Uri). Patched builds that drop the card: 6 of 6 (2.1.1: 5 of 6).
+- Engine switches ON by default: Parcel round trip (Parcel real drops 76 -> 0 KeePassDX, 4 -> 0 K-9, 2 -> 0 Chaka; flows unchanged in 6 corpus apps), WebViewClient / ActivityResult / Binder bridges (0 flow and 0 drop change in 6 corpus apps; CVE 6/13 with each of the first two on; the Binder CVE run was stopped at 10 of 24 APKs).
+- Still OFF: setter summary (KeePassDX real drops 51 -> 59, +2 LOW flows, 0 CVE gain) and sink-kind validation (CVE recall 5 of 13 with it on).
+- Self-scan, dev.apkrelab code: HIGH 0, MEDIUM 0, LOW 10 (2.1.1: 0 / 12 / 10). Rules now need the instruction, not a string naming the API (shell exec, biometric prompt, Jackson typing, Uri host check, Firebase URL host, code identifiers in the high-entropy rule). Left: the manifest card for REQUEST_INSTALL_PACKAGES (the app installs rebuilt APKs) and MD5 inside the bundled jadx library.
+- Renamed-code cards (Scope OBF) name the library packages the class uses, instead of only "run classify_class".
+- Blind round 3 false positive (simplenotes `o41.J(File)`): NOT fixed. A gate rule (approximate reach + renamed code) removed it but broke the Axis Pay dispatcher shape the owner asked to keep in MUST FIX; reverted.
+- Tests: Gradle 1012 pass, 0 fail, 0 lint errors (2.1.1: 1003). self_check on 6 lock apps: PASSED, recall and flow sets identical.
+- Device validation: not performed. The release is based on sandbox scans only.
+- versionCode 235: above the installed 234.
+
 ## 2.1.1 (versionCode 234)
 - New agent tool `diff_scans` (ReportDiff): compares two saved scan reports (findings, MUST FIX, exported components, permissions, deep links). Run on 2 real pairs without error: Paperless 33 -> 32 findings (1 fixed), Zulip 20 -> 20.
 - Engine: identical to 2.1.0. Real-CVE benchmark: MUST FIX recall 6 of 13, patched build drops the card in 5 of 6 (final scan identical to the 2.1.0 scan, 24 of 24 APKs).
