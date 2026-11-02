@@ -737,10 +737,12 @@ public final class CallGraph {
         }
     }
 
-    /** 2.2 (session 3b, bridge i): switch for the mutation check of the WebViewClient / WebChromeClient edges. */
+    /** 2.2 (session 3b, bridges i and ii): switches for the mutation checks of the WebViewClient / WebChromeClient and the ActivityResult callback edges. */
     public static boolean WEBVIEW_CLIENT_EDGES = !Boolean.getBoolean("apkrelab.noWebViewClientEdges");
+    public static boolean RESULT_CALLBACK_EDGES = !Boolean.getBoolean("apkrelab.noResultCallbackEdges");
     static final Set<String> WEBVIEW_CLIENT_NAMES = new HashSet<>(Arrays.asList(
             "shouldOverrideUrlLoading", "shouldInterceptRequest", "onPageStarted", "onPageFinished", "onJsPrompt", "onShowFileChooser"));
+    static final Set<String> RESULT_CALLBACK_NAMES = new HashSet<>(Arrays.asList("onActivityResult"));
 
     /**
      * 2.2 (session 3b): a callback object handed to the framework, which calls it later. {@code webView.setWebViewClient(c)} / {@code setWebChromeClient(c)} and
@@ -754,6 +756,8 @@ public final class CallGraph {
         String owner = in.targetOwner();
         if (WEBVIEW_CLIENT_EDGES && owner.equals("Landroid/webkit/WebView;") && (name.equals("setWebViewClient") || name.equals("setWebChromeClient"))) {
             hostCallbackClass(m, in, 1, WEBVIEW_CLIENT_NAMES, "webview");
+        } else if (RESULT_CALLBACK_EDGES && name.equals("registerForActivityResult") && in.uses.length >= 3) {
+            hostCallbackClass(m, in, 2, RESULT_CALLBACK_NAMES, "launcher");
         }
     }
 
