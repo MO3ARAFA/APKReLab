@@ -50,4 +50,35 @@ class SelfScanTighteningTest {
         assertFalse(Regex("[A-Za-z0-9][A-Za-z0-9-]{2,}(?:\\.[A-Za-z0-9-]+)?\\.(?:firebaseio\\.com|firebasedatabase\\.app)").containsMatchIn("firebaseio.com"))
         assertTrue(Regex("[A-Za-z0-9][A-Za-z0-9-]{2,}(?:\\.[A-Za-z0-9-]+)?\\.(?:firebaseio\\.com|firebasedatabase\\.app)").containsMatchIn("https://my-proj.firebaseio.com"))
     }
+
+    // 3.0.0 (C11): Kotlin code: Uri.getAuthority() compared with StringsKt.endsWith(String, String, Boolean)
+    @Test fun kotlinAuthoritySuffixCheckIsWeakHostValidation() {
+        val kt = m("    invoke-virtual {p1}, Landroid/net/Uri;->getAuthority()Ljava/lang/String;\n    move-result-object v0\n    const-string v1, \"wikipedia.org\"\n    const/4 v2, 0x0\n" +
+            "    invoke-static {v0, v1, v2}, Lkotlin/text/StringsKt__StringsJVMKt;->endsWith(Ljava/lang/String;Ljava/lang/String;Z)Z")
+        assertEquals(1, scan(DeeplinkHostValidationRule, kt).size)
+        val ktDefault = m("    invoke-virtual {p1}, Landroid/net/Uri;->getHost()Ljava/lang/String;\n    move-result-object v0\n    const-string v1, \"x.org\"\n    const/4 v2, 0x0\n    const/4 v3, 0x2\n    const/4 v4, 0x0\n" +
+            "    invoke-static {v0, v1, v2, v3, v4}, Lkotlin/text/StringsKt;->endsWith\$default(Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Z")
+        assertEquals(1, scan(DeeplinkHostValidationRule, ktDefault).size)
+        val exact = m("    invoke-virtual {p1}, Landroid/net/Uri;->getAuthority()Ljava/lang/String;\n    move-result-object v0\n    const-string v1, \"wikipedia.org\"\n" +
+            "    invoke-static {v0, v1}, Lkotlin/jvm/internal/Intrinsics;->areEqual(Ljava/lang/Object;Ljava/lang/Object;)Z")
+        assertTrue(scan(DeeplinkHostValidationRule, exact).isEmpty())                 // twin: an exact comparison is not weak
+    }
+
+    @Test fun aCheckOnAnotherValueOrAProperDotSuffixIsNotReported() {
+        val path = m("    invoke-virtual {p1}, Landroid/net/Uri;->getHost()Ljava/lang/String;\n    move-result-object v0\n    invoke-virtual {p1}, Landroid/net/Uri;->getPath()Ljava/lang/String;\n    move-result-object v1\n" +
+            "    const-string v2, \"/wiki\"\n    invoke-virtual {v1, v2}, Ljava/lang/String;->startsWith(Ljava/lang/String;)Z")
+        assertTrue(scan(DeeplinkHostValidationRule, path).isEmpty())                  // the startsWith is on the path, not the host
+        val dot = m("    invoke-virtual {p1}, Landroid/net/Uri;->getHost()Ljava/lang/String;\n    move-result-object v0\n    const-string v1, \".wikipedia.org\"\n" +
+            "    invoke-virtual {v0, v1}, Ljava/lang/String;->endsWith(Ljava/lang/String;)Z")
+        assertTrue(scan(DeeplinkHostValidationRule, dot).isEmpty())                   // a leading-dot suffix is the correct check
+        val noDot = m("    invoke-virtual {p1}, Landroid/net/Uri;->getHost()Ljava/lang/String;\n    move-result-object v0\n    const-string v1, \"wikipedia.org\"\n" +
+            "    invoke-virtual {v0, v1}, Ljava/lang/String;->endsWith(Ljava/lang/String;)Z")
+        assertEquals(1, scan(DeeplinkHostValidationRule, noDot).size)                   // twin
+    }
+
+    @Test fun aKotlinMoveCopyOfTheHostIsFollowed() {                                     // C11 shape: null check, move-object, the original register reused for the constant
+        val kt = m("    invoke-virtual {p1}, Landroid/net/Uri;->getAuthority()Ljava/lang/String;\n\n    .line 211\n    .line 212\n    .line 213\n    move-result-object v1\n    move-object v4, v1\n    const-string v1, \"wikipedia.org\"\n    const/4 v0, 0x0\n" +
+            "    invoke-static {v4, v1, v0}, Lkotlin/text/StringsKt__StringsJVMKt;->endsWith(Ljava/lang/String;Ljava/lang/String;Z)Z")
+        assertEquals(1, scan(DeeplinkHostValidationRule, kt).size)
+    }
 }
