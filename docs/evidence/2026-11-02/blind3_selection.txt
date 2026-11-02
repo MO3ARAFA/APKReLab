@@ -1,0 +1,19 @@
+Blind round 3 selection (docs/PLAN_3_0_0.md Item 5), committed BEFORE any APK was downloaded or scanned.
+index: https://f-droid.org/repo/index-v1.jar downloaded 2026-11-02, SHA-256 ca45b6c3fa1a4870fcabd9a53c33f5123090c7ba174f3df795fcff7ca713927b
+rule: tools/benchmark/blind_select.py index-v1.json touched.txt 20261102 12 5000000 android.permission.INTERNET
+touched list: 15141 names (the 4,733 names of rounds 1 and 2 plus every package-like token in the git-tracked files and ./private text files and the APK names of the benchmark folders); SHA-256 173647073f6aed895be8a280b798249a1d9657a741ede4e6081ee15d0819014a
+selected names found in the touched list: 0 (test 1 of Item 5 needs 0 of 12)
+
+package	versionCode	versionName	apkName	index SHA-256	size
+com.blogspot.e_kanivets.moneytracker	46	2.3.0	com.blogspot.e_kanivets.moneytracker_46.apk	faf689193af5f3db940091132f063913331144e63c258dca6d27216a73ae50c3	5940305
+de.nielstron.simplenextcloud	8	1.0.5	de.nielstron.simplenextcloud_8.apk	514223b015a0b6a75fe78c88a812503fb46020c9ee651db28a50050aca2601d6	13271955
+de.monocles.translator	604	1.5	de.monocles.translator_604.apk	6e152d764dda1e7c249d006cf8d59bce78150a0a35a82995bcc2aeaeb10fb7ed	9671247
+com.kaii.photos	214	v2.1.4	com.kaii.photos_214.apk	1b7fe96b4bb0b3df37699dad2c923a50263ef788aa5042beb6c5396c94a91d8d	20437816
+com.lesspass.android	900800704	9.8.7	com.lesspass.android_900800704.apk	e6222c89a1b447e0519a49c6e403f94034c678d96a20245d7b0084a2d7593412	23359138
+be.ppareit.swiftp_free	30700	3.7.0	be.ppareit.swiftp_free_30700.apk	ce8a2049fd231f87866867ae91eefa298761ba6a1703a60d4e757486d4d687c9	7088669
+at.linuxtage.Eventfahrplan	1700029	1.8.29-glt-Edition	at.linuxtage.Eventfahrplan_1700029.apk	3df246102fc871c0aba648d6bb1fd207cdbc3386d5f44ccd91a56c79d5f183c4	9031954
+com.albertodiaz.valencia_transit_reloaded	23	0.1.1	com.albertodiaz.valencia_transit_reloaded_23.apk	5a2244d4a38e04464a320022758f74a26755447c5b236036925ff2f47aa9ea41	18808742
+com.lazydevs.wristotle	12300	1.23.0	com.lazydevs.wristotle_12300.apk	249741fb74ff6439eaeee86a00a8e3db0dd7a20fd8c1f342b312d6ef5ec3d9a1	34476558
+dev.dettmer.simplenotes	69	2.21.0	dev.dettmer.simplenotes_69.apk	5b1fe3a7532c44385929df0a9a5320919b7671310c2cf9fbba7463e8f9d4f202	5553858
+com.fitforge.fitforge	23	2.1.0	com.fitforge.fitforge_23.apk	8bcd24f7366f7138b667ae43c341234b1adc7e0611349e06ff9b3f0e73b82cc7	21229361
+com.example.mempal	20	2.0	com.example.mempal_20.apk	d1b6354764c504db986381c9e9c7652718c12dc06b7ac49bf646f3a13c2b0327	28743874
