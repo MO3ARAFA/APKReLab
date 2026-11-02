@@ -734,8 +734,19 @@ public final class CallGraph {
             for (String k : lifecycleKeys(type, FRAGMENT_NAMES)) addEdge(caller, insn, k, "frag");
         } else if (SUSPEND_LAMBDAS && base.startsWith("Lkotlin/coroutines/jvm/internal/") && (base.endsWith("SuspendLambda;") || base.endsWith("ContinuationImpl;"))) {
             for (String k : lifecycleKeys(type, SUSPEND_NAMES)) addEdge(caller, insn, k, "suspend");
+        } else if (BINDER_HOSTING && base.equals("Landroid/os/Binder;")) {
+            for (String k : lifecycleKeys(type, BINDER_NAMES)) addEdge(caller, insn, k, "binder");
         }
     }
+
+    /**
+     * 2.2 (session 3b, bridge iii; OsmAnd OsmandAidlServiceV2: the Service builds an AIDL Stub (a Binder) in its constructor and onBind hands it out): the framework calls a Binder's
+     * onTransact when another process calls it, and the Stub's onTransact calls the interface methods the service implements. Nothing in app code calls onTransact, so every
+     * method behind an exported service's binder had no incoming edge. A reached method that instantiates a Binder subclass now has a "binder" edge to its onTransact. REACH ONLY: the
+     * Parcel reads in onTransact are already sources (TaintIr PARCEL_ENTRY_METHODS); the reply Parcel is not made a sink (that would be a rule).
+     */
+    public static boolean BINDER_HOSTING = !Boolean.getBoolean("apkrelab.noBinderHosting");
+    static final Set<String> BINDER_NAMES = new HashSet<>(Arrays.asList("onTransact"));
 
     /** 2.2 (session 3b, bridges i and ii): switches for the mutation checks of the WebViewClient / WebChromeClient and the ActivityResult callback edges. */
     public static boolean WEBVIEW_CLIENT_EDGES = !Boolean.getBoolean("apkrelab.noWebViewClientEdges");
