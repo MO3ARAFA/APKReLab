@@ -42,7 +42,7 @@ public class IrSinkKindValidationTest {
         throw new AssertionError("no flow titled " + title);
     }
 
-    /** The sink-kind match is OFF by default (SsaBridge.SINK_KIND_VALIDATION); every item() built by these tests is built with it on. */
+    /** The sink-kind match is ON by default since 2.1.4; on() sets it explicitly so these tests do not depend on the default. */
     static SsaBridge.Item on(String src, String validation, String sink, String title) {
         boolean was = SsaBridge.SINK_KIND_VALIDATION;
         SsaBridge.SINK_KIND_VALIDATION = true;
@@ -92,10 +92,23 @@ public class IrSinkKindValidationTest {
 
     // ---- mutant: every validation matches every sink kind
     @Test public void mutantEveryValidationCountsEverywhere() {
-        // switch off (the default): a wrong-kind check counts, as in 2.1.0
-        SsaBridge.Item it = item(STR_SRC, STARTS_HTTP, FILE_SINK, TaintIr.T_FILE);
-        assertTrue(it.detail, it.detail.contains("The chain also contains validation-like calls"));
+        // switch off (the mutation): a wrong-kind check counts again, as in 2.1.0
+        boolean was = SsaBridge.SINK_KIND_VALIDATION;
+        SsaBridge.SINK_KIND_VALIDATION = false;
+        try {
+            SsaBridge.Item it = item(STR_SRC, STARTS_HTTP, FILE_SINK, TaintIr.T_FILE);
+            assertTrue(it.detail, it.detail.contains("The chain also contains validation-like calls"));
+        } finally { SsaBridge.SINK_KIND_VALIDATION = was; }
     }
 
-    @Test public void theSinkKindMatchIsOffByDefault() { assertFalse(SsaBridge.SINK_KIND_VALIDATION); }
+    // 2.1.4 (real-CVE benchmark C05, ownCloud 2.21: the only check on the path is Uri.getScheme(), a content-or-file dispatch, before a FileOutputStream)
+    static final String SCHEME = "    invoke-static {v3}, Landroid/net/Uri;->parse(Ljava/lang/String;)Landroid/net/Uri;\n    move-result-object v8\n    invoke-virtual {v8}, Landroid/net/Uri;->getScheme()Ljava/lang/String;\n";
+    @Test public void aSchemeTestDoesNotSuppressAFileSink() {
+        doesNotCount(item(STR_SRC, "", FILE_SINK, TaintIr.T_FILE), on(STR_SRC, SCHEME, FILE_SINK, TaintIr.T_FILE));
+    }
+    @Test public void aSchemeTestStillSuppressesAWebViewSink() {                     // twin: for a WebView the scheme is the right kind of check
+        counts(item(STR_SRC, "", WEB_SINK, TaintIr.T_WEB), on(STR_SRC, SCHEME, WEB_SINK, TaintIr.T_WEB));
+    }
+
+    @Test public void theSinkKindMatchIsOnByDefault() { assertTrue(SsaBridge.SINK_KIND_VALIDATION); }
 }

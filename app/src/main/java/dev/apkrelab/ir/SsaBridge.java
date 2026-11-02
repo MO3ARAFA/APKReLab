@@ -310,7 +310,10 @@ public final class SsaBridge {
      * (file and content-URI cards of the Nextcloud / ownCloud family went from evidence 0.3 to 1.0 and crowded the three MUST FIX slots); with it off (cve_run7_rc_noSinkKind.txt) the
      * headline is 6 of 13 and 5 again. Do not turn it on without a new measurement of that benchmark. Switch on for tests: -Dapkrelab.sinkKindValidation=true.
      */
-    public static boolean SINK_KIND_VALIDATION = Boolean.getBoolean("apkrelab.sinkKindValidation");
+    // 2.1.4: ON by default. Re-measured after the MUST FIX cap was removed (2.1.2): CVE benchmark MUST FIX recall 6 -> 7 of 13 (C05: the only check on its path is
+    // Uri.getScheme() before a FileOutputStream), 0 cases lost, self_check identical. The 2.1.1 loss (6 -> 5 of 13) came from the cap of 3 that the extra cards crowded.
+    // Off: -Dapkrelab.noSinkKindValidation=true.
+    public static boolean SINK_KIND_VALIDATION = !Boolean.getBoolean("apkrelab.noSinkKindValidation");
     private static final Pattern V_PATH = Pattern.compile("->(getCanonicalPath|getCanonicalFile|normalize)\\(|const-string [vp]\\d+, \"\\.\\.\"");
     private static final Pattern V_HOST = Pattern.compile("->(getHost|getScheme|getAuthority|isHttpsUrl|isValidUrl)\\(");
     private static final Pattern V_PREFIX = Pattern.compile("Ljava/lang/String;->startsWith\\(");

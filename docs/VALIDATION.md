@@ -148,6 +148,12 @@ NOT measured: a device run of 2.1.0; WE Wallet / JustMarkets / Axis Pay 3.1.0 th
 - Axis Pay 3.1.0 report 9 had no Hybrid section although HybridInspector is in main: `HybridInspector.clear()` ran at the start of every code scan and wiped what the resource scan had published at APK load.
 - `im2.success -> f51.run` kept reach YES: the hub rule required a framework owner and `im2` is an R8-renamed interface of the app.
 
+## 2.1.4 Module 1: missed-case causes and sink-kind validation (2026-11-02; tuning set, NOT blind)
+- Causes of the 7 missed cases (from the 2.1.2 reports `reports_212`, card text + smali of C05, C11, C12): reach 2 (C01, C12), validation 1 (C05), sink severity 1 (C04), source 1 (C08), IPC source 1 (C14), rule coverage 1 (C11).
+- Sink-kind validation on, 24 of 24 APKs (`tools/benchmark/cve/runs/run11_214_sinkkind_on.txt`): MUST FIX recall 7 of 13 (2.1.2: 6), patched drops 6 of 7; C02, C03, C06, C07, C09, C10 unchanged.
+- New MUST FIX cards: 4 distinct issues: 2 true positives (C05; owncloudnewsreader NewFeedActivity, low impact), 2 uncertain (Nextcloud / ownCloud copyFile via the not-exported OperationsService, reachable only under the open-redirector assumption).
+- self_check (6 lock apps) with it on: PASSED, recall line identical to 2.1.3.
+
 ## 2.1.2 CVE rescan and self-check (2026-11-02; tuning set, NOT blind)
 - Full CVE benchmark, 24 of 24 APKs, final engine (`tools/benchmark/cve/runs/run10_212_final.txt`): MUST FIX recall 6 of 13; the patched build drops the card in 6 of 6 (2.1.1: 5 of 6; the change is C03).
 - MUST FIX without a cap: C06 3 related of 5 listed, C07 1 of 6; no case entered MUST FIX that was not there with the cap of 3.

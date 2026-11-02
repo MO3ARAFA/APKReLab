@@ -2,6 +2,14 @@
 
 Release notes in short. The full record (measurements, what was not measured, every decision) is `docs/internal/HANDOFF.md`; numbers are in `docs/internal/PERF.md`.
 
+## 2.1.4 (versionCode 237)
+- Module 1, step 1 (measurement, no code): why each of the 7 missed CVE cases is not in MUST FIX. Reach 2 (C01 WorkManager data written in a Conductor controller; C12 the Intent to SingleWebViewActivity is built in an R8-merged synthetic lambda), validation 1 (C05: the only check on the path is Uri.getScheme()), sink severity 1 (C04: opening a content URI is a MEDIUM sink), source 1 (C08: only a SharedPreferences flow found), IPC source 1 (C14: AIDL parameters are not a source), rule coverage 1 (C11: Kotlin StringsKt.endsWith on getAuthority, a MEDIUM rule). Aliasing through wrapper objects explains none of the 7.
+- Module 1, step 2: sink-kind validation ON by default (a check counts only when it can restrict that kind of sink: a scheme / host / prefix test does not restrict a file path). CVE MUST FIX recall 6 -> 7 of 13 (C05), 0 cases lost; the patched build drops the card in 6 of 7 (the patched C05 keeps it). Its 2.1.1 loss (6 -> 5 of 13) came from the cap of 3, removed in 2.1.2.
+- New MUST FIX cards on the CVE set: 11 cards in 9 reports, 4 distinct issues read in the code: C05 (true positive, the CVE), owncloudnewsreader NewFeedActivity (exported deep-link activity reads a file path from the Intent: true positive, low impact), Nextcloud FileStorageUtils.copyFile and ownCloud FileDataStorageManager.copyFile (the Intent is read in the not-exported OperationsService; the private-component rule is off for the whole app because an exported component relaunches an Intent it received: uncertain, not judged a true positive).
+- Gates: self_check 6 lock apps PASSED, recall line identical; Gradle 1018 pass / 0 fail / 0 lint errors; self-scan dev.apkrelab 0 HIGH / 0 MEDIUM / 10 LOW. Corpus taint drops: unchanged by construction (the switch only changes card confidence, not propagation; not re-run).
+- Not done (step 2 picked one change): C01 / C12 reach, C04 sink severity, C08 / C14 sources, C11 Kotlin string functions in the host rule.
+- Device validation: not performed. The release is based on sandbox scans only.
+
 ## 2.1.3 (versionCode 236)
 - Background index: pauses only when the battery is at most 5% and the phone is not charging (`PowerPolicy`); Battery Saver alone no longer pauses it (JustMarkets report: "Index paused at 2/59667"). 3 tests (5% pauses; 40% and 6% with Battery Saver do not; charging or unknown level never pauses).
 - Engine: identical to 2.1.2 (no taint-analysis change). README: new section "What This Tool Does NOT Do Well (Known Limitations)".
