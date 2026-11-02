@@ -298,16 +298,60 @@ object DeeplinkHostValidationRule : ScanRule {
     override val cwes = listOf("CWE-939")
     override val confidence = "MEDIUM"
 
+    // 3.0.0 (real-CVE benchmark C11, Wikipedia: Uri.getAuthority() compared with Kotlin's StringsKt.endsWith("wikipedia.org")): the authority is the host (plus user info /
+    // port), Kotlin code calls the stdlib (kotlin/text/StringsKt, its __StringsJVMKt / __StringsKt parts, the $default variants) instead of java.lang.String, and the test must
+    // be on the HOST value itself (the register the getter returned, until it is overwritten): a startsWith("/wiki") on the path in the same method is not a host check.
+    // endsWith(".example.com") (a leading dot) is the correct suffix test and is not reported.
+    private val hostCall = rx("invoke-[a-z/]+ \\{[^}]*\\}, L(?:android/net/Uri|java/net/URL|java/net/URI);->(?:getHost|getAuthority)\\(\\)Ljava/lang/String;")
+    private val weakCall = rx("^\\s*invoke-[a-z/]+ \\{([^}]*)\\}, (?:Ljava/lang/String;|Lkotlin/text/StringsKt(?:__[A-Za-z]+Kt)?;)->(endsWith|startsWith|contains|indexOf)(?:\\\$default)?\\(")
+
+    /** The registers of an invoke's argument list "v1, v2" or a range "v1 .. v3" (range: first and last only, enough for the first two arguments). */
+    private fun regs(list: String): List<String> = list.split(',', '.').map { it.trim() }.filter { it.isNotEmpty() }
+
+    /** The last const-string written to [reg] before line [at], or null. */
+    private fun constBefore(lines: List<String>, at: Int, reg: String): String? {
+        val re = Regex("^\\s*const-string(?:/jumbo)? " + Regex.escape(reg) + ", \"(.*)\"\\s*$")
+        for (k in at - 1 downTo maxOf(0, at - 40)) re.find(lines[k])?.let { return it.groupValues[1] }
+        return null
+    }
+
     override fun scan(ctx: RuleContext): List<Finding> {
         if (ctx.scope == SecurityScanner.Scope.LIB) return emptyList()
         val out = ArrayList<Finding>()
         for (m in OvaaHelpers.methods(ctx.text)) {
-            val host = rx("invoke-[a-z/]+ \\{[^}]*\\}, (?:Landroid/net/Uri;->getHost\\(\\)|Ljava/net/URL;->getHost\\(\\))").find(m.body) ?: continue
-            val weak = rx("invoke-[a-z/]+ \\{[^}]*\\}, Ljava/lang/String;->(endsWith|startsWith|contains|indexOf)\\(").find(m.body.substring(host.range.first)) ?: continue
+            val lines = m.body.split('\n')
+            val starts = IntArray(lines.size).also { a -> var o = 0; for (k in lines.indices) { a[k] = o; o += lines[k].length + 1 } }
+            var hit: Pair<Int, String>? = null
+            for (k in lines.indices) {
+                if (!hostCall.containsMatchIn(lines[k])) continue
+                // the next INSTRUCTION after the call (.line / labels / blank lines skipped) must be its move-result-object
+                val mr = (k + 1 until lines.size).firstOrNull { val x = lines[it].trim(); x.isNotEmpty() && !x.startsWith(".") && !x.startsWith("#") }
+                    ?.takeIf { lines[it].trim().startsWith("move-result-object ") } ?: continue
+                // the registers that hold the host: the getter's result and its move-object copies (Kotlin copies it after the null check), until each is overwritten
+                val hosts = HashSet<String>().apply { add(lines[mr].trim().removePrefix("move-result-object ").trim()) }
+                val write = Regex("^\\s*(move-result-object|move-object(?:/from16|/16)?|const-string(?:/jumbo)?|const/4|const|iget-object|sget-object|new-instance|aget-object) (v\\d+|p\\d+)\\b(?:, (v\\d+|p\\d+))?")
+                for (q in mr + 1 until lines.size) {
+                    val w = weakCall.find(lines[q])
+                    if (w != null) {
+                        val r = regs(w.groupValues[1])
+                        if (r.isNotEmpty() && r[0] in hosts) {
+                            val op = w.groupValues[2]
+                            val arg = if (r.size > 1) constBefore(lines, q, r[1]) else null
+                            if (!(op == "endsWith" && arg != null && arg.startsWith("."))) { hit = q to op; break }
+                        }
+                    }
+                    val wr = write.find(lines[q]) ?: continue
+                    val dst = wr.groupValues[2]
+                    if (wr.groupValues[1].startsWith("move-object") && wr.groupValues[3] in hosts) hosts.add(dst) else hosts.remove(dst)
+                    if (hosts.isEmpty()) break
+                }
+                if (hit != null) break
+            }
+            val (line, op) = hit ?: continue
             out.add(ctx.finding(Severity.MEDIUM, title,
-                "The host of a Uri is read and then compared with String.${weak.groupValues[1]}(). Checks like that accept hosts such as evil-example.com or example.com.evil.com, so a deep link can point the app (WebView, login, download) at an attacker's server.",
+                "The host of a Uri is read and then compared with $op(). Checks like that accept hosts such as evil-example.com or example.com.evil.com, so a deep link can point the app (WebView, login, download) at an attacker's server.",
                 "Compare the whole host with an allow-list using equals(), or require host == \"example.com\" || host.endsWith(\".example.com\") (note the leading dot) after parsing with a real URI parser.",
-                m.start + host.range.first, "CWE-939"))
+                m.start + starts[line], "CWE-939"))
         }
         return out
     }

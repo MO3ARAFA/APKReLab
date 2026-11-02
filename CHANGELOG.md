@@ -2,6 +2,12 @@
 
 Release notes in short. The full record (measurements, what was not measured, every decision) is `docs/internal/HANDOFF.md`; numbers are in `docs/internal/PERF.md`.
 
+## 2.1.5 (versionCode 238)
+- Weak host validation rule: the compared value must be the host itself (getHost or getAuthority, followed through register copies); Kotlin's StringsKt.endsWith / startsWith / contains count; endsWith(".example.com") with a leading dot is the correct check and is not reported. Wikipedia (C11): 7 cards -> 3, and the MainActivity check of the advisory is now found (MEDIUM; the MUST FIX headline does not change: 7 of 13).
+- self_check 6 lock apps: PASSED, recall line identical. 4 new tests (Kotlin authority suffix, $default variant, move copy, path / leading-dot twins).
+- Not done: AI Hunt (an AI pass over exported components without a HIGH card) was not built in this session.
+- Device validation: not performed. The release is based on sandbox scans only.
+
 ## 2.1.4 (versionCode 237)
 - Module 1, step 1 (measurement, no code): why each of the 7 missed CVE cases is not in MUST FIX. Reach 2 (C01 WorkManager data written in a Conductor controller; C12 the Intent to SingleWebViewActivity is built in an R8-merged synthetic lambda), validation 1 (C05: the only check on the path is Uri.getScheme()), sink severity 1 (C04: opening a content URI is a MEDIUM sink), source 1 (C08: only a SharedPreferences flow found), IPC source 1 (C14: AIDL parameters are not a source), rule coverage 1 (C11: Kotlin StringsKt.endsWith on getAuthority, a MEDIUM rule). Aliasing through wrapper objects explains none of the 7.
 - Module 1, step 2: sink-kind validation ON by default (a check counts only when it can restrict that kind of sink: a scheme / host / prefix test does not restrict a file path). CVE MUST FIX recall 6 -> 7 of 13 (C05), 0 cases lost; the patched build drops the card in 6 of 7 (the patched C05 keeps it). Its 2.1.1 loss (6 -> 5 of 13) came from the cap of 3, removed in 2.1.2.
