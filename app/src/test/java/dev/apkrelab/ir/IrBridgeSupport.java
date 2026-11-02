@@ -25,6 +25,14 @@ final class IrBridgeSupport {
         return null;
     }
 
+    /** The engine switches of sessions 3a.1 and 3b are OFF by default; the positive bridge tests run with them on. */
+    static TaintIr.Flow flowOn(String target, String... smali) {
+        boolean w = CallGraph.WEBVIEW_CLIENT_EDGES, r = CallGraph.RESULT_CALLBACK_EDGES, b = CallGraph.BINDER_HOSTING, p = TaintIr.PARCEL_ROUNDTRIP;
+        CallGraph.WEBVIEW_CLIENT_EDGES = true; CallGraph.RESULT_CALLBACK_EDGES = true; CallGraph.BINDER_HOSTING = true; TaintIr.PARCEL_ROUNDTRIP = true;
+        try { return flowIn(target, smali); }
+        finally { CallGraph.WEBVIEW_CLIENT_EDGES = w; CallGraph.RESULT_CALLBACK_EDGES = r; CallGraph.BINDER_HOSTING = b; TaintIr.PARCEL_ROUNDTRIP = p; }
+    }
+
     static String activity(String body) {
         return ".class public Lt/A;\n.super Landroid/app/Activity;\n.field public w:Landroid/webkit/WebView;\n" + CTOR
             + ".method public onCreate(Landroid/os/Bundle;)V\n    .locals 6\n" + body + "    return-void\n.end method\n";

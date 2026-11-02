@@ -14,7 +14,7 @@ public class IrResultCallbackBridgeTest {
     static final String AR_REG = "    invoke-virtual {p0, v3, v4}, Lt/A;->registerForActivityResult(Landroidx/activity/result/contract/ActivityResultContract;Landroidx/activity/result/ActivityResultCallback;)Landroidx/activity/result/ActivityResultLauncher;\n";
 
     @Test public void anActivityResultCallbackThatIsRegisteredIsReached() {
-        TaintIr.Flow f = flowIn("Lt/T;", activity(AR_NEW + AR_REG), AR_CB);
+        TaintIr.Flow f = flowOn("Lt/T;", activity(AR_NEW + AR_REG), AR_CB);
         assertTrue(f != null && f.reachable);
     }
     @Test public void anActivityResultCallbackThatIsNeverRegisteredIsNotReached() {
@@ -22,4 +22,8 @@ public class IrResultCallbackBridgeTest {
         assertTrue(f == null || !f.reachable);
     }
 
+    @Test public void theBridgeIsOffByDefault() {
+        TaintIr.Flow f = flowIn("Lt/T;", activity(AR_NEW + AR_REG), AR_CB);
+        assertTrue(f == null || !f.reachable);
+    }
 }

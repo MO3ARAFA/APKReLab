@@ -1163,7 +1163,8 @@ public final class TaintIr {
     /** 2.0.0 pillar 1.1 switches (mutation checks): constructor field capture, async dispatch to the concrete Runnable, FunctionN devirtualisation. */
     static boolean CTOR_CAPTURE = !Boolean.getBoolean("apkrelab.noCtorCapture");
     /** 2.2 (session 3a.1): switch for the mutation check of the Parcel round trip (a value written to a Parcel is what a read of the SAME Parcel object returns). */
-    static boolean PARCEL_ROUNDTRIP = !Boolean.getBoolean("apkrelab.noParcelRoundTrip");
+    // OFF BY DEFAULT in 2.1.1 (version decision tree rule 2, blind round 3: a MUST FIX false positive present with every session switch off, so the engine changes are not shipped active). Switch on: -Dapkrelab.parcelRoundTrip=true.
+    static boolean PARCEL_ROUNDTRIP = Boolean.getBoolean("apkrelab.parcelRoundTrip");
     /**
      * 2.2 (session 3a.1): the setter summary: a small instance method that stores its parameter into a field of "this" hands the caller's taint to that field, like a constructor does
      * (CTOR_CAPTURE). OFF BY DEFAULT since the 3.0.0 release-candidate rescan: it added a MUST FIX card on Omni-Notes (DbHelper, a SQL flow whose value is a boxed Long, BaseNote.get_id)

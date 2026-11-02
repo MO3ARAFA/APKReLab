@@ -52,10 +52,20 @@ public class IrParcelRoundTripTest {
         return out;
     }
 
+    /** The Parcel round trip is OFF by default (TaintIr.PARCEL_ROUNDTRIP); the positive test switches it on. */
     @Test public void parcelRoundTripKeepsTheTaintOfAWrittenValue() {
-        List<TaintIr.Flow> f = flows(parcelActivity(true));
-        assertEquals(1, f.size());
-        assertTrue(f.get(0).source, f.get(0).source.startsWith("Intent."));
+        boolean was = TaintIr.PARCEL_ROUNDTRIP;
+        TaintIr.PARCEL_ROUNDTRIP = true;
+        try {
+            List<TaintIr.Flow> f = flows(parcelActivity(true));
+            assertEquals(1, f.size());
+            assertTrue(f.get(0).source, f.get(0).source.startsWith("Intent."));
+        } finally { TaintIr.PARCEL_ROUNDTRIP = was; }
+    }
+
+    @Test public void theParcelRoundTripIsOffByDefault() {
+        assertFalse(TaintIr.PARCEL_ROUNDTRIP);
+        assertEquals(0, flows(parcelActivity(true)).size());
     }
 
     @Test public void aParcelNothingWasWrittenToStaysClean() { assertEquals(0, flows(parcelActivity(false)).size()); }

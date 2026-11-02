@@ -745,12 +745,13 @@ public final class CallGraph {
      * method behind an exported service's binder had no incoming edge. A reached method that instantiates a Binder subclass now has a "binder" edge to its onTransact. REACH ONLY: the
      * Parcel reads in onTransact are already sources (TaintIr PARCEL_ENTRY_METHODS); the reply Parcel is not made a sink (that would be a rule).
      */
-    public static boolean BINDER_HOSTING = !Boolean.getBoolean("apkrelab.noBinderHosting");
+    // The three bridge switches (BINDER_HOSTING, WEBVIEW_CLIENT_EDGES, RESULT_CALLBACK_EDGES) are OFF BY DEFAULT in 2.1.1 (version decision tree rule 2). Switch on: -Dapkrelab.binderHosting=true, webViewClientEdges, resultCallbackEdges.
+    public static boolean BINDER_HOSTING = Boolean.getBoolean("apkrelab.binderHosting");
     static final Set<String> BINDER_NAMES = new HashSet<>(Arrays.asList("onTransact"));
 
     /** 2.2 (session 3b, bridges i and ii): switches for the mutation checks of the WebViewClient / WebChromeClient and the ActivityResult callback edges. */
-    public static boolean WEBVIEW_CLIENT_EDGES = !Boolean.getBoolean("apkrelab.noWebViewClientEdges");
-    public static boolean RESULT_CALLBACK_EDGES = !Boolean.getBoolean("apkrelab.noResultCallbackEdges");
+    public static boolean WEBVIEW_CLIENT_EDGES = Boolean.getBoolean("apkrelab.webViewClientEdges");
+    public static boolean RESULT_CALLBACK_EDGES = Boolean.getBoolean("apkrelab.resultCallbackEdges");
     static final Set<String> WEBVIEW_CLIENT_NAMES = new HashSet<>(Arrays.asList(
             "shouldOverrideUrlLoading", "shouldInterceptRequest", "onPageStarted", "onPageFinished", "onJsPrompt", "onShowFileChooser"));
     static final Set<String> RESULT_CALLBACK_NAMES = new HashSet<>(Arrays.asList("onActivityResult"));

@@ -19,7 +19,7 @@ public class IrBinderBridgeTest {
     }
 
     @Test public void aBinderTheServiceBuildsHasItsOnTransactReached() {
-        TaintIr.Flow f = flowIn("Lt/T;", service(true), BINDER);
+        TaintIr.Flow f = flowOn("Lt/T;", service(true), BINDER);
         assertTrue(f != null && f.reachable);
     }
     @Test public void aBinderClassNobodyBuildsIsNotReached() {
@@ -27,4 +27,8 @@ public class IrBinderBridgeTest {
         assertTrue(f == null || !f.reachable);
     }
 
+    @Test public void theBridgeIsOffByDefault() {
+        TaintIr.Flow f = flowIn("Lt/T;", service(true), BINDER);
+        assertTrue(f == null || !f.reachable);
+    }
 }

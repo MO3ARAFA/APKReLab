@@ -14,7 +14,7 @@ public class IrWebViewClientBridgeTest {
     static final String WV_SET = "    iget-object v5, p0, Lt/A;->w:Landroid/webkit/WebView;\n    invoke-virtual {v5, v4}, Landroid/webkit/WebView;->setWebViewClient(Landroid/webkit/WebViewClient;)V\n";
 
     @Test public void aWebViewClientThatTheActivityInstallsIsReached() {
-        TaintIr.Flow f = flowIn("Lt/T;", activity(WV_NEW + WV_SET), WV_CLIENT);
+        TaintIr.Flow f = flowOn("Lt/T;", activity(WV_NEW + WV_SET), WV_CLIENT);
         assertTrue(f != null && f.reachable);
     }
     @Test public void aWebViewClientThatIsNeverInstalledIsNotReached() {
@@ -22,4 +22,8 @@ public class IrWebViewClientBridgeTest {
         assertTrue(f == null || !f.reachable);
     }
 
+    @Test public void theBridgeIsOffByDefault() {
+        TaintIr.Flow f = flowIn("Lt/T;", activity(WV_NEW + WV_SET), WV_CLIENT);
+        assertTrue(f == null || !f.reachable);
+    }
 }
