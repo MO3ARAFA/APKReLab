@@ -897,6 +897,8 @@ object SecurityScanner {
             if (looksLikeName(s)) continue
             if (s.count { it == '/' } > 2) continue
             if (s.startsWith("L") && s.endsWith(";")) continue
+            // 3.0.0: a dex type descriptor or member reference ("Lpkg/Cls;->name(...)V"), the text a scanner or a rule keeps about code: not a secret
+            if (s.contains(";->") || (s.startsWith("L") && s.contains(';') && s.indexOf('/') in 1 until s.indexOf(';')) || s.startsWith("[L")) continue
             val entropy = shannonEntropy(s)
             if (entropy < 3.8 || s.toSet().size < 10) continue
             if (charClasses(s) < 3) continue

@@ -45,7 +45,7 @@ object AndroGoatChecks {
         SecretRule("Hardcoded HTTP Basic credentials", rx("^Basic [A-Za-z0-9+/]{16,}={0,2}$"), Severity.MEDIUM,
             "Base64 is not encryption: it decodes to user:password. Remove it, rotate that password, and authenticate with a per-user token from your backend."),
         SecretRule(
-            "Firebase Realtime Database URL", rx("[A-Za-z0-9.-]*(?:firebaseio\\.com|firebasedatabase\\.app)"), Severity.MEDIUM,
+            "Firebase Realtime Database URL", rx("[A-Za-z0-9][A-Za-z0-9-]{2,}(?:\\.[A-Za-z0-9-]+)?\\.(?:firebaseio\\.com|firebasedatabase\\.app)"), Severity.MEDIUM,
             "Open this URL + \"/.json\" from a test device you own: if it returns data, the database rules allow public reads. Lock the rules down (auth != null) and require authentication."
         ),
         SecretRule(
@@ -195,7 +195,7 @@ object AndroGoatChecks {
         }
 
         // --- Biometric ---
-        rx("Landroidx/biometric/BiometricPrompt;->authenticate\\(Landroidx/biometric/BiometricPrompt\\\$PromptInfo;\\)V").find(text)?.let {
+        rx("invoke-[a-z/]+ \\{[^}]*\\}, Landroidx/biometric/BiometricPrompt;->authenticate\\(Landroidx/biometric/BiometricPrompt\\\$PromptInfo;\\)V").find(text)?.let {
             add(Severity.MEDIUM, "Biometric prompt without CryptoObject",
                 "authenticate(PromptInfo) is used without a CryptoObject, so the result is just a boolean callback. Anyone who can hook or patch the callback (Frida, smali patching) can fake a successful login.",
                 "Bind the biometric check to a Keystore key (setUserAuthenticationRequired(true)) and use authenticate(PromptInfo, CryptoObject), so the secret can only be unlocked by a real authentication.",
@@ -243,13 +243,14 @@ object AndroGoatChecks {
         // mobile backend bugs (HospitalGown/Comparitech studies found tens of thousands of exposed apps), so "the SDK
         // is here, go check its rules" is still worth flagging even without a URL in hand.
         if (scope != Scope.LIB) {
-            val fbType = rx("Lcom/google/firebase/database/FirebaseDatabase;|Lcom/google/firebase/firestore/FirebaseFirestore;").find(text)
+            // 3.0.0: an instruction that references the SDK type (invoke / field access / new-instance / const-class), not a string that spells its name
+            val fbType = rx("^[ \\t]*(?:invoke-|[is]get|[is]put|new-instance|const-class)[^\\n\"]*(Lcom/google/firebase/database/FirebaseDatabase;|Lcom/google/firebase/firestore/FirebaseFirestore;)", RegexOption.MULTILINE).find(text)
             if (fbType != null) {
-                val isFirestore = fbType.value.contains("firestore")
+                val isFirestore = fbType.groupValues[1].contains("firestore")
                 var urlLit: String? = null
                 for (lm in literalRe.findAll(text)) {
                     val lit = lm.groupValues[1]
-                    if (lit.contains("firebaseio.com") || lit.contains("firebasedatabase.app")) { urlLit = lit; break }
+                    if (rx("[A-Za-z0-9][A-Za-z0-9-]{2,}(?:\\.[A-Za-z0-9-]+)?\\.(?:firebaseio\\.com|firebasedatabase\\.app)").containsMatchIn(lit)) { urlLit = lit; break }
                 }
                 if (urlLit != null) {
                     add(Severity.MEDIUM, "Firebase Realtime Database URL in code",
