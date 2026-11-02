@@ -1179,6 +1179,8 @@ public final class TaintIr {
      */
     /** 2.0.0 pillar 1.1 switches (mutation checks): constructor field capture, async dispatch to the concrete Runnable, FunctionN devirtualisation. */
     static boolean CTOR_CAPTURE = !Boolean.getBoolean("apkrelab.noCtorCapture");
+    /** 3.0.0: switch for the mutation check of the ActivityResultContract.parseResult shape in isActivityResultIntent. */
+    static boolean RESULT_CONTRACT_SHAPE = !Boolean.getBoolean("apkrelab.noResultContractShape");
     /** 3.0.0: the self-call field capture (Summary.selfFields); OFF until measured, -Dapkrelab.selfCallCapture=true. */
     static boolean SELF_CALL_CAPTURE = Boolean.getBoolean("apkrelab.selfCallCapture");
     /** 2.2 (session 3a.1): switch for the mutation check of the Parcel round trip (a value written to a Parcel is what a read of the SAME Parcel object returns). */
@@ -1686,6 +1688,11 @@ public final class TaintIr {
             // 0.83.0 (AnkiDroid `b8.a(IILandroid/content/Intent;)Z` = androidx ActivityResultRegistry.dispatchResult, renamed by R8): by SHAPE.
             // (int requestCode, int resultCode, Intent data) is the shape of an activity answer whatever the method is called
             boolean helper = m.desc.contains("IILandroid/content/Intent;)");
+            // 3.0.0 (blind round 3 false positive, simplenotes c5.S(Intent, int) = androidx ActivityResultContract.parseResult, renamed and R8-merged; the picked file's
+            // Uri went to o41.J(File) as a MUST FIX card): (int resultCode, Intent) -> Object, in either order, is the shape of a contract's parseResult: an answer too
+            boolean contract = RESULT_CONTRACT_SHAPE && !m.isStatic
+                    && (m.desc.equals("(ILandroid/content/Intent;)Ljava/lang/Object;") || m.desc.equals("(Landroid/content/Intent;I)Ljava/lang/Object;"));
+            if (contract) return true;      // a contract's parseResult has no other Intent than its parameter (R8 reuses p1 for other values in other branches: no param proof)
             return (m.name.equals("onActivityResult") || helper) && viaIntentParam(v, 0);
         }
 
