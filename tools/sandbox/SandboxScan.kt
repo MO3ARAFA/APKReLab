@@ -34,7 +34,7 @@ fun main(args: Array<String>) {
     val entries = mc.exportedComponents.map { mc.smaliTypeOf(it) }
     // big apps: "nossa" skips the whole-app SSA here (the device groups it with ScopePlanner; measure it with MeasureBig instead)
     val items = if (args.size > 3 && args[3] == "nossa") emptyList() else
-        dev.apkrelab.ir.SsaBridge.newFlows(texts.filter { (args.size > 3 && args[3] == "withlibs") || SecurityScanner.scopeOf(it.first, pkg) != SecurityScanner.Scope.LIB }.map { dev.apkrelab.ir.SmaliParser.parse(it.second) }, entries, ArrayList<dev.apkrelab.ir.TaintIr.Old>())
+        dev.apkrelab.ir.SsaBridge.newFlows(texts.filter { (args.size > 3 && args[3] == "withlibs") || (SecurityScanner.scopeOf(it.first, pkg) != SecurityScanner.Scope.LIB || SecurityScanner.appCodeInLibraryName(it.first, it.second, pkg)) }.map { dev.apkrelab.ir.SmaliParser.parse(it.second) }, entries, ArrayList<dev.apkrelab.ir.TaintIr.Old>())
     val idx = texts.withIndex().associate { it.value.first to it.index }
     for (item in items) {
         val sev = SecurityScanner.Severity.values().firstOrNull { it.label == item.sev } ?: SecurityScanner.Severity.HIGH
