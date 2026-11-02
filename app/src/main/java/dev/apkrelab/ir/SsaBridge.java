@@ -348,6 +348,23 @@ public final class SsaBridge {
         return true;
     }
 
+    /** 3.0.0: switch for the mutation check of guard predicates (see validationKind). */
+    public static boolean GUARD_PREDICATES = !Boolean.getBoolean("apkrelab.noGuardPredicates");
+
+    /** 3.0.0: 2 = the app method [key] (a boolean predicate) holds a strong validation that applies to [sinkTitle], 1 = only weak ones, 0 = none / not an app method. */
+    private static int guardPredicateKind(CallGraph g, String key, String sinkTitle) {
+        MethodIr p = g.methods.get(key);
+        if (p == null) return 0;
+        int kind = 0;
+        for (Insn x : p.insns) {
+            String t = x.text();
+            if (!VALIDATION.matcher(t).find() || !validationAppliesTo(t, sinkTitle)) continue;
+            if (WEAK_ONLY.matcher(t).find() && !t.contains("->matches(")) kind = Math.max(kind, 1);
+            else return 2;
+        }
+        return kind;
+    }
+
     /** Low two bits: 0 = no validation-like call on the chain that applies to this sink, 1 = only weak ones, 2 = at least one strong one. Bit 4: a validation-like call was seen that does not apply to this kind of sink. */
     private static int validationKind(CallGraph g, TaintIr.Flow f) {
         Set<String> seen = new HashSet<>();
@@ -364,6 +381,13 @@ public final class SsaBridge {
             if (m == null) continue;
             for (Insn in : m.insns) {
                 String t = in.text();
+                // 3.0.0 (blind round 4, AndStatus ZipUtils.unzipFiles: FileUtils.isFileInsideFolder(file, folder) = canonical path startsWith, before every entry is written):
+                // a call on the chain to an APP method returning boolean whose own body holds a strong check is a guard predicate: it counts like the check itself
+                if (GUARD_PREDICATES && in.kind == Insn.Kind.INVOKE && in.targetSig().endsWith(")Z")) {
+                    int gk = guardPredicateKind(g, in.targetOwner() + "->" + in.targetSig(), f.sink.title);
+                    if (gk == 2) return 2;
+                    if (gk == 1) kind = Math.max(kind, 1);
+                }
                 if (!VALIDATION.matcher(t).find()) continue;
                 if (!validationAppliesTo(t, f.sink.title)) { ignored = 4; continue; }
                 if (WEAK_ONLY.matcher(t).find() && !t.contains("->matches(")) kind = Math.max(kind, 1);
