@@ -52,20 +52,18 @@ public class IrParcelRoundTripTest {
         return out;
     }
 
-    /** The Parcel round trip is OFF by default (TaintIr.PARCEL_ROUNDTRIP); the positive test switches it on. */
+    /** The Parcel round trip is ON by default (3.0.0); switching it off (the mutation check) loses the flow. */
     @Test public void parcelRoundTripKeepsTheTaintOfAWrittenValue() {
-        boolean was = TaintIr.PARCEL_ROUNDTRIP;
-        TaintIr.PARCEL_ROUNDTRIP = true;
-        try {
-            List<TaintIr.Flow> f = flows(parcelActivity(true));
-            assertEquals(1, f.size());
-            assertTrue(f.get(0).source, f.get(0).source.startsWith("Intent."));
-        } finally { TaintIr.PARCEL_ROUNDTRIP = was; }
+        assertTrue(TaintIr.PARCEL_ROUNDTRIP);
+        List<TaintIr.Flow> f = flows(parcelActivity(true));
+        assertEquals(1, f.size());
+        assertTrue(f.get(0).source, f.get(0).source.startsWith("Intent."));
     }
 
-    @Test public void theParcelRoundTripIsOffByDefault() {
-        assertFalse(TaintIr.PARCEL_ROUNDTRIP);
-        assertEquals(0, flows(parcelActivity(true)).size());
+    @Test public void withTheRoundTripOffTheFlowIsLost() {
+        boolean was = TaintIr.PARCEL_ROUNDTRIP;
+        TaintIr.PARCEL_ROUNDTRIP = false;
+        try { assertEquals(0, flows(parcelActivity(true)).size()); } finally { TaintIr.PARCEL_ROUNDTRIP = was; }
     }
 
     @Test public void aParcelNothingWasWrittenToStaysClean() { assertEquals(0, flows(parcelActivity(false)).size()); }
