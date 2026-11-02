@@ -737,6 +737,53 @@ public final class CallGraph {
         }
     }
 
+    /** 2.2 (session 3b, bridge i): switch for the mutation check of the WebViewClient / WebChromeClient edges. */
+    public static boolean WEBVIEW_CLIENT_EDGES = !Boolean.getBoolean("apkrelab.noWebViewClientEdges");
+    static final Set<String> WEBVIEW_CLIENT_NAMES = new HashSet<>(Arrays.asList(
+            "shouldOverrideUrlLoading", "shouldInterceptRequest", "onPageStarted", "onPageFinished", "onJsPrompt", "onShowFileChooser"));
+
+    /**
+     * 2.2 (session 3b): a callback object handed to the framework, which calls it later. {@code webView.setWebViewClient(c)} / {@code setWebChromeClient(c)} and
+     * {@code registerForActivityResult(contract, callback)}: when the argument is an object built in this method (new-instance, possibly through a move) or an
+     * INSTANCE singleton (sget-object), the installing method gets an edge to the class's callback methods. REACH ONLY, no value moves along these edges (they are not invoke
+     * edges), and no source is added: a client's callbacks are the app navigating where the page asked, an ActivityResult is decided by the existing onActivityResult rules.
+     * A client built elsewhere and read from a field is not followed (not measured).
+     */
+    private void callbackRegistered(MethodIr m, Insn in) {
+        String name = in.targetName();
+        String owner = in.targetOwner();
+        if (WEBVIEW_CLIENT_EDGES && owner.equals("Landroid/webkit/WebView;") && (name.equals("setWebViewClient") || name.equals("setWebChromeClient"))) {
+            hostCallbackClass(m, in, 1, WEBVIEW_CLIENT_NAMES, "webview");
+        }
+    }
+
+    private void hostCallbackClass(MethodIr m, Insn in, int useIdx, Set<String> names, String kind) {
+        String cls = classOfArg(m, in, useIdx);
+        if (cls == null || !classes.containsKey(cls)) return;
+        instantiate(cls);
+        for (String k : lifecycleKeys(cls, names)) addEdge(m.key(), in.index, k, kind);
+    }
+
+    /** The class of the object that register {@code in.uses[useIdx]} holds at this call: a new-instance (followed through moves, at most 16 instructions back) or an sget-object of a field typed with an app class. */
+    private String classOfArg(MethodIr m, Insn in, int useIdx) {
+        if (in.uses.length <= useIdx) return null;
+        int reg = in.uses[useIdx];
+        for (int i = in.index - 1, n = 0; i >= 0 && n < 16; i--, n++) {
+            Insn d = m.insns.get(i);
+            boolean defines = false;
+            for (int r : d.defs) if (r == reg) { defines = true; break; }
+            if (!defines) continue;
+            if (d.kind == Insn.Kind.MOVE && d.uses.length > 0) { reg = d.uses[0]; continue; }
+            if (d.kind == Insn.Kind.NEW_INSTANCE) return d.ref;
+            if (d.kind == Insn.Kind.FIELD_GET && d.op.startsWith("sget") && d.ref != null) {
+                int c = d.ref.lastIndexOf(':');
+                return c > 0 ? d.ref.substring(c + 1) : null;
+            }
+            return null;
+        }
+        return null;
+    }
+
     /** 2.1.0: switches for the mutation checks of Conductor controller hosting, Kotlin suspend lambdas and WorkManager workers. */
     public static boolean CONTROLLER_HOSTING = !Boolean.getBoolean("apkrelab.noControllerHosting");
     public static boolean SUSPEND_LAMBDAS = !Boolean.getBoolean("apkrelab.noSuspendLambdas");
@@ -773,6 +820,7 @@ public final class CallGraph {
         String owner = in.targetOwner(), sig = in.targetSig(), kind = in.invokeKind();
         if (owner.isEmpty() || owner.charAt(0) == '[') return;
         workScheduled(m, in);
+        callbackRegistered(m, in);
         String caller = m.key();
         if (ASYNC_EDGES) {                                                     // 2.0.0: the dispatched Runnable runs: its run() is reached through this site
             String at = asyncTarget(m, in);
