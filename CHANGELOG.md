@@ -2,6 +2,17 @@
 
 Release notes in short. The full record (measurements, what was not measured, every decision) is `docs/internal/HANDOFF.md`; numbers are in `docs/internal/PERF.md`.
 
+## 2.1.3 (versionCode 236)
+- Background index: pauses only when the battery is at most 5% and the phone is not charging (`PowerPolicy`); Battery Saver alone no longer pauses it (JustMarkets report: "Index paused at 2/59667"). 3 tests (5% pauses; 40% and 6% with Battery Saver do not; charging or unknown level never pauses).
+- Engine: identical to 2.1.2 (no taint-analysis change). README: new section "What This Tool Does NOT Do Well (Known Limitations)".
+
+### What This Release Does Not Do
+- 7 of 13 valid CVE cases do not enter MUST FIX: C01, C04, C05, C08, C11, C12, C14 (MUST FIX recall 6 of 13; the patched build drops the card in 6 of 6).
+- 1 false positive in blind round 3 stays (simplenotes `o41.J(File)`): the gate rule that removed it also removed the Axis Pay dispatcher (`viaHub`, approximate reach) shape that must stay in MUST FIX, so it was reverted.
+- 2 switches stay OFF: setter summary (KeePassDX real drops 51 -> 59, +2 LOW flows) and sink-kind validation (CVE MUST FIX recall 6 of 13 -> 5 of 13, patched drops 5 -> 3).
+- 3 self-scan cards outside the dev.apkrelab code on the debug APK: CRITICAL `android:debuggable="true"` (a debug build), MEDIUM `REQUEST_INSTALL_PACKAGES` in AndroidManifest.xml (the app installs rebuilt APKs), MEDIUM MD5 inside the bundled jadx library.
+- Device validation: not performed. The release is based on sandbox scans only.
+
 ## 2.1.2 (versionCode 235)
 - MUST FIX lists every card that passes the gate (the cap of 3 is gone). On the CVE benchmark one report (Nextcloud 3.18.0) had 5 passing cards. Recall did not change (6 of 13); C06 now shows 3 related cards in MUST FIX instead of 1.
 - C03 (Omni-Notes): a check in the method that WROTE the tainted field now counts (6.2.8 calls `validatePath` before storing the Uri). Patched builds that drop the card: 6 of 6 (2.1.1: 5 of 6).
