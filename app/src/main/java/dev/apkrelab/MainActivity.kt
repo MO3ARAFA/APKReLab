@@ -1408,7 +1408,7 @@ class MainActivity : Activity() {
         if (inSecurity && !(smartRunning && smartStopped)) runDeepScan() else if (smartRunning) smartFinish()
     }
 
-    /** 0.37.6: true when the phone is NOT charging and (battery below 20% or battery saver is on): the background index waits then. */
+    /** 2.1.3: true when the phone is NOT charging and the battery is at most 5% (PowerPolicy): the background index waits then. Battery Saver alone no longer pauses it. */
     private fun lowPower(): Boolean {
         try {
             val i = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -1417,10 +1417,8 @@ class MainActivity : Activity() {
             val scale = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
             val st = i.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
             val charging = (st == android.os.BatteryManager.BATTERY_STATUS_CHARGING) || (st == android.os.BatteryManager.BATTERY_STATUS_FULL)
-            if (charging) return false
             val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-            val lowLevel = lvl >= 0 && (lvl * 100 / scale) < 20
-            return lowLevel || pm.isPowerSaveMode
+            return PowerPolicy.indexShouldPause(if (lvl >= 0) lvl * 100 / scale else -1, charging, pm.isPowerSaveMode)
         } catch (_: Throwable) {
             return false
         }
@@ -1459,14 +1457,14 @@ class MainActivity : Activity() {
                     // 0.37.6: battery check at most every 10 s
                     val nowP = System.currentTimeMillis()
                     if (nowP - lastPwr > 10_000L) { lastPwr = nowP; lowCached = lowPower() }
-                    // stay out of the way of the user's own work, and of a low battery / battery saver
+                    // stay out of the way of the user's own work, and of a critically low battery (PowerPolicy)
                     while (!bgIndexCancel && gen == apkGen) {
                         val busy = secScanning || smartRunning || building || agentBusy
                         if (!busy && !lowCached) break
                         if (!busy && !pausedShown) {
                             pausedShown = true
                             val n = done
-                            runOnUiThread { setIdxStatus(gen, "⏸ Index paused at $n/${defs.size} (low battery or battery saver)") }
+                            runOnUiThread { setIdxStatus(gen, "⏸ Index paused at $n/${defs.size} (battery at ${PowerPolicy.CRITICAL_PCT}% or less)") }
                         }
                         Thread.sleep(if (busy) 800L else 5000L)
                         if (!busy) lowCached = lowPower()

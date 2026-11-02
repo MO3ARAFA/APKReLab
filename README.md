@@ -18,6 +18,10 @@ Current version: **1.2.1** (versionCode 225); maturity protocol phases 0-4 and 3
 - **Not a verdict on its own.** Findings are leads: a card says what to open and verify before acting on it.
 - **Not for apps you are not allowed to analyse.** Use it on your own apps or with the owner's permission.
 
+## What This Tool Does NOT Do Well (Known Limitations)
+
+APKReLab performs static data-flow analysis exclusively on Dalvik bytecode (DEX) and Android XML resources within the memory constraints of a mobile device; it does not disassemble or model control or data flow inside native shared libraries (`.so`), Flutter AOT snapshots (`libapp.so`), or React Native Hermes bytecode, restricting hybrid framework coverage to string and URL extraction. On the 13-case real-world Android CVE benchmark, the `MUST FIX` gate achieves a 46.2% recall (6 of 13 vulnerable builds surfaced, with 6 of 6 patched builds cleanly clearing the gate). On a 12-app blind holdout evaluation (`Blind Round 3`), the `MUST FIX` gate emitted 4 cards across 12 applications, resulting in 3 true positives and 1 false positive (75.0% precision, 25.0% false-positive rate). Broader inter-procedural heuristics—specifically generic field setter-capture and sink-kind validation filtering—degraded taint-drop counts (`51` to `59` on `KeePassDX`) or reduced CVE recall (`6/13` to `5/13`) during measurement and remain disabled by default. Finally, flows traversing obfuscated callback dispatchers with 8 or more targets are downgraded to approximate reachability (`YES~`) rather than proven data flow.
+
 ## Build
 The owner builds on the phone with Code on the Go (no Gradle wrapper in the repository). On a PC or in CI: AGP 9.3.1, Gradle 9.8.2, JDK 17+ (JDK 21 verified), Android SDK platform 36:
 ```
