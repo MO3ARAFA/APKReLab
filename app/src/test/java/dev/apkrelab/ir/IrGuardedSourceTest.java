@@ -46,7 +46,7 @@ public class IrGuardedSourceTest {
     private static String redirector(String self) {
         return ".class public " + self + "\n.super Landroid/app/Activity;\n\n.method public onCreate(Landroid/os/Bundle;)V\n    .locals 7\n"
                 + "    new-instance v0, Landroid/content/Intent;\n    const-string v1, \"x\"\n"
-                + "    invoke-virtual {v0, v1}, Landroid/content/Intent;->getParcelableExtra(Ljava/lang/String;)Landroid/os/Parcelable;\n    move-result-object v4\n"
+                + "    invoke-virtual {v0, v1}, Landroid/content/Intent;->getParcelableExtra(Ljava/lang/String;)Landroid/os/Parcelable;\n    move-result-object v4\n    check-cast v4, Landroid/content/Intent;\n"   // 3.0.0: as dex has it
                 + "    invoke-virtual {v7, v4}, Landroid/app/Activity;->startActivity(Landroid/content/Intent;)V\n    return-void\n.end method\n";
     }
 

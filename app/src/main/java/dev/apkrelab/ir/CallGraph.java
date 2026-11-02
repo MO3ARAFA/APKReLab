@@ -544,14 +544,17 @@ public final class CallGraph {
         }
         for (MethodIr m : methods.values()) {
             if (!reach.contains(outerOf(TaintIr.classOf(m.key())))) continue;
-            boolean takesIntent = false, launchesIntent = false;
+            boolean takesIntent = false, launchesIntent = false, intentTyped = false;
             for (Insn in : m.insns) {
+                // 3.0.0: the Parcelable read must be an INTENT (check-cast / const-class Landroid/content/Intent;), not any Parcelable (Nextcloud: a User object read and an
+                // unrelated activity started in one method turned the private-component rule off for the whole app)
+                if (!STRICT_REDIRECTOR || ((in.op.startsWith("check-cast") || in.op.startsWith("const-class")) && "Landroid/content/Intent;".equals(in.ref))) intentTyped = true;
                 if (in.kind != Insn.Kind.INVOKE) continue;
                 String o = in.targetOwner(), n = in.targetName();
                 if ((o.equals("Landroid/content/Intent;") || o.equals("Landroid/os/Bundle;")) && (n.equals("getParcelableExtra") || n.equals("getParcelable"))) takesIntent = true;
                 if (n.startsWith("startActivit") || n.equals("startService") || n.equals("startForegroundService") || n.equals("sendBroadcast") || n.equals("bindService")) launchesIntent = true;
             }
-            if (takesIntent && launchesIntent) openRedirector = true;
+            if (takesIntent && launchesIntent && intentTyped) openRedirector = true;
         }
         return reach;
     }
@@ -835,6 +838,8 @@ public final class CallGraph {
         }
     }
 
+    /** 3.0.0: switch for the mutation check of the Intent-typed open-redirector test. */
+    public static boolean STRICT_REDIRECTOR = !Boolean.getBoolean("apkrelab.noStrictRedirector");
     /** 3.0.0: switch for the mutation check of {@link #selfListenerRegistered}. */
     public static boolean SELF_LISTENER_EDGES = !Boolean.getBoolean("apkrelab.noSelfListenerEdges");
 

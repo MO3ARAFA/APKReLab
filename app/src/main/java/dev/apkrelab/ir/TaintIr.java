@@ -486,6 +486,8 @@ public final class TaintIr {
         boolean retSeen, retPathSafe = true;
         /** 2.0.0: a constructor stores parameter slot k into these fields of the new object ("ref|S" when the value was a String). */
         final Map<Integer, Set<String>> ctorFields = new TreeMap<>();
+        /** 3.0.0: instance method that stores a parameter-derived value into a field of "this": param slot -> fields (applied only when the call's receiver is the caller's own "this"). */
+        final Map<Integer, Set<String>> selfFields = new TreeMap<>();
         final Map<Integer, Map<String, SinkRef>> sinkParams = new TreeMap<>();
         int refsDropped;      // 0.66.5: sink references not kept because the slot was full (MAX_REFS); measurement only
 
@@ -1177,6 +1179,8 @@ public final class TaintIr {
      */
     /** 2.0.0 pillar 1.1 switches (mutation checks): constructor field capture, async dispatch to the concrete Runnable, FunctionN devirtualisation. */
     static boolean CTOR_CAPTURE = !Boolean.getBoolean("apkrelab.noCtorCapture");
+    /** 3.0.0: the self-call field capture (Summary.selfFields); OFF until measured, -Dapkrelab.selfCallCapture=true. */
+    static boolean SELF_CALL_CAPTURE = Boolean.getBoolean("apkrelab.selfCallCapture");
     /** 2.2 (session 3a.1): switch for the mutation check of the Parcel round trip (a value written to a Parcel is what a read of the SAME Parcel object returns). */
     // ON by default since 3.0.0. Measured (MeasureBig, 6 corpus apps, -Xmx2g): android/os/Parcel real drops 4 -> 0 (K-9), 76 -> 0 (KeePassDX), 2 -> 0 (Chaka); real drops of
     // all owners 127 -> 51 (KeePassDX), 33 -> 29 (K-9), 14 -> 12 (Chaka), 4592 -> 4576 (Axis Pay), 38 -> 42 (Paperless: the taint now travels further and ends elsewhere);
@@ -1627,6 +1631,14 @@ public final class TaintIr {
                         for (int k = 1; k < 64; k++)
                             if ((t.params & (1L << k)) != 0) sum.ctorFields.computeIfAbsent(k, x -> new java.util.TreeSet<>()).add(in.ref + (str ? "|S" : ""));
                     }
+                    // 3.0.0 (real-CVE benchmark C14, OsmAnd AidlParams.readFromParcel: parcel.readBundle() is handed to this.readFromBundle(bundle), which stores
+                    // bundle.getString("fileName") in a field): an instance method's parameter-derived value stored into a field of "this"; used only for self-calls
+                    if (SELF_CALL_CAPTURE && collect && t.params != 0L && !"<init>".equals(m.name) && !m.isStatic && in.op.startsWith("iput") && u.length > vc && isThis(u[vc])
+                            && !in.ref.endsWith(":Ljava/lang/Object;") && !isNumericFieldRef(in.ref)) {
+                        boolean str = vc == 1 && u.length > 0 && isString(u[0], 0);
+                        for (int k = 1; k < 64; k++)
+                            if ((t.params & (1L << k)) != 0) sum.selfFields.computeIfAbsent(k, x -> new java.util.TreeSet<>()).add(in.ref + (str ? "|S" : ""));
+                    }
                     break;
                 }
                 case ARRAY_GET:
@@ -1994,6 +2006,14 @@ public final class TaintIr {
                         // 2.0.0: the constructor keeps this argument in a field: the caller's real taint goes to that field's heap slot
                         if (CTOR_CAPTURE && t[k].level > 0) {
                             Set<String> fs = sc.ctorFields.get(k);
+                            if (fs != null) for (String f : fs) {
+                                boolean str = f.endsWith("|S");
+                                run.raiseField(str ? f.substring(0, f.length() - 2) : f, t[k], m.key(), str);
+                            }
+                        }
+                        // 3.0.0: a call on the caller's own "this": the callee's parameter-to-field stores get the caller's real taint
+                        if (SELF_CALL_CAPTURE && t[k].level > 0 && !isStatic && av.length > 0 && isThis(av[0])) {
+                            Set<String> fs = sc.selfFields.get(k);
                             if (fs != null) for (String f : fs) {
                                 boolean str = f.endsWith("|S");
                                 run.raiseField(str ? f.substring(0, f.length() - 2) : f, t[k], m.key(), str);
