@@ -40,6 +40,8 @@ class SelfScanTighteningTest {
         fun cls(lit: String) = ".class public Lcom/x/C;\n.super Ljava/lang/Object;\n.method public run()V\n    .locals 2\n    const-string v0, \"$lit\"\n    const-string v1, \"api_token\"\n    return-void\n.end method\n"
         val sig = SecurityScanner.scanHighEntropyStrings("Lcom/x/C;", 0, cls("Lcom/facebook/Ab9;->xQ7pLz2(Lcom/foo/Bar;)V"))
         assertTrue(sig.toString(), sig.none { it.severity != SecurityScanner.Severity.INFO })
+        for (code in listOf("Landroid/security/ConfirmationPrompt", "AccountManager.getPassword()", "(ILjava/lang/Object;)Ljava/lang/String;"))
+            assertTrue(code, SecurityScanner.scanHighEntropyStrings("Lcom/x/C;", 0, cls(code)).none { it.severity != SecurityScanner.Severity.INFO })
         val secret = SecurityScanner.scanHighEntropyStrings("Lcom/x/C;", 0, cls("kJ8fP2xQ9zLm4Vb7Nc1RtYw6HsD3gAe5U0"))
         assertTrue(secret.any { it.severity != SecurityScanner.Severity.INFO })     // twin: a real random string near a credential name still reports
     }
