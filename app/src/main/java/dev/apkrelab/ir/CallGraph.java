@@ -745,13 +745,15 @@ public final class CallGraph {
      * method behind an exported service's binder had no incoming edge. A reached method that instantiates a Binder subclass now has a "binder" edge to its onTransact. REACH ONLY: the
      * Parcel reads in onTransact are already sources (TaintIr PARCEL_ENTRY_METHODS); the reply Parcel is not made a sink (that would be a rule).
      */
-    // The three bridge switches (BINDER_HOSTING, WEBVIEW_CLIENT_EDGES, RESULT_CALLBACK_EDGES) are OFF BY DEFAULT in 2.1.1 (version decision tree rule 2). Switch on: -Dapkrelab.binderHosting=true, webViewClientEdges, resultCallbackEdges.
-    public static boolean BINDER_HOSTING = Boolean.getBoolean("apkrelab.binderHosting");
+    // The three bridge switches (BINDER_HOSTING, WEBVIEW_CLIENT_EDGES, RESULT_CALLBACK_EDGES) were OFF in 2.1.1 and are ON since 2.1.2. Measured one at a time: CVE benchmark 6/13 and 5
+    // patched drops with WEBVIEW_CLIENT_EDGES on and with RESULT_CALLBACK_EDGES on (identical to off); BINDER_HOSTING's own CVE run was stopped at 10 of 24 APKs; all three on together
+    // change 0 flows and 0 real drops in the 6 corpus apps (MeasureBig). They only add call edges the framework makes. Off: -Dapkrelab.noBinderHosting / noWebViewClientEdges / noResultCallbackEdges.
+    public static boolean BINDER_HOSTING = !Boolean.getBoolean("apkrelab.noBinderHosting");
     static final Set<String> BINDER_NAMES = new HashSet<>(Arrays.asList("onTransact"));
 
     /** 2.2 (session 3b, bridges i and ii): switches for the mutation checks of the WebViewClient / WebChromeClient and the ActivityResult callback edges. */
-    public static boolean WEBVIEW_CLIENT_EDGES = Boolean.getBoolean("apkrelab.webViewClientEdges");
-    public static boolean RESULT_CALLBACK_EDGES = Boolean.getBoolean("apkrelab.resultCallbackEdges");
+    public static boolean WEBVIEW_CLIENT_EDGES = !Boolean.getBoolean("apkrelab.noWebViewClientEdges");
+    public static boolean RESULT_CALLBACK_EDGES = !Boolean.getBoolean("apkrelab.noResultCallbackEdges");
     static final Set<String> WEBVIEW_CLIENT_NAMES = new HashSet<>(Arrays.asList(
             "shouldOverrideUrlLoading", "shouldInterceptRequest", "onPageStarted", "onPageFinished", "onJsPrompt", "onShowFileChooser"));
     static final Set<String> RESULT_CALLBACK_NAMES = new HashSet<>(Arrays.asList("onActivityResult"));

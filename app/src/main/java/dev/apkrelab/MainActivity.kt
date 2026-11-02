@@ -2531,7 +2531,15 @@ class MainActivity : Activity() {
                 }
             }
             // 1.0.0: structural context on the cards of renamed code of unknown origin (merged class, static holder, unattributed)
-            try { ClassTools.obfHint(found, sdkAttr.mergedTypes, sdkAttr.holderTypes) } catch (_: Throwable) { }
+            try {
+                val refCache = HashMap<String, String>()
+                val appPkgForRefs = codePackageOf(classDefs)
+                ClassTools.obfHint(found, sdkAttr.mergedTypes, sdkAttr.holderTypes) { type ->      // 3.0.0: the library packages a renamed class names, inline
+                    refCache.getOrPut(type) {
+                        try { classDefs.firstOrNull { it.type == type }?.let { ClassTools.namedPackages(type, agentIndexedText(it), appPkgForRefs) } ?: "" } catch (_: Throwable) { "" }
+                    }
+                }
+            } catch (_: Throwable) { }
             found.sortBy { it.clsIndex }                      // same order as the old single-thread scan (stable sort)
             // 0.46.0: merge repeats (same rule+class, and INFO across classes into one xN card) before they hit the list
             val aggregated = try { SecurityScanner.aggregate(found) } catch (_: Throwable) { found }

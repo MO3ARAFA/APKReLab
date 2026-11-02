@@ -25,7 +25,7 @@ final class IrBridgeSupport {
         return null;
     }
 
-    /** The engine switches of sessions 3a.1 and 3b are OFF by default; the positive bridge tests run with them on. */
+    /** The positive bridge tests run with the switches on (on by default since 2.1.2; they stay set here so a test does not depend on the default). */
     static TaintIr.Flow flowOn(String target, String... smali) {
         boolean w = CallGraph.WEBVIEW_CLIENT_EDGES, r = CallGraph.RESULT_CALLBACK_EDGES, b = CallGraph.BINDER_HOSTING, p = TaintIr.PARCEL_ROUNDTRIP;
         CallGraph.WEBVIEW_CLIENT_EDGES = true; CallGraph.RESULT_CALLBACK_EDGES = true; CallGraph.BINDER_HOSTING = true; TaintIr.PARCEL_ROUNDTRIP = true;

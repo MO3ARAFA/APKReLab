@@ -22,8 +22,13 @@ public class IrResultCallbackBridgeTest {
         assertTrue(f == null || !f.reachable);
     }
 
-    @Test public void theBridgeIsOffByDefault() {
-        TaintIr.Flow f = flowIn("Lt/T;", activity(AR_NEW + AR_REG), AR_CB);
-        assertTrue(f == null || !f.reachable);
+    @Test public void theBridgeIsOnByDefaultAndTheMutationLosesIt() {      // 2.1.2: on by default
+        assertTrue(CallGraph.RESULT_CALLBACK_EDGES);
+        boolean was = CallGraph.RESULT_CALLBACK_EDGES;
+        CallGraph.RESULT_CALLBACK_EDGES = false;
+        try {
+            TaintIr.Flow f = flowIn("Lt/T;", activity(AR_NEW + AR_REG), AR_CB);
+            assertTrue(f == null || !f.reachable);
+        } finally { CallGraph.RESULT_CALLBACK_EDGES = was; }
     }
 }

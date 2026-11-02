@@ -302,8 +302,8 @@ object DeeplinkHostValidationRule : ScanRule {
         if (ctx.scope == SecurityScanner.Scope.LIB) return emptyList()
         val out = ArrayList<Finding>()
         for (m in OvaaHelpers.methods(ctx.text)) {
-            val host = rx("Landroid/net/Uri;->getHost\\(\\)|Ljava/net/URL;->getHost\\(\\)").find(m.body) ?: continue
-            val weak = rx("Ljava/lang/String;->(endsWith|startsWith|contains|indexOf)\\(").find(m.body.substring(host.range.first)) ?: continue
+            val host = rx("invoke-[a-z/]+ \\{[^}]*\\}, (?:Landroid/net/Uri;->getHost\\(\\)|Ljava/net/URL;->getHost\\(\\))").find(m.body) ?: continue
+            val weak = rx("invoke-[a-z/]+ \\{[^}]*\\}, Ljava/lang/String;->(endsWith|startsWith|contains|indexOf)\\(").find(m.body.substring(host.range.first)) ?: continue
             out.add(ctx.finding(Severity.MEDIUM, title,
                 "The host of a Uri is read and then compared with String.${weak.groupValues[1]}(). Checks like that accept hosts such as evil-example.com or example.com.evil.com, so a deep link can point the app (WebView, login, download) at an attacker's server.",
                 "Compare the whole host with an allow-list using equals(), or require host == \"example.com\" || host.endsWith(\".example.com\") (note the leading dot) after parsing with a real URI parser.",

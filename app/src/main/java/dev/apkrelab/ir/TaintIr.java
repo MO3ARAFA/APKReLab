@@ -322,6 +322,21 @@ public final class TaintIr {
         return SINKS.containsKey(owner + "->" + name);
     }
 
+    /** 3.0.0: the field reference "Lowner;->name:T" has a number or boolean type (primitive or boxed): such a value cannot carry SQL, path or markup syntax. */
+    static boolean isNumericFieldRef(String ref) {
+        int i = ref.lastIndexOf(':');
+        if (i < 0) return false;
+        String t = ref.substring(i + 1);
+        if (t.length() == 1) return "ZBSIJFD".indexOf(t.charAt(0)) >= 0;
+        switch (t) {
+            case "Ljava/lang/Integer;": case "Ljava/lang/Long;": case "Ljava/lang/Double;": case "Ljava/lang/Float;":
+            case "Ljava/lang/Boolean;": case "Ljava/lang/Short;": case "Ljava/lang/Byte;":
+                return true;
+            default:
+                return false;
+        }
+    }
+
     static boolean isSanitizer(String owner, String name) {
         switch (owner) {
             case "Ljava/net/URLEncoder;":
@@ -1163,8 +1178,10 @@ public final class TaintIr {
     /** 2.0.0 pillar 1.1 switches (mutation checks): constructor field capture, async dispatch to the concrete Runnable, FunctionN devirtualisation. */
     static boolean CTOR_CAPTURE = !Boolean.getBoolean("apkrelab.noCtorCapture");
     /** 2.2 (session 3a.1): switch for the mutation check of the Parcel round trip (a value written to a Parcel is what a read of the SAME Parcel object returns). */
-    // OFF BY DEFAULT in 2.1.1 (version decision tree rule 2, blind round 3: a MUST FIX false positive present with every session switch off, so the engine changes are not shipped active). Switch on: -Dapkrelab.parcelRoundTrip=true.
-    static boolean PARCEL_ROUNDTRIP = Boolean.getBoolean("apkrelab.parcelRoundTrip");
+    // ON by default since 3.0.0. Measured (MeasureBig, 6 corpus apps, -Xmx2g): android/os/Parcel real drops 4 -> 0 (K-9), 76 -> 0 (KeePassDX), 2 -> 0 (Chaka); real drops of
+    // all owners 127 -> 51 (KeePassDX), 33 -> 29 (K-9), 14 -> 12 (Chaka), 4592 -> 4576 (Axis Pay), 38 -> 42 (Paperless: the taint now travels further and ends elsewhere);
+    // flows unchanged in all 6 apps; CVE benchmark 6/13 and 5 patched drops, identical to the engine without it. Off: -Dapkrelab.noParcelRoundTrip=true.
+    static boolean PARCEL_ROUNDTRIP = !Boolean.getBoolean("apkrelab.noParcelRoundTrip");
     /**
      * 2.2 (session 3a.1): the setter summary: a small instance method that stores its parameter into a field of "this" hands the caller's taint to that field, like a constructor does
      * (CTOR_CAPTURE). OFF BY DEFAULT since the 3.0.0 release-candidate rescan: it added a MUST FIX card on Omni-Notes (DbHelper, a SQL flow whose value is a boxed Long, BaseNote.get_id)
@@ -1604,7 +1621,8 @@ public final class TaintIr {
                     }
                     // 2.2 (session 3a.1): the same for a small non-constructor instance method that only stores its parameter (setX(v) { this.x = v; }): the caller's real taint goes to the field
                     if (SETTER_CAPTURE && CTOR_CAPTURE && collect && t.params != 0L && !"<init>".equals(m.name) && !m.isStatic && m.desc.endsWith(")V") && m.insns.size() <= SETTER_MAX_INSNS
-                            && in.op.startsWith("iput") && u.length > vc && isThis(u[vc]) && !in.ref.endsWith(":Ljava/lang/Object;")) {
+                            && in.op.startsWith("iput") && u.length > vc && isThis(u[vc]) && !in.ref.endsWith(":Ljava/lang/Object;")
+                            && !isNumericFieldRef(in.ref)) {   // 3.0.0: a number-typed field (long id, int, boxed Long ...) cannot carry an injection
                         boolean str = vc == 1 && u.length > 0 && isString(u[0], 0);
                         for (int k = 1; k < 64; k++)
                             if ((t.params & (1L << k)) != 0) sum.ctorFields.computeIfAbsent(k, x -> new java.util.TreeSet<>()).add(in.ref + (str ? "|S" : ""));

@@ -880,6 +880,8 @@ object SecurityScanner {
      * AND an identifier/short literal with credential words (word-split, not substring) sits in the same
      * method next to it. Everything else is merged into ONE low-confidence INFO per class.
      */
+    private val codeNameRe = Regex("L[a-z][a-z0-9_]*(?:/[A-Za-z0-9_$]+)+;?|\\([A-Za-z0-9_$/;\\[]*\\)[A-Za-z0-9_$/;\\[]+|[A-Z][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)*\\.[a-z][A-Za-z0-9_$]*\\([A-Za-z0-9_$., ]*\\)")
+
     internal fun scanHighEntropyStrings(classType: String, clsIndex: Int, text: String): List<Finding> {
         val out = ArrayList<Finding>()
         val seen = HashSet<String>()
@@ -897,6 +899,10 @@ object SecurityScanner {
             if (looksLikeName(s)) continue
             if (s.count { it == '/' } > 2) continue
             if (s.startsWith("L") && s.endsWith(";")) continue
+            // 3.0.0: a dex type descriptor or member reference ("Lpkg/Cls;->name(...)V"), the text a scanner or a rule keeps about code: not a secret
+            if (s.contains(";->") || (s.startsWith("L") && s.contains(';') && s.indexOf('/') in 1 until s.indexOf(';')) || s.startsWith("[L")) continue
+            // 3.0.0: an internal class name without the ';' ("Landroid/security/ConfirmationPrompt"), a method signature ("(I)Ljava/lang/String;") or a "Class.method()" display name
+            if (codeNameRe.matches(s)) continue
             val entropy = shannonEntropy(s)
             if (entropy < 3.8 || s.toSet().size < 10) continue
             if (charClasses(s) < 3) continue

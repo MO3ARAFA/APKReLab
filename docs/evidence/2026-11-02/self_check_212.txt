@@ -1,0 +1,3 @@
+Recall: Sieve: 8/8 (held-out); top3 3/3; flow set identical to the baseline (4) | Allsafe: 6/7 (tuning set); top3 2/4; flow set identical to the baseline (5) | PIVAA: 21/25 (tuning set); top3 1/2; flow set identical to the baseline (2) | Vuldroid: 7/8 (tuning set); top3 4/5; flow set identical to the baseline (5) | OVAA: 18/19 (tuning set); top3 2/2; flow set identical to the baseline (4) | InsecureShop: 2/2 (tuning set); top3 2/4; flow set identical to the baseline (5)
+SELF-CHECK PASSED
+(output of tools/sandbox/self_check.sh on the 2.1.2 tree d0609ec minus the high-entropy commit; that commit changes no taint flow)

@@ -1155,7 +1155,8 @@ object ShellExecRule : ScanRule {
             out.add(ctx.finding(sev, title, detail, rec, offset, cwe))
         }
 
-        rx("Ljava/lang/Runtime;->exec\\(|Ljava/lang/ProcessBuilder;-><init>").find(text)?.let {
+        // 3.0.0: an invoke instruction, not any text that happens to contain the signature (a rule table or a lambda that only names "Runtime;->exec(" in a const-string)
+        rx("invoke-[a-z/]+ \\{[^}]*\\}, (?:Ljava/lang/Runtime;->exec\\(|Ljava/lang/ProcessBuilder;-><init>)").find(text)?.let {
             // 0.102.0: every call site of the class has only constant arguments (literals, or a constant-indexed string-table lookup): nothing to inject into
             val (sites, fixed) = ConstantArgGuards.shellSites(text)
             if (sites > 0 && fixed == sites) {

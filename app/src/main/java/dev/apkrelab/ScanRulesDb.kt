@@ -14,9 +14,9 @@ object JacksonDefaultTypingRule : ScanRule {
     override val title = "Jackson polymorphic typing enabled (class names in JSON)"
     override val cwes = listOf("CWE-502")
     override val confidence = "HIGH"
-    private val enableRe = rx("Lcom/fasterxml/jackson/databind/ObjectMapper;->enableDefaultTyping\\(")
-    private val activateRe = rx("Lcom/fasterxml/jackson/databind/ObjectMapper;->activateDefaultTyping(?:AsProperty)?\\(")
-    private val laissezRe = rx("LaissezFaireSubTypeValidator")
+    private val enableRe = rx("invoke-[a-z/]+ \\{[^}]*\\}, Lcom/fasterxml/jackson/databind/ObjectMapper;->enableDefaultTyping\\(")
+    private val activateRe = rx("invoke-[a-z/]+ \\{[^}]*\\}, Lcom/fasterxml/jackson/databind/ObjectMapper;->activateDefaultTyping(?:AsProperty)?\\(")
+    private val laissezRe = rx("^[ \\t]*(?:sget-object|new-instance|const-class|invoke-)[^\\n\"]*LaissezFaireSubTypeValidator", RegexOption.MULTILINE)   // 3.0.0: an instruction naming the type, not a string spelling it
     private val annoRe = rx("\\.annotation runtime Lcom/fasterxml/jackson/annotation/JsonTypeInfo;[^.]{0,300}?use = \\.enum Lcom/fasterxml/jackson/annotation/JsonTypeInfo\\\$Id;->(?:CLASS|MINIMAL_CLASS)")
 
     override fun scan(ctx: RuleContext): List<SecurityScanner.Finding> {
