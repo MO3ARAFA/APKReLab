@@ -1,0 +1,20 @@
+MeasureBig (-Xmx2g -Downers=60), decoded smali of the corpus apps; columns: android/os/Parcel real drops | all real drops (library or outside group) | flows
+base = main (6610689); 3a.1 = Parcel round trip + setter summary; 3a.2 = + sink-kind validation (branch claude/session-3a-parcel-validation); 3b rows = branch claude/session-3b-bridges, bridges all on vs all off
+
+app        | base            | 3a.1            | 3a.1+3a.2
+k9         | 4 | 33 |   0   | 0 | 29 |   0   | 0 | 29 |   0
+newpipe    | 0 | 31 |   1   | 0 | 31 |   1   | 0 | 31 |   1
+paperless  | 0 | 38 |   1   | 0 | 42 |   1   | 0 | 42 |   1
+zulip      | 0 | 0 |   0   | 0 | 0 |   0   | 0 | 0 |   0
+chaka      | 2 | 14 |   1   | 0 | 12 |   1   | 0 | 12 |   1
+keepass    | 76 | 127 |   9   | 0 | 59 |  11   | 0 | 59 |  11
+axis       | 0 | 4592 |  15   | 0 | 4576 |  15   | 0 | 4576 |  15
+
+3b (bridges off | all on): flows
+k9         | 0 | 0
+newpipe    | 1 | 1
+paperless  | 1 | 1
+zulip      | 0 | 0
+chaka      | 1 | 1
+keepass    | 9 | 9
+axis       | 15 | 15

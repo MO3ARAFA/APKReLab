@@ -1,0 +1,20 @@
+Numbers only, extracted from the device reports in ./private/dev201 (scanner 2.0.2 on the phone; the APKs are not on this machine). file:line refer to the private report files.
+
+WE Wallet (we3.md): verdict line 7: critical 0, high-priority 3, informational 38, reported cards 41
+  MUST FIX line 14: empty (no card passes the gate)
+  CRITICAL PATH line 8: scenario listed
+  CONFIDENCE line 15: 33% of HIGH+ cards have HIGH confidence: 1 of 3
+  Deep scan status line 714: classes 15470 of 15470; SSA flows added 8; plan 20 s, groups 118 s, 2 threads, heap 512 MB
+  taint losses (line 714): library or outside group real/param-only 527/25719; app method unresolved 54/13205; android/os/Parcel real drops: 151
+JustMarkets (jm3.md): verdict line 7: critical 0, high-priority 3, informational 46, reported cards 49
+  MUST FIX line 14: empty (no card passes the gate)
+  CRITICAL PATH line 8: scenario listed
+  CONFIDENCE line 15: 33% of HIGH+ cards have HIGH confidence: 1 of 3
+  Deep scan status line 804: classes 59667 of 59667; SSA flows added 8; plan 42 s, groups 20 s, 2 threads, heap 512 MB
+  taint losses (line 804): library or outside group real/param-only 351/41888; app method unresolved 0/153; android/os/Parcel real drops: 132
+Axis Pay 3.1.0 (axis10.md): verdict line 7: critical 0, high-priority 1, informational 40, reported cards 41
+  MUST FIX line 9: empty (no card passes the gate)
+  CRITICAL PATH line 8: none
+  CONFIDENCE line 10: 0% of HIGH+ cards have HIGH confidence: 0 of 1
+  Deep scan status line 810: classes 19004 of 19004; SSA flows added 29; plan 19 s, groups 219 s, 2 threads, heap 512 MB
+  taint losses (line 810): library or outside group real/param-only 8596/193498; app method unresolved 10/1335; android/os/Parcel real drops: not in the top 5 owners
