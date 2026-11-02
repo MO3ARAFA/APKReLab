@@ -1181,8 +1181,11 @@ public final class TaintIr {
     static boolean CTOR_CAPTURE = !Boolean.getBoolean("apkrelab.noCtorCapture");
     /** 3.0.0: switch for the mutation check of the ActivityResultContract.parseResult shape in isActivityResultIntent. */
     static boolean RESULT_CONTRACT_SHAPE = !Boolean.getBoolean("apkrelab.noResultContractShape");
-    /** 3.0.0: the self-call field capture (Summary.selfFields); OFF until measured, -Dapkrelab.selfCallCapture=true. */
-    static boolean SELF_CALL_CAPTURE = Boolean.getBoolean("apkrelab.selfCallCapture");
+    /**
+     * 3.0.0: the self-call field capture (Summary.selfFields). ON: measured on the CVE benchmark, MUST FIX recall 7 -> 8 of 13 (C14, OsmAnd AIDL), 0 cases lost; self_check
+     * identical; corpus flows unchanged, KeePassDX real drops 51 -> 52. Off: -Dapkrelab.noSelfCallCapture=true.
+     */
+    static boolean SELF_CALL_CAPTURE = !Boolean.getBoolean("apkrelab.noSelfCallCapture");
     /** 2.2 (session 3a.1): switch for the mutation check of the Parcel round trip (a value written to a Parcel is what a read of the SAME Parcel object returns). */
     // ON by default since 3.0.0. Measured (MeasureBig, 6 corpus apps, -Xmx2g): android/os/Parcel real drops 4 -> 0 (K-9), 76 -> 0 (KeePassDX), 2 -> 0 (Chaka); real drops of
     // all owners 127 -> 51 (KeePassDX), 33 -> 29 (K-9), 14 -> 12 (Chaka), 4592 -> 4576 (Axis Pay), 38 -> 42 (Paperless: the taint now travels further and ends elsewhere);
