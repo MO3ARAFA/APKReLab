@@ -1164,8 +1164,13 @@ public final class TaintIr {
     static boolean CTOR_CAPTURE = !Boolean.getBoolean("apkrelab.noCtorCapture");
     /** 2.2 (session 3a.1): switch for the mutation check of the Parcel round trip (a value written to a Parcel is what a read of the SAME Parcel object returns). */
     static boolean PARCEL_ROUNDTRIP = !Boolean.getBoolean("apkrelab.noParcelRoundTrip");
-    /** 2.2 (session 3a.1): switch for the mutation check of the setter summary: a small instance method that stores its parameter into a field of "this" hands the caller's taint to that field, like a constructor does (CTOR_CAPTURE). */
-    static boolean SETTER_CAPTURE = !Boolean.getBoolean("apkrelab.noSetterCapture");
+    /**
+     * 2.2 (session 3a.1): the setter summary: a small instance method that stores its parameter into a field of "this" hands the caller's taint to that field, like a constructor does
+     * (CTOR_CAPTURE). OFF BY DEFAULT since the 3.0.0 release-candidate rescan: it added a MUST FIX card on Omni-Notes (DbHelper, a SQL flow whose value is a boxed Long, BaseNote.get_id)
+     * in the vulnerable and the patched build, and 2 LOW flows on KeePassDX (docs/internal/HANDOFF.md, release candidate entry). Accepted cost: a setter / getter pair no longer carries
+     * taint (test getterSetterRoundTripPreservesTaint runs with the switch on). Do not turn it on without a measurement. Switch on: -Dapkrelab.setterCapture=true.
+     */
+    static boolean SETTER_CAPTURE = Boolean.getBoolean("apkrelab.setterCapture");
     /** A setter is a method of at most this many instructions (instruction count of the parsed method, labels and returns included). */
     static final int SETTER_MAX_INSNS = 8;
     static boolean ASYNC_DISPATCH = !Boolean.getBoolean("apkrelab.noAsyncDispatch");

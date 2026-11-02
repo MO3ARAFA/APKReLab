@@ -60,11 +60,25 @@ public class IrParcelRoundTripTest {
 
     @Test public void aParcelNothingWasWrittenToStaysClean() { assertEquals(0, flows(parcelActivity(false)).size()); }
 
+    /** The setter summary is OFF by default (TaintIr.SETTER_CAPTURE); these tests switch it on. */
     @Test public void getterSetterRoundTripPreservesTaint() {
-        List<TaintIr.Flow> f = flows(modelActivity("getX"), MODEL);
-        assertEquals(1, f.size());
-        assertTrue(f.get(0).source, f.get(0).source.startsWith("Intent."));
+        boolean was = TaintIr.SETTER_CAPTURE;
+        TaintIr.SETTER_CAPTURE = true;
+        try {
+            List<TaintIr.Flow> f = flows(modelActivity("getX"), MODEL);
+            assertEquals(1, f.size());
+            assertTrue(f.get(0).source, f.get(0).source.startsWith("Intent."));
+        } finally { TaintIr.SETTER_CAPTURE = was; }
     }
 
-    @Test public void getterOfUnwrittenFieldStaysUnclean() { assertEquals(0, flows(modelActivity("getY"), MODEL).size()); }
+    @Test public void getterOfUnwrittenFieldStaysUnclean() {
+        boolean was = TaintIr.SETTER_CAPTURE;
+        TaintIr.SETTER_CAPTURE = true;
+        try { assertEquals(0, flows(modelActivity("getY"), MODEL).size()); } finally { TaintIr.SETTER_CAPTURE = was; }
+    }
+
+    @Test public void theSetterSummaryIsOffByDefault() {
+        assertFalse(TaintIr.SETTER_CAPTURE);
+        assertEquals(0, flows(modelActivity("getX"), MODEL).size());
+    }
 }

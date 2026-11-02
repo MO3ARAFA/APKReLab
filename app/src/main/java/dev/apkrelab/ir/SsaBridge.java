@@ -304,8 +304,13 @@ public final class SsaBridge {
     /** The checks a bypass is well known for: a substring or SUFFIX test on a String (blacklist contains, host endsWith). startsWith stays a validation: it is the usual scheme / prefix check ("https://"). Everything else VALIDATION matches (regex, allow-list contains, getHost, canonical path, named helpers) is strong. */
     private static final Pattern WEAK_ONLY = Pattern.compile("^(?:invoke-[a-z]+(?:/range)?\\s+\\{[^}]*\\},\\s*)?Ljava/lang/String;->(endsWith|contains)\\(.*$");
 
-    /** 2.2 (session 3a.2): switch for the mutation check of the sink-kind match (false = every validation-like call counts for every sink, as before). */
-    public static boolean SINK_KIND_VALIDATION = !Boolean.getBoolean("apkrelab.noSinkKindValidation");
+    /**
+     * 2.2 (session 3a.2): the sink-kind match (false = every validation-like call counts for every sink, as in 2.1.0). OFF BY DEFAULT since the 3.0.0 release-candidate rescan of the
+     * CVE benchmark (docs/evidence/2026-11-02/cve_run6_rc.txt): with it on, MUST FIX recall fell from 6 of 13 to 5 of 13 and the patched builds that drop the card from 5 to 3
+     * (file and content-URI cards of the Nextcloud / ownCloud family went from evidence 0.3 to 1.0 and crowded the three MUST FIX slots); with it off (cve_run7_rc_noSinkKind.txt) the
+     * headline is 6 of 13 and 5 again. Do not turn it on without a new measurement of that benchmark. Switch on for tests: -Dapkrelab.sinkKindValidation=true.
+     */
+    public static boolean SINK_KIND_VALIDATION = Boolean.getBoolean("apkrelab.sinkKindValidation");
     private static final Pattern V_PATH = Pattern.compile("->(getCanonicalPath|getCanonicalFile|normalize)\\(|const-string [vp]\\d+, \"\\.\\.\"");
     private static final Pattern V_HOST = Pattern.compile("->(getHost|getScheme|getAuthority|isHttpsUrl|isValidUrl)\\(");
     private static final Pattern V_PREFIX = Pattern.compile("Ljava/lang/String;->startsWith\\(");

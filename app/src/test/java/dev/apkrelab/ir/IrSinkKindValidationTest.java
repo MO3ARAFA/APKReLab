@@ -42,6 +42,13 @@ public class IrSinkKindValidationTest {
         throw new AssertionError("no flow titled " + title);
     }
 
+    /** The sink-kind match is OFF by default (SsaBridge.SINK_KIND_VALIDATION); every item() built by these tests is built with it on. */
+    static SsaBridge.Item on(String src, String validation, String sink, String title) {
+        boolean was = SsaBridge.SINK_KIND_VALIDATION;
+        SsaBridge.SINK_KIND_VALIDATION = true;
+        try { return item(src, validation, sink, title); } finally { SsaBridge.SINK_KIND_VALIDATION = was; }
+    }
+
     static void counts(SsaBridge.Item base, SsaBridge.Item it) {
         assertTrue(it.detail, it.detail.contains("The chain also contains validation-like calls"));
         assertFalse(it.detail, it.detail.contains("none of them restricts this kind of sink"));
@@ -57,39 +64,38 @@ public class IrSinkKindValidationTest {
 
     // ---- file sink (CWE-22)
     @Test public void wrongKindValidationDoesNotSuppressFileSink() {
-        doesNotCount(item(STR_SRC, "", FILE_SINK, TaintIr.T_FILE), item(STR_SRC, STARTS_HTTP, FILE_SINK, TaintIr.T_FILE));
+        doesNotCount(item(STR_SRC, "", FILE_SINK, TaintIr.T_FILE), on(STR_SRC, STARTS_HTTP, FILE_SINK, TaintIr.T_FILE));
     }
     @Test public void rightKindValidationSuppressesFileSink() {
-        counts(item(STR_SRC, "", FILE_SINK, TaintIr.T_FILE), item(STR_SRC, CANON_THEN_PREFIX, FILE_SINK, TaintIr.T_FILE));
+        counts(item(STR_SRC, "", FILE_SINK, TaintIr.T_FILE), on(STR_SRC, CANON_THEN_PREFIX, FILE_SINK, TaintIr.T_FILE));
     }
 
     // ---- WebView sink
     @Test public void wrongKindValidationDoesNotSuppressWebViewSink() {
-        doesNotCount(item(STR_SRC, "", WEB_SINK, TaintIr.T_WEB), item(STR_SRC, CANONICAL, WEB_SINK, TaintIr.T_WEB));
+        doesNotCount(item(STR_SRC, "", WEB_SINK, TaintIr.T_WEB), on(STR_SRC, CANONICAL, WEB_SINK, TaintIr.T_WEB));
     }
     @Test public void rightKindValidationSuppressesWebViewSink() {
-        counts(item(STR_SRC, "", WEB_SINK, TaintIr.T_WEB), item(STR_SRC, HOST, WEB_SINK, TaintIr.T_WEB));
+        counts(item(STR_SRC, "", WEB_SINK, TaintIr.T_WEB), on(STR_SRC, HOST, WEB_SINK, TaintIr.T_WEB));
     }
 
     @Test public void aPrefixSchemeCheckStillSuppressesWebViewSink() {
-        counts(item(STR_SRC, "", WEB_SINK, TaintIr.T_WEB), item(STR_SRC, STARTS_HTTP, WEB_SINK, TaintIr.T_WEB));
+        counts(item(STR_SRC, "", WEB_SINK, TaintIr.T_WEB), on(STR_SRC, STARTS_HTTP, WEB_SINK, TaintIr.T_WEB));
     }
 
     // ---- content URI sink (CWE-73)
     @Test public void wrongKindValidationDoesNotSuppressUriSink() {
-        doesNotCount(item(URI_SRC, "", URI_SINK, TaintIr.T_URI), item(URI_SRC, STARTS_HTTP, URI_SINK, TaintIr.T_URI));
+        doesNotCount(item(URI_SRC, "", URI_SINK, TaintIr.T_URI), on(URI_SRC, STARTS_HTTP, URI_SINK, TaintIr.T_URI));
     }
     @Test public void rightKindValidationSuppressesUriSink() {
-        counts(item(URI_SRC, "", URI_SINK, TaintIr.T_URI), item(URI_SRC, AUTHORITY, URI_SINK, TaintIr.T_URI));
+        counts(item(URI_SRC, "", URI_SINK, TaintIr.T_URI), on(URI_SRC, AUTHORITY, URI_SINK, TaintIr.T_URI));
     }
 
     // ---- mutant: every validation matches every sink kind
     @Test public void mutantEveryValidationCountsEverywhere() {
-        boolean was = SsaBridge.SINK_KIND_VALIDATION;
-        SsaBridge.SINK_KIND_VALIDATION = false;
-        try {
-            SsaBridge.Item it = item(STR_SRC, STARTS_HTTP, FILE_SINK, TaintIr.T_FILE);
-            assertTrue(it.detail, it.detail.contains("The chain also contains validation-like calls"));
-        } finally { SsaBridge.SINK_KIND_VALIDATION = was; }
+        // switch off (the default): a wrong-kind check counts, as in 2.1.0
+        SsaBridge.Item it = item(STR_SRC, STARTS_HTTP, FILE_SINK, TaintIr.T_FILE);
+        assertTrue(it.detail, it.detail.contains("The chain also contains validation-like calls"));
     }
+
+    @Test public void theSinkKindMatchIsOffByDefault() { assertFalse(SsaBridge.SINK_KIND_VALIDATION); }
 }
