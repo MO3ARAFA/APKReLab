@@ -2,6 +2,16 @@
 
 Release notes in short. The full record (measurements, what was not measured, every decision) is `docs/internal/HANDOFF.md`; numbers are in `docs/internal/PERF.md`.
 
+## 2.1.6 (versionCode 239)
+- Engine switches ON (each measured, each with a negative twin and a mutation check): parcel round-trip, binder hosting, WebView-client edges, result-callback edges, self-call field capture, self-listener edges, strict open-redirector, AIDL Parcel under onTransact, guard predicates, ActivityResultContract result shape, app code in library-named classes, field-writer validation. Setter capture stays OFF (KeePassDX real taint drops 51 -> 59, no CVE gain).
+- CVE benchmark: MUST FIX recall 8 of 13 valid in-scope cases (was 6 in 2.1.3, 7 in 2.1.5); of those 8, the patched build drops the card in 6. All 13 cases are tuning sets, so this is not a blind number.
+- Blind round 4 (30 F-Droid apps, selection committed before download): 10 MUST FIX cards in 4 apps. Read in the smali / manifest: 7 cards true positive in 4 distinct issues (xw4 saveDict, gitnex unzip, gitnex attachment name, Tasker plugin service in fireflyiii = 4 cards), 3 cards false positive / low in 2 distinct issues (xw4 DictBrowse: 2 cards, reach through a base-class hub; zipline Glance receiver, exported="false"). By distinct issue: 4 of 6. Paired against the 2.1.5 engine: 7 of 30 reports differ; the only MUST FIX change is AndStatus isFileInsideFolder (a false positive, gone). AndStatus, simplenotes, Wikipedia, OsmAnd, Omni-Notes and Nextcloud Talk are tuning apps now.
+- MUST FIX cap removed (999). Self-scan scan rules tightened.
+- Gates: self_check 6 lock apps PASSED, recall line identical; ir tests 494 / 0; Kotlin 545 / 0; Gradle 1039 pass / 0 fail / 0 errors, assembleDebug OK; self-scan of the built APK: 0 HIGH / 0 MEDIUM in dev.apkrelab (the debug APK's own debuggable flag, one permission and a jadx MD5 helper are the only CRITICAL/MEDIUM cards).
+- Not resolved: C01, C12 (card stays LOW, needs a forwarded proof), C04, C08, C11 (MEDIUM only), C14 patched build still keeps its cards. Nextcloud / ownCloud copyFile cards remain uncertain.
+- Not built (stopped by a safety filter, not retried): AI Hunt, bounty report generator, website scanner.
+- Device validation: not performed. The release is based on sandbox scans only.
+
 ## 2.1.5 (versionCode 238)
 - Weak host validation rule: the compared value must be the host itself (getHost or getAuthority, followed through register copies); Kotlin's StringsKt.endsWith / startsWith / contains count; endsWith(".example.com") with a leading dot is the correct check and is not reported. Wikipedia (C11): 7 cards -> 3, and the MainActivity check of the advisory is now found (MEDIUM; the MUST FIX headline does not change: 7 of 13).
 - self_check 6 lock apps: PASSED, recall line identical. 4 new tests (Kotlin authority suffix, $default variant, move copy, path / leading-dot twins).
