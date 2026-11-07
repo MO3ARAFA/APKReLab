@@ -2450,6 +2450,7 @@ class MainActivity : Activity() {
             val partEdges = Array(workers) { SecurityScanner.CallIndex() }
             val xlinker = TaintLinker(appPkg)   // 0.49.0: cross-class taint summaries (stage A in the workers, stage B after join)
             val sdkAttr = SdkAttribution(appPkg)   // 0.106.0: renamed root-package classes that only one bundled SDK names
+            libAppCode = java.util.concurrent.ConcurrentHashMap.newKeySet()   // 3.0.0: library-named classes that hold app code (R8 static merger)
             val threads = ArrayList<Thread>()
             for (w in 0 until workers) {
                 val th = Thread {
@@ -2465,6 +2466,7 @@ class MainActivity : Activity() {
                             if (text.isNotEmpty()) {
                                 try {
                                     try { sdkAttr.observe(def.type, text) } catch (_: Throwable) { }
+                                    try { if (SecurityScanner.appCodeInLibraryName(def.type, text, appPkg)) libAppCode.add(i) } catch (_: Throwable) { }   // 3.0.0
                                     try { DynamicReceivers.observe(text) } catch (_: Throwable) { }   // 1.1.0
                                     try { NativeBridge.observe(def.type, text) } catch (_: Throwable) { }   // 1.1.0
                                     val fs = SecurityScanner.scanSmali(def.type, i, text, appPkg)
@@ -2629,10 +2631,13 @@ class MainActivity : Activity() {
         File(File(filesDir, "plancache"), "$h.dg")
     } catch (_: Throwable) { null }
 
+    /** 3.0.0: indices (into classDefs) of library-named classes whose instructions name the app's package (SecurityScanner.appCodeInLibraryName), filled by the code scan. */
+    @Volatile private var libAppCode: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     private fun ssaFindings(defs: List<ClassDef>, appPkg: String, known: List<SecurityScanner.Finding>, progress: (String) -> Unit = {}): List<SecurityScanner.Finding> {
         val appIdx = ArrayList<Int>()
         for ((i, d) in defs.withIndex()) {
-            if (SecurityScanner.scopeOf(d.type, appPkg) != SecurityScanner.Scope.LIB) appIdx.add(i)
+            if (SecurityScanner.scopeOf(d.type, appPkg) != SecurityScanner.Scope.LIB || i in libAppCode) appIdx.add(i)   // 3.0.0: + app code R8 moved into a library-named class
         }
         val maxClasses = 6000      // up to this size the whole app is one run (as before)
         val groupSize = 3000       // 0.59.0: above it the app is analysed group by group, each group fits in memory

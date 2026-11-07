@@ -208,6 +208,30 @@ object SecurityScanner {
         return if (s != Scope.LIB && text.isNotEmpty() && isRepackagedLibrary(classType, text, appPkg)) Scope.LIB else s
     }
 
+    /** 3.0.0: switch for the mutation check of [appCodeInLibraryName]. */
+    internal var APP_CODE_IN_LIB_NAMES = true
+
+    /**
+     * 3.0.0 (real-CVE benchmark C12, Wikipedia: R8's static merger moved SingleWebViewActivity.newIntent$default, and other app helpers, into okio/ByteString$Companion):
+     * a class whose NAME is a library's, but whose INSTRUCTIONS name the app's own package at least [minRefs] times (invoke / field access / const-class / new-instance /
+     * check-cast lines, not strings), holds app code. It is analysed by the data-flow engine like app code; without it the Intent built there to the app's own activity is lost.
+     */
+    fun appCodeInLibraryName(classType: String, text: String, appPkg: String, minRefs: Int = 3): Boolean {
+        if (!APP_CODE_IN_LIB_NAMES || appPkg.isEmpty() || text.isEmpty() || scopeOf(classType, appPkg) != Scope.LIB) return false
+        val segs = appPkg.split('.')
+        val pref = "L" + (if (segs.size >= 2) segs.take(2) else segs).joinToString("/") + "/"
+        if (classType.startsWith(pref)) return false
+        var n = 0
+        for (line in text.lineSequence()) {
+            val t = line.trimStart()
+            if (!(t.startsWith("invoke-") || t.startsWith("iget") || t.startsWith("iput") || t.startsWith("sget") || t.startsWith("sput") ||
+                  t.startsWith("const-class") || t.startsWith("new-instance") || t.startsWith("check-cast"))) continue
+            if (t.contains('"')) continue
+            if (t.contains(pref) && ++n >= minRefs) return true
+        }
+        return false
+    }
+
     fun isAppBoundObf(text: String, appPkg: String, minRefs: Int = 3): Boolean {
         if (appPkg.isEmpty()) return false
         if (libIdentityRe.containsMatchIn(text)) return false

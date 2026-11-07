@@ -168,6 +168,19 @@ public final class SsaBridge {
         return out;
     }
 
+    /** 3.0.0: switch for the mutation check of {@link #ipcParcel}. */
+    public static boolean AIDL_PARCEL = !Boolean.getBoolean("apkrelab.noAidlParcel");
+
+    /**
+     * 3.0.0 (real-CVE benchmark C14, OsmAnd OsmandAidlServiceV2.copyFile(CopyFileParams)): a value held in a Parcelable is weak (0.83.0: the Parcelable usually travels
+     * inside the app), except when the path from the exported entry goes through a Binder's onTransact: there the Parcelable is unmarshalled from another app's call.
+     */
+    static boolean ipcParcel(TaintIr.Flow f) {
+        if (!AIDL_PARCEL || !f.weak || f.via == null || !f.via.startsWith(TaintIr.PARCEL_HELD_MARK) || !f.reachable) return false;
+        for (String k : f.entryPath) if (k.contains("->onTransact(")) return true;
+        return false;
+    }
+
     private static Item toItem(CallGraph g, List<TaintIr.Flow> group) {
         return toItem(g, group, null);
     }
@@ -175,11 +188,11 @@ public final class SsaBridge {
     private static Item toItem(CallGraph g, List<TaintIr.Flow> group, String also) {
         // flows come sorted (severity, reachable first); the first one of the group is the one to show
         TaintIr.Flow f = group.get(0);
-        if (f.weak) for (TaintIr.Flow x : group) if (!x.weak) { f = x; break; }      // 0.68.5: show a strong flow of the group when there is one
+        if (f.weak) for (TaintIr.Flow x : group) if (!x.weak || ipcParcel(x)) { f = x; break; }      // 0.68.5: show a strong flow of the group when there is one
         // 2.0.1 (real-CVE benchmark C04 Tasks ShareLinkActivity, C13 OsmAnd): flows are grouped per sink and the first one is shown. A SharedPreferences source (root or a
         // tampered backup) is not weak in the engine, so it could hide the Intent / Uri flow of the same sink: prefer a strong flow whose source is not SharedPreferences.
         if (PREFER_OUTSIDE_SOURCE && f.source.startsWith("SharedPreferences."))
-            for (TaintIr.Flow x : group) if (!x.weak && !x.source.startsWith("SharedPreferences.")) { f = x; break; }
+            for (TaintIr.Flow x : group) if ((!x.weak || ipcParcel(x)) && !x.source.startsWith("SharedPreferences.")) { f = x; break; }
         MethodIr sinkM = g.methods.get(f.sink.method);
         if (sinkM == null || f.sink.insn < 0 || f.sink.insn >= sinkM.insns.size()) return null;
         int at = sinkM.insns.get(f.sink.insn).offset;
@@ -197,7 +210,8 @@ public final class SsaBridge {
         if (validation) conf = step(conf);
         if (cleaned) conf = "LOW";
         boolean prefs = f.source.startsWith("SharedPreferences.");
-        if (prefs || f.weak) conf = "LOW";
+        boolean ipc = ipcParcel(f);
+        if (prefs || (f.weak && !ipc)) conf = "LOW";
         if (!f.reachable) conf = step(conf);
         String sev = f.sink.sev;
         if (conf.equals("LOW")) sev = lowerOne(sev);
@@ -220,6 +234,7 @@ public final class SsaBridge {
         else if (f.internal) sb.append(" The Intent is read in a component that the manifest does not export (or in a receiver for system broadcasts), so an outside app cannot normally supply this value; it matters only when an exported component forwards an Intent to it (low confidence).");
         else if (f.weak && f.via != null && f.via.contains("prefs:"))
             sb.append(" The value went through SharedPreferences with a key that is not a literal (built at run time, e.g. from a resource id), so the engine cannot tell whether the value read is the one written: low confidence, check the keys.");
+        else if (ipc) sb.append(" The Parcelable holding the value is unmarshalled by a Binder's onTransact on the path from an exported service: another app sends it through the service's interface.");
         else if (f.weak && f.via != null && f.via.startsWith(TaintIr.PARCEL_HELD_MARK)) sb.append(" The value is read from a Parcel in one method and used in another, so this is a problem only if the whole Parcelable is received from another app (an Intent extra or a Binder call); if it only travels inside this app it is not attacker input: low confidence, check where this class is unmarshalled;");
         else if (f.weak && f.via != null && f.via.startsWith(TaintIr.ERASED_MARK)) sb.append(" The path goes through " + TaintIr.ERASED_WEAK + " or more methods whose signature carries no type information (all parameters java.lang.Object: coroutine / lambda glue), where unrelated values meet: low confidence, check that this path really exists;");
         else if (f.weak && f.via != null && f.via.startsWith(TaintIr.SANITIZER_PARTIAL_MARK)) sb.append(" The value passed " + f.via.substring(TaintIr.SANITIZER_PARTIAL_MARK.length()) + ", which checks the canonical path (getCanonicalPath / normalize + startsWith) but not on every path to its return: low confidence, read that method and check which return skips the check;");
@@ -333,6 +348,23 @@ public final class SsaBridge {
         return true;
     }
 
+    /** 3.0.0: switch for the mutation check of guard predicates (see validationKind). */
+    public static boolean GUARD_PREDICATES = !Boolean.getBoolean("apkrelab.noGuardPredicates");
+
+    /** 3.0.0: 2 = the app method [key] (a boolean predicate) holds a strong validation that applies to [sinkTitle], 1 = only weak ones, 0 = none / not an app method. */
+    private static int guardPredicateKind(CallGraph g, String key, String sinkTitle) {
+        MethodIr p = g.methods.get(key);
+        if (p == null) return 0;
+        int kind = 0;
+        for (Insn x : p.insns) {
+            String t = x.text();
+            if (!VALIDATION.matcher(t).find() || !validationAppliesTo(t, sinkTitle)) continue;
+            if (WEAK_ONLY.matcher(t).find() && !t.contains("->matches(")) kind = Math.max(kind, 1);
+            else return 2;
+        }
+        return kind;
+    }
+
     /** Low two bits: 0 = no validation-like call on the chain that applies to this sink, 1 = only weak ones, 2 = at least one strong one. Bit 4: a validation-like call was seen that does not apply to this kind of sink. */
     private static int validationKind(CallGraph g, TaintIr.Flow f) {
         Set<String> seen = new HashSet<>();
@@ -349,6 +381,13 @@ public final class SsaBridge {
             if (m == null) continue;
             for (Insn in : m.insns) {
                 String t = in.text();
+                // 3.0.0 (blind round 4, AndStatus ZipUtils.unzipFiles: FileUtils.isFileInsideFolder(file, folder) = canonical path startsWith, before every entry is written):
+                // a call on the chain to an APP method returning boolean whose own body holds a strong check is a guard predicate: it counts like the check itself
+                if (GUARD_PREDICATES && in.kind == Insn.Kind.INVOKE && in.targetSig().endsWith(")Z")) {
+                    int gk = guardPredicateKind(g, in.targetOwner() + "->" + in.targetSig(), f.sink.title);
+                    if (gk == 2) return 2;
+                    if (gk == 1) kind = Math.max(kind, 1);
+                }
                 if (!VALIDATION.matcher(t).find()) continue;
                 if (!validationAppliesTo(t, f.sink.title)) { ignored = 4; continue; }
                 if (WEAK_ONLY.matcher(t).find() && !t.contains("->matches(")) kind = Math.max(kind, 1);

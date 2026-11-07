@@ -263,6 +263,7 @@ public final class CallGraph {
      */
     public boolean isHubEdge(Edge e) {
         if (e == null || e.external) return false;
+        if (SELF_LISTENER_EDGES && "callback~".equals(e.kind)) return true;     // 3.0.0: a self-registered listener's method is reached approximately
         if (DISPATCHER_HUBS && isDispatcherMethod(e.caller)) return true;       // 2.1.0
         MethodIr m = methods.get(e.caller);
         if (m == null || e.insn < 0 || e.insn >= m.insns.size()) return false;
@@ -543,14 +544,17 @@ public final class CallGraph {
         }
         for (MethodIr m : methods.values()) {
             if (!reach.contains(outerOf(TaintIr.classOf(m.key())))) continue;
-            boolean takesIntent = false, launchesIntent = false;
+            boolean takesIntent = false, launchesIntent = false, intentTyped = false;
             for (Insn in : m.insns) {
+                // 3.0.0: the Parcelable read must be an INTENT (check-cast / const-class Landroid/content/Intent;), not any Parcelable (Nextcloud: a User object read and an
+                // unrelated activity started in one method turned the private-component rule off for the whole app)
+                if (!STRICT_REDIRECTOR || ((in.op.startsWith("check-cast") || in.op.startsWith("const-class")) && "Landroid/content/Intent;".equals(in.ref))) intentTyped = true;
                 if (in.kind != Insn.Kind.INVOKE) continue;
                 String o = in.targetOwner(), n = in.targetName();
                 if ((o.equals("Landroid/content/Intent;") || o.equals("Landroid/os/Bundle;")) && (n.equals("getParcelableExtra") || n.equals("getParcelable"))) takesIntent = true;
                 if (n.startsWith("startActivit") || n.equals("startService") || n.equals("startForegroundService") || n.equals("sendBroadcast") || n.equals("bindService")) launchesIntent = true;
             }
-            if (takesIntent && launchesIntent) openRedirector = true;
+            if (takesIntent && launchesIntent && intentTyped) openRedirector = true;
         }
         return reach;
     }
@@ -834,11 +838,43 @@ public final class CallGraph {
         }
     }
 
+    /** 3.0.0: switch for the mutation check of the Intent-typed open-redirector test. */
+    public static boolean STRICT_REDIRECTOR = !Boolean.getBoolean("apkrelab.noStrictRedirector");
+    /** 3.0.0: switch for the mutation check of {@link #selfListenerRegistered}. */
+    public static boolean SELF_LISTENER_EDGES = !Boolean.getBoolean("apkrelab.noSelfListenerEdges");
+
+    /**
+     * 3.0.0 (real-CVE benchmark C01, Nextcloud Talk: ConversationsListController implements FlexibleAdapter.OnItemClickListener and calls adapter.addListener(this);
+     * onItemClick -> handleSharedData -> the confirm dialog -> upload was never reached): an app object hands ITSELF ("this", p0 of an instance method) to a method
+     * outside the app (a library or the framework) while its class implements an interface that is also outside the app. That code can call the object back through
+     * the interface; which methods are the interface's is not known here (the interface is not app code), so every public instance "on..." method the class declares gets
+     * an APPROXIMATE edge ("callback~": the report says approximate reach, never a proven path). Only the object's own class, only at the registration site.
+     */
+    private void selfListenerRegistered(MethodIr m, Insn in) {
+        if (!SELF_LISTENER_EDGES || m.isStatic || classes.containsKey(in.targetOwner()) || in.uses.length == 0) return;
+        int self = m.firstParam();
+        boolean passesSelf = false;
+        for (int k = in.invokeKind().equals("static") ? 0 : 1; k < in.uses.length; k++) if (in.uses[k] == self) { passesSelf = true; break; }
+        if (!passesSelf) return;
+        for (int i = 0; i < in.index && i < m.insns.size(); i++) for (int r : m.insns.get(i).defs) if (r == self) return;   // p0 was overwritten: not "this"
+        ClassIr c = classes.get(m.owner);
+        if (c == null) return;
+        boolean externalInterface = false;
+        for (String itf : c.interfaces) if (!classes.containsKey(itf)) { externalInterface = true; break; }
+        if (!externalInterface) return;
+        for (MethodIr x : c.methods) {
+            if (x.isStatic || !x.name.startsWith("on") || x.name.length() < 3 || !Character.isUpperCase(x.name.charAt(2))) continue;
+            if (!(" " + x.flags + " ").contains(" public ")) continue;
+            addEdge(m.key(), in.index, x.key(), "callback~");
+        }
+    }
+
     private void invoke(MethodIr m, Insn in, Set<String> localNew) {
         String owner = in.targetOwner(), sig = in.targetSig(), kind = in.invokeKind();
         if (owner.isEmpty() || owner.charAt(0) == '[') return;
         workScheduled(m, in);
         callbackRegistered(m, in);
+        selfListenerRegistered(m, in);
         String caller = m.key();
         if (ASYNC_EDGES) {                                                     // 2.0.0: the dispatched Runnable runs: its run() is reached through this site
             String at = asyncTarget(m, in);

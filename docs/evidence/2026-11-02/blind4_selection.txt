@@ -1,0 +1,35 @@
+Blind round 4 selection (committed before any download)
+rule: tools/benchmark/blind_select.py index-v1.json touched.txt 20261103 30 5000000 android.permission.INTERNET
+index: the F-Droid index-v1.json of round 3, SHA-256 484e481c17b620dd168b3b502a3c6e3a07578f94ad9c931f19dc2355668687b8
+touched list: 19465 names (round 3's 15141 + its 12 selected apps + every package-like token in git-tracked files), SHA-256 0de74159c4252a11297574789783cb6367f705eba6f0d86b4a1e441da7ec8800
+candidates=1280 seed=20261103
+me.kafuuneko.rpclient	20260402	2026.4.2	me.kafuuneko.rpclient_20260402.apk	2845c3cf478a3c88539b292bf5fc6d20d0d66626875708e6d970d36143bb8944	8360074
+com.stefdp.zipline	44	2.1.10	com.stefdp.zipline_44.apk	a06ac7df4c118bd5d4cc5cc4184ac4e6b4844402db8a687f32de446a9077db6e	6043096
+godau.fynn.dsbdirect	43	3.4.2	godau.fynn.dsbdirect_43.apk	f5dc87e0900a3877951c9e64846c595fd98031b5a150d4cc02a4a79d954bc97b	10626200
+com.jens.automation2	149	1.8.8	com.jens.automation2_149.apk	e4878ac5a7308f886747214168abffa332f8ae5577bcd1ab9ea8d6a41e84df87	5962623
+com.odiousapps.z2mdash	133	0.0.133	com.odiousapps.z2mdash_133.apk	24e88c5dbbc6a3b2539d7caa6d07e00160a8e7d7000d8bcfdc5aa9fa4837d8e2	6761505
+org.mian.gitnex	1500	15.0.0	org.mian.gitnex_1500.apk	6166682846bdc973a9bdd0a251a4da640dba6a8e410be87c9fda633ef7c8794f	18263793
+geddit.buzl.uk	7	1.7	geddit.buzl.uk_7.apk	fc5de5320d354a693e443ea609efe3bc63e7cc238147e8127a6989fe108894c4	6891719
+com.resonance.music	13	0.8.1	com.resonance.music_13.apk	cd42c9a58c8ce9a81631d332bac3fd82c0073e5fa4aba3d116caea67cb542258	7561942
+org.elijaxapps.androidxmrigminer	5	1.02	org.elijaxapps.androidxmrigminer_5.apk	7ad4b182757b4e177c2e27975764cc0e94273076283e6c881e2b1d8cdc149b7c	7369147
+io.github.akarimarisa.tumblrdownloader	8	1.0.7	io.github.akarimarisa.tumblrdownloader_8.apk	e3556a9037d1629a6ff448d375cca14542bcaf078ef65e62bd407b4a18127682	7671417
+xyz.hisname.fireflyiii	112	5.0.7	xyz.hisname.fireflyiii_112.apk	739fae2c6facab68c3e4706995d232bbb278216f0a214a3d04b34cf0d67d6bc5	5457333
+com.github.enteraname74.soulsearching	42	0.17.2	com.github.enteraname74.soulsearching_42.apk	e4744fc9a32590380557933cbfbe6b066a7d35564cdde981c5312adb3883b946	15117404
+de.doen1el.calibreWebCompanion	2503	2.3.4	de.doen1el.calibreWebCompanion_2503.apk	3263a2789208a10d836e494878581367c4f73d3da7ad6d96df24206708fdb14e	37176460
+systems.sieber.vscreensaver	6	1.3.1	systems.sieber.vscreensaver_6.apk	9bdac10b9b3f2da8b042b134f043c2b8bf2d2b4fecb32c8131c79dd8fdb77784	6504471
+org.nqmgaming.aneko	36	2.4.4	org.nqmgaming.aneko_36.apk	eb5c652c5862e7e44acba51904977ad696fb55a87db692b63c2c91aaa02bf1c1	6207703
+org.andstatus.app	370	62.03	org.andstatus.app_370.apk	8fa68144623e16fc72b1c187a798c25be17846ac28ab5fac59c13b2316079c4c	8944313
+io.github.ulysseszh.sunproxy	102	0.1.2	io.github.ulysseszh.sunproxy_102.apk	e7a51c624aefbe1ffc2a06212690af461ca62ddbb7b924201fe02a64604b7e3b	11249144
+org.eehouse.android.xw4	204	4.4.208	org.eehouse.android.xw4_204.apk	b8b638dc09927c86d0a8d3fa43efbf560be1a1e0d83926541add58432c7bf3e6	7646810
+com.elektropepi.bootboi	11	1.1	com.elektropepi.bootboi_11.apk	b5beda628a133cdbf4b4e1dd949739ca0a57c04c11db983a436caafb99964a11	30645677
+com.worxbend.scenedeck	1010	0.1.4	com.worxbend.scenedeck_1010.apk	08ae9deed9cbbcec509656fe6638c47acd7e2012d325e334be1ec5a1af288282	7285256
+com.eddyizm.degoogled.tempus	52	4.31.0	com.eddyizm.degoogled.tempus_52.apk	4038d365cc622cbb130f81d74e6e8395d011bff9fc18c9abc49c3cb6de3e6e7c	11168700
+com.blazify.music	162	9.17.0	com.blazify.music_162.apk	3a10ebf5b60a362d8632d0594936e349fc38a4cde07e83ebf0870786ccb9ad0a	27357663
+com.dn0ne.lotus	1002004	1.2.0	com.dn0ne.lotus_1002004.apk	06a19b2117c833b90bc8feb9c9e9625243692c543ad5dd98e281035d3f821195	18604511
+eu.heili.wormhole	8423	1.1.11	eu.heili.wormhole_8423.apk	f77fd1c75c6612a494de63986955a0a077262b3c04adefca7690d03fe67e1426	27108362
+com.bwqr.mavinote	200	0.2.0	com.bwqr.mavinote_200.apk	682fc91f68ac3d78a1efffae09d87d3276842d395c0643fb4530e60ff23510f7	12393937
+dev.forgesworn.cambium	20	0.9.1	dev.forgesworn.cambium_20.apk	b9f11de0969098a8a640dc425ea29760d8c9147082c8c7b9f4d21d004b8b3693	19880268
+com.readrops.app	22	2.1.1	com.readrops.app_22.apk	8572c49aa1a484cd871eec268d4c712ec296a43a2a427a6780f747ef7b935aa6	5126296
+com.aditya1875.pokeverse	21	1.2.1	com.aditya1875.pokeverse_21.apk	fbbd68a3326bc1b7c41d69220c2bd125fe3038d841e485687deb56357573417b	8677506
+org.c_base.c_beam	39	26.09.0	org.c_base.c_beam_39.apk	51119404af024dc3c64b7052766ee5db6e9d14066fa59243b0fda0a497a456c7	8544572
+com.matt.outfield	5	5	com.matt.outfield_5.apk	9fd3cc51956a4e3cdd8c2fb91acf2b93c3804748728a48b8131dcd3800a75b43	5981194

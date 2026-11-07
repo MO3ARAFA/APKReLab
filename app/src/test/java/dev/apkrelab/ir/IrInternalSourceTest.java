@@ -256,7 +256,7 @@ public class IrInternalSourceTest {
     private static String redirector(boolean launch) {
         StringBuilder sb = new StringBuilder(".class public Lt/A;\n.super Landroid/app/Activity;\n\n.method public onCreate(Landroid/os/Bundle;)V\n    .locals 7\n");
         sb.append("    new-instance v0, Landroid/content/Intent;\n    const-string v1, \"x\"\n");
-        sb.append("    invoke-virtual {v0, v1}, Landroid/content/Intent;->getParcelableExtra(Ljava/lang/String;)Landroid/os/Parcelable;\n    move-result-object v4\n");
+        sb.append("    invoke-virtual {v0, v1}, Landroid/content/Intent;->getParcelableExtra(Ljava/lang/String;)Landroid/os/Parcelable;\n    move-result-object v4\n    check-cast v4, Landroid/content/Intent;\n");   // 3.0.0: as dex has it (the verifier needs the cast);
         if (launch) sb.append("    invoke-virtual {v7, v4}, Landroid/app/Activity;->startActivity(Landroid/content/Intent;)V\n");
         sb.append("    return-void\n.end method\n");
         return sb.toString();
